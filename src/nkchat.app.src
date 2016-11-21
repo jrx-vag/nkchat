@@ -1,0 +1,9 @@
+{application, nkchat, [
+    {description, "NkCHAT Framework"},
+    {vsn, "develop"},
+    {modules, []},
+    {registered, []},
+    % {mod, {nkmedia_app, []}},
+    {applications, [nkservice]},
+    {env, []}
+]}.
