@@ -20,7 +20,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc 
--module(nkchat_mm_proxy_server).
+-module(nkchat_mm_proxy_server_ws).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([get_all/0, send_reply/2]).

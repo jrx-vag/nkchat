@@ -1,5 +1,6 @@
 REPO ?= nkchat
 RELOADER ?= -s nklib_reloader
+PA ?= -pa deps/*/ebin -pa ../nkchat/ebin
 
 
 .PHONY: deps release
@@ -28,14 +29,10 @@ eunit:
 	./rebar eunit skip_deps=true
 
 shell:
-	erl -config util/shell_app.config -args_file util/shell_vm.args $(RELOADER)
+	erl -config util/shell_app.config -args_file util/shell_vm.args -s nkchat_app $(RELOADER) $(PA)
 
-sample:
-	erl -config util/shell_app.config -args_file util/shell_vm.args -s nkchat_app -s nkchat_sample $(RELOADER)
-
-shell2:
-	erl -config util/shell_app.config -args_file util/shell_vm.args $(RELOADER)
-
+start:
+	erl -config util/shell_app.config -args_file util/shell_vm.args -s nkchat_app -s nkchat $(RELOADER) $(PA)
 
 docs:
 	./rebar skip_deps=true doc
@@ -52,7 +49,7 @@ build_plt:
 	dialyzer --build_plt --output_plt $(COMBO_PLT) --apps $(APPS) deps/*/ebin
 
 dialyzer:
-	dialyzer -Wno_return --plt $(COMBO_PLT) ebin/nkchat*.beam #| \
+	dialyzer -Wno_return --plt $(COMBO_PLT) ebin/nkmedia*.beam #| \
 	    # fgrep -v -f ./dialyzer.ignore-warnings
 
 cleanplt:
