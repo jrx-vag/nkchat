@@ -230,7 +230,6 @@ process({proxy, #state{path=Path}=State}) ->
 process_api([<<"users">>, <<"initial_load">>], Body, State) ->
     case do_proxy(Body, State) of
         {ok, 200, RespHds, RespBody} ->
-
             #{<<"client_cfg">>:=Cfg1} = RespBody,
             Cfg2 = Cfg1#{<<"SiteURL">>=><<"https://chat.dkv.netc.io">>},
             RespBody2 = RespBody#{<<"client_cfg">>:=Cfg2},
@@ -284,9 +283,8 @@ process_api(_Path, Body, State) ->
 
 
 %% @private
-do_proxy(Body, State) ->
-    #state{method=Method, path=Path} = State, 
-    Url = nklib_util:bjoin([<<"http://", ?HOST>>|Path], <<"/">>),
+do_proxy(Body, #state{method=Method}=State) ->
+    Url = make_proxy_url(State),
     Hds = get_headers(State),
     ?DEBUG("to: ~s", [Url], State),
     ?DEBUG("orig headers: ~p", [Hds], State),
@@ -315,9 +313,8 @@ do_proxy(Body, State) ->
 
 
 %% @private
-send_static_proxy(State) ->
-    #state{method=Method, path=Path} = State, 
-    Url = nklib_util:bjoin([<<"http://", ?HOST>>|Path], <<"/">>),
+send_static_proxy(#state{method=Method}=State) ->
+    Url = make_proxy_url(State),
     Hds = get_headers(State),
     Body = get_body(State, #{}),
     ?DEBUG("static proxy to: ~s", [Url], State),
@@ -330,6 +327,13 @@ send_static_proxy(State) ->
     end.
 
 
+%% @private
+make_proxy_url(#state{path=Path, req=Req}) ->
+    Url = nklib_util:bjoin([<<"http://", ?HOST>>|Path], <<"/">>),
+    case cowboy_req:qs(Req) of
+        <<>> -> Url;
+        Qs -> <<Url/binary, $?, Qs/binary>>
+    end.
 
 
 
