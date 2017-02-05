@@ -41,7 +41,11 @@ start() ->
         % elastic_url => "https://cluster.netc.io/es/",
         % elastic_user => "user",
         % elastic_pass => "es",
-        debug => [nkchat_mm_proxy]
+        debug => [
+        	nkchat_mm_proxy_server_http
+        	% nkchat_mm_proxy_server_ws, 
+        	% nkchat_mm_proxy_client_ws
+        ]
         % api_gelf_server => "c2.netc.io"
     },
     % Spec2 = nkmedia_util:add_certs(Spec1),

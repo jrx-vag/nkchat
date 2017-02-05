@@ -24,9 +24,10 @@
 
 -define(HOST, "chat.dkv.netc.io:8065").
 
+% To debug, set debug => [nkchat_mm_proxy_server_http]
 
 -define(DEBUG(Txt, Args, State),
-    case erlang:get(nkchat_mm_proxy_debug) of
+    case erlang:get(nkchat_mm_proxy_server_http_debug) of
         true -> ?LLOG(debug, Txt, Args, State);
         _ -> ok
     end).
@@ -34,6 +35,15 @@
 -define(LLOG(Type, Txt, Args, State),
     lager:Type("NkCHAT MM Proxy HTTP "++Txt, 
                Args)).
+
+% -define(MSG(Txt, Args, State),
+%     case erlang:get(nkchat_mm_proxy_server_http_debug) of
+%         true -> print(Txt, Args, State);
+%         _ -> ok
+%     end).
+
+
+
 
 
 %% ===================================================================
@@ -117,60 +127,6 @@ get_body(#state{ct=CT, req=Req}, Opts) ->
 get_headers(#state{req=Req}) ->
     cowboy_req:headers(Req).
     
-
-%% ===================================================================
-%% Users
-%% ===================================================================
-
-
-% %% @doc
-% pre_users(_Other, State) ->
-%     {proxy, State}.
-
-
-% %% @doc
-% post_users([<<"initial_load">>], #{resp_body:=Body}=State) ->
-%     Data1 = nklib_json:decode(Body),
-%     #{<<"client_cfg">> := ClientCfg1} = Data1,
-%     ClientCfg2 = ClientCfg1#{<<"SiteURL">> := <<"http://127.0.0.1:9443">>},
-%     Data2 = Data1#{<<"client_cfg">>:=ClientCfg2},
-%     lager:info("Initial load: \n~s", [nklib_json:encode_pretty(Data2)]),
-%     {proxy, Data2, State};
-
-% post_users([<<"login">>], #{resp_hds:=Hds, resp_body:=Body}=State) ->
-%     Token = nklib_util:get_value(<<"Token">>, Hds),
-%     _Cookie = nklib_util:get_value(<<"Set-Cookie">>, Hds),
-%     _ReqId = nklib_util:get_value(<<"X-Request-Id">>, Hds),
-%     _VsnId = nklib_util:get_value(<<"X-Version-Id">>, Hds),
-%     Data = nklib_json:decode(Body),
-%     lager:info("User data: ~s", [nklib_json:encode_pretty(Data)]),
-%     lager:notice("Token: ~s", [Token]),
-%     nklib_store:put({?MODULE, token}, Token),
-%     {proxy, State};
-
-% post_users([<<"logout">>], State) ->
-%     nklib_store:del({?MODULE, token}),
-%     {proxy, State};
-
-% post_users(Other, State) ->
-%     lager:error("Users: ~p", [Other]),
-%     {proxy, State}.
-
-
-
-%% ===================================================================
-%% Emoji
-%% ===================================================================
-
-% %% @doc
-% pre_emoji([<<"list">>], #{req_hds:=Hds}=State) ->
-%     lager:error("EM: ~p", [Hds]),
-%     {proxy, State};
-
-% pre_emoji(_Other, State) ->
-%     {proxy, State}.
-
-
 
 %% ===================================================================
 %% Cowboy callbacks
@@ -276,9 +232,9 @@ process_api([<<"users">>, <<"initial_load">>], Body, State) ->
         {ok, 200, RespHds, RespBody} ->
 
             #{<<"client_cfg">>:=Cfg1} = RespBody,
-            Cfg2 = Cfg1#{<<"SiteURL">>=><<"http://casa.carlosj.net:8200">>},
+            Cfg2 = Cfg1#{<<"SiteURL">>=><<"https://chat.dkv.netc.io">>},
             RespBody2 = RespBody#{<<"client_cfg">>:=Cfg2},
-            lager:error("Updated inital_load"),
+            lager:info("Updated inital_load"),
             send_http_reply(200, RespHds, RespBody2, State);
         error ->
             send_http_error(State)
@@ -332,13 +288,12 @@ do_proxy(Body, State) ->
     #state{method=Method, path=Path} = State, 
     Url = nklib_util:bjoin([<<"http://", ?HOST>>|Path], <<"/">>),
     Hds = get_headers(State),
-    % ?LLOG(info, "to: ~s", [Url], State),
-    % ?DEBUG("orig headers: ~p", [Hds], State),
+    ?DEBUG("to: ~s", [Url], State),
+    ?DEBUG("orig headers: ~p", [Hds], State),
     case is_map(Body) orelse is_list(Body) of
         true ->
-            % ?LLOG(debug, "~p ~s request: ~s", 
-            %       [Method, Url, nklib_json:encode_pretty(Body)], State);
-            ok;
+            ?DEBUG("~p ~s request: ~s", 
+                  [Method, Url, nklib_json:encode_pretty(Body)], State);
         false ->
             ok
     end,
@@ -346,9 +301,8 @@ do_proxy(Body, State) ->
         {ok, Code, RespHds, RespBody} ->
             case is_map(RespBody) orelse is_list(RespBody) of
                 true ->
-                    % ?LLOG(debug, "~p ~s response (~p): ~s", 
-                          % [Method, Url, Code, nklib_json:encode_pretty(RespBody)], State);
-                    ok;
+                    ?DEBUG("~p ~s response (~p): ~s", 
+                          [Method, Url, Code, nklib_json:encode_pretty(RespBody)], State);
                 false ->
                     ok
             end,
@@ -366,7 +320,7 @@ send_static_proxy(State) ->
     Url = nklib_util:bjoin([<<"http://", ?HOST>>|Path], <<"/">>),
     Hds = get_headers(State),
     Body = get_body(State, #{}),
-    % ?LLOG(debug, "static proxy to: ~s", [Url], State),
+    ?DEBUG("static proxy to: ~s", [Url], State),
     case http_raw(Method, Url, Hds, Body) of
         {ok, Code, RespHds, RespBody} ->
             send_http_reply(Code, RespHds, RespBody, State);
@@ -382,12 +336,12 @@ send_static_proxy(State) ->
 
 %% @private
 set_log(#state{srv_id=SrvId}=State) ->
-    Debug = case nkservice_util:get_debug_info(SrvId, nkchat_mm_proxy) of
+    Debug = case nkservice_util:get_debug_info(SrvId, ?MODULE) of
         {true, _} -> true;
         _ -> false
     end,
-    % lager:error("DEBUG: ~p", [Debug]),
-    put(nkchat_mm_proxy_debug, Debug),
+    % lager:error("HTTP DEBUG: ~p", [Debug]),
+    put(nkchat_mm_proxy_server_http_debug, Debug),
     State.
 
 
@@ -476,6 +430,5 @@ http_raw(Method, Url, Hds, Body) ->
 %% @private
 handle(Fun, Args, State) ->
     nklib_gen_server:handle_any(Fun, Args, State, #state.srv_id, #state.user_state).
-
 
 

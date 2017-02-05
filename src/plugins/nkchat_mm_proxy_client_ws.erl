@@ -26,9 +26,10 @@
 -export([conn_init/1, conn_encode/2, conn_parse/3, conn_stop/3]).
 -export([conn_handle_call/4, conn_handle_cast/3, conn_handle_info/3]).
 -export([send/2, print/3]).
--export([start/5]).
+-export([start/6, get_all/0]).
 
-% To debug, set debug => [{nkmedia_fs_verto, #{nkpacket=>true}}]
+
+% To debug, set debug => [?MODULE]
 
 -define(DEBUG(Txt, Args, State),
     case erlang:get(nkchat_mm_proxy_client_ws_debug) of
@@ -43,13 +44,8 @@
     end).
 
 -define(LLOG(Type, Txt, Args, State),
-    lager:Type("MM WS (~s)"++Txt, [State#state.remote|Args])).
+    lager:Type("MM Client WS (~s) "++Txt, [State#state.remote|Args])).
 
-
-
-% -define(OP_TIME, 5*60*1000).    % Maximum operation time
-% -define(CALL_TIMEOUT, 5*60*1000).
-% -define(CODECS, [opus,vp8,speex,iLBC,'GSM','PCMU','PCMA']).
 
 -define(WS_TIMEOUT, 60*60*1000).
 
@@ -64,7 +60,7 @@
 %% Public
 %% ===================================================================
 
-start(Proto, Ip, Port, Cookie, Pid) ->
+start(SrvId, Proto, Ip, Port, Cookie, Pid) ->
     % Debug = case nkservice_util:get_debug_info(SrvId, ?MODULE) of
     %     {true, #{nkpacket:=true}} -> true;
     %     _ -> false
@@ -73,9 +69,9 @@ start(Proto, Ip, Port, Cookie, Pid) ->
         class => ?MODULE,
         monitor => self(),
         idle_timeout => ?WS_TIMEOUT,
-        user => #{srv_id=>dkv, proxy_pid=>Pid},
+        user => #{srv_id=>SrvId, proxy=>Pid},
         path => <<"/api/v3/users/websocket">>,
-        debug => true,
+        debug => false,
         headers => [{<<"Cookie">>, Cookie}]
     },
     Conn = {?MODULE, Proto, Ip, Port},
@@ -93,12 +89,12 @@ send(Pid, Msg) ->
 
 
 
-% %% @private
-% -spec get_all() ->
-%     [{id(), pid()}].
+%% @private
+-spec get_all() ->
+    [{Server::pid(), Client::pid()}].
 
-% get_all() ->
-%     nklib_proc:values(?MODULE).
+get_all() ->
+    nklib_proc:values(?MODULE).
 
 
 % %% @private
@@ -134,7 +130,7 @@ send(Pid, Msg) ->
 
 -record(state, {
     srv_id :: nkservice:id(),
-    proxy_pid :: pid(),
+    proxy :: pid(),
     remote :: binary()
 }).
 
@@ -159,18 +155,17 @@ default_port(wss) -> 8082.
 conn_init(NkPort) ->
     {ok, Remote} = nkpacket:get_remote_bin(NkPort),
     {ok, _Class, User} = nkpacket:get_user(NkPort),
-    #{srv_id:=SrvId, proxy_pid:=ProxyPid} = User,
+    #{srv_id:=SrvId, proxy:=ProxyPid} = User,
     State = #state{
         srv_id = SrvId,
-        proxy_pid = ProxyPid,
+        proxy = ProxyPid,
         remote = Remote
     },
     set_log(State),
-    monitor(process, ProxyPid),
     nkservice_util:register_for_changes(SrvId),
+    monitor(process, ProxyPid),
     ?DEBUG("new session (~p)", [self()], State),
-    % true = nklib_proc:reg({?MODULE, SessId}),
-    % nklib_proc:put(?MODULE, SessId),
+    nklib_proc:put(?MODULE, ProxyPid),
     {ok, State}.
 
 
@@ -191,8 +186,8 @@ conn_parse({text, Data}, _NkPort, State) ->
         _ ->
             ok
     end,
-    ?MSG("received ~s", [Msg], State),
-    #state{proxy_pid=ProxyPid} = State,
+    ?MSG("received from server\n~s", [Msg], State),
+    #state{proxy=ProxyPid} = State,
     nkchat_mm_proxy_server_ws:send(ProxyPid, Msg),
     {ok, State}.
 
@@ -225,6 +220,7 @@ conn_handle_call(Msg, _From, _NkPort, State) ->
     {ok, #state{}} | {stop, term(), #state{}}.
 
 conn_handle_cast({send, Msg}, NkPort, State) ->
+    ?MSG("received from client:\n~s", [Msg], State),
     send(Msg, NkPort, State);
 
 conn_handle_cast(stop, _NkPort, State) ->
@@ -242,6 +238,11 @@ conn_handle_cast(Msg, _NkPort, State) ->
 
 conn_handle_info({nkservice_updated, _SrvId}, _NkPort, State) ->
     {ok, set_log(State)};
+
+conn_handle_info({'DOWN', _Ref, process, Pid, Reason}, _NkPort, 
+                 #state{proxy=Pid}=State) ->
+    ?LLOG(notice, "stopped because server WS stopped (~p)", [Reason], State),
+    {stop, normal, State};
 
 conn_handle_info(Msg, _NkPort, State) ->
     lager:warning("Module ~p received unexpected info: ~p", [?MODULE, Msg]),
@@ -273,6 +274,7 @@ set_log(#state{srv_id=SrvId}=State) ->
         {true, _} -> true;
         _ -> false
     end,
+    % ?LLOG(error, "debug: ~p", [Debug], State),
     put(nkchat_mm_proxy_client_ws_debug, Debug),
     State.
 
@@ -299,7 +301,7 @@ do_send(Msg, NkPort) ->
 print(Txt, [#{}=Map], State) ->
     print(Txt, [nklib_json:encode_pretty(Map)], State);
 print(Txt, Args, State) ->
-    ?LLOG(debug, Txt, Args, State).
+    ?LLOG(warning, Txt, Args, State).
 
 
 
