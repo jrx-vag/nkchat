@@ -21,11 +21,11 @@
 -module(nkchat_mm_proxy_callbacks).
 
 -export([plugin_deps/0, plugin_syntax/0, plugin_listen/2]).
--export([chat_mm_proxy_http/4]).
--export([chat_mm_proxy_init/2, 
-         chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
-         chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
-         chat_mm_proxy_handle_cast/2, chat_mm_proxy_handle_info/2]).
+-export([nkchat_mm_proxy_http/4]).
+-export([nkchat_mm_proxy_ws_init/2, 
+         nkchat_mm_proxy_ws_in/2, nkchat_mm_proxy_ws_out/2, 
+         nkchat_mm_proxy_ws_terminate/2, nkchat_mm_proxy_ws_handle_call/3,
+         nkchat_mm_proxy_ws_handle_cast/2, nkchat_mm_proxy_ws_handle_info/2]).
 
 -include_lib("nkservice/include/nkservice.hrl").
 
@@ -44,7 +44,7 @@ plugin_deps() ->
 plugin_syntax() ->
     code:ensure_loaded(nkchat_mm_proxy_server_ws),
     code:ensure_loaded(nkchat_mm_proxy_server_http),
-    nkpacket:register_protocol(nkchat_mm_proxy, nkchat_mm_proxy_server),
+    % nkpacket:register_protocol(mm_proxy, nkchat_mm_proxy_server_ws),
     #{
         mm_proxy_listen => fun parse_listen/1
     }.
@@ -54,18 +54,22 @@ plugin_listen(#{mm_proxy_listen:={parsed, Webs, _Opts}}, #{id:=SrvId}) ->
     Routes = [{'_', [{"/[...]", nkchat_mm_proxy_server_http, [{srv_id, SrvId}]}]}],
     WebOpts =#{
         class => {nkchat_mm_proxy_http, SrvId},
-        http_proto => {dispatch, #{routes => Routes}}
+        http_proto => {dispatch, #{routes => Routes}},
+        debug => false
     },
     Wss = lists:map(
         fun({nkpacket_protocol_http, Proto, Ip, Port}) ->
             WsProto = case Proto of http -> ws; https -> wss end,
-            {chat_mm_proxy_server, WsProto, Ip, Port}
+            {nkchat_mm_proxy_server_ws, WsProto, Ip, Port}
         end,
         Webs),
     WsOpts = #{
         class => {nkchat_mm_proxy_ws, SrvId},
         idle_timeout => 60*60*1000,
-        path => <<"/api/v3/users/websocket">>
+        path => <<"/api/v3/users/websocket">>,
+        debug => false,
+        user => #{proxy_to=>{ws, {104,238,188,71}, 8065}},
+        get_headers => [<<"cookie">>]
     },                                  
     [{Webs, WebOpts}, {Wss, WsOpts}];
 
@@ -95,78 +99,78 @@ plugin_listen(_Config, _Service) ->
 
 
 %% @doc called when a new http request has been received
--spec chat_mm_proxy_http(http_method(), http_path(), http_req(), state()) ->
+-spec nkchat_mm_proxy_http(http_method(), http_path(), http_req(), state()) ->
     http_reply().
 
-chat_mm_proxy_http(_Method, _Path, _Req, State) ->
+nkchat_mm_proxy_http(_Method, _Path, _Req, State) ->
     {proxy, State}.
 
 
 
 %% @doc Called when a new FS proxy connection arrives
--spec chat_mm_proxy_init(nkpacket:nkport(), state()) ->
+-spec nkchat_mm_proxy_ws_init(nkpacket:nkport(), state()) ->
     {ok, state()}.
 
-chat_mm_proxy_init(_NkPort, State) ->
+nkchat_mm_proxy_ws_init(_NkPort, State) ->
     {ok, State}.
 
 
 % %% @doc Called to select a FS server
-% -spec chat_mm_proxy_find_fs(nkmedia_service:id(), state()) ->
+% -spec nkchat_mm_proxy_ws_find_fs(nkmedia_service:id(), state()) ->
 %     {ok, [chat_mm_engine:id()], state()}.
 
-% chat_mm_proxy_find_fs(SrvId, State) ->
+% nkchat_mm_proxy_ws_find_fs(SrvId, State) ->
 %     List = [Name || {Name, _} <- nkmedia_fs_engine:get_all(SrvId)],
 %     {ok, List, State}.
 
 
 %% @doc Called when a new msg arrives
--spec chat_mm_proxy_in(map(), state()) ->
+-spec nkchat_mm_proxy_ws_in(map(), state()) ->
     {ok, map(), state()} | {stop, term(), state()} | continue().
 
-chat_mm_proxy_in(Msg, State) ->
+nkchat_mm_proxy_ws_in(Msg, State) ->
     {ok, Msg, State}.
 
 
 %% @doc Called when a new msg is to be answered
--spec chat_mm_proxy_out(map(), state()) ->
+-spec nkchat_mm_proxy_ws_out(map(), state()) ->
     {ok, map(), state()} | {stop, term(), state()} | continue().
 
-chat_mm_proxy_out(Msg, State) ->
+nkchat_mm_proxy_ws_out(Msg, State) ->
     {ok, Msg, State}.
 
 
 %% @doc Called when the connection is stopped
--spec chat_mm_proxy_terminate(Reason::term(), state()) ->
+-spec nkchat_mm_proxy_ws_terminate(Reason::term(), state()) ->
     {ok, state()}.
 
-chat_mm_proxy_terminate(_Reason, State) ->
+nkchat_mm_proxy_ws_terminate(_Reason, State) ->
     {ok, State}.
 
 
 %% @doc 
--spec chat_mm_proxy_handle_call(Msg::term(), {pid(), term()}, state()) ->
+-spec nkchat_mm_proxy_ws_handle_call(Msg::term(), {pid(), term()}, state()) ->
     {ok, state()} | continue().
 
-chat_mm_proxy_handle_call(Msg, _From, State) ->
+nkchat_mm_proxy_ws_handle_call(Msg, _From, State) ->
     lager:error("Module ~p received unexpected call: ~p", [?MODULE, Msg]),
     {ok, State}.
 
 
 %% @doc 
--spec chat_mm_proxy_handle_cast(Msg::term(), state()) ->
+-spec nkchat_mm_proxy_ws_handle_cast(Msg::term(), state()) ->
     {ok, state()}.
 
-chat_mm_proxy_handle_cast(Msg, State) ->
+nkchat_mm_proxy_ws_handle_cast(Msg, State) ->
     lager:error("Module ~p received unexpected cast: ~p", [?MODULE, Msg]),
     {ok, State}.
 
 
 %% @doc 
--spec chat_mm_proxy_handle_info(Msg::term(), state()) ->
+-spec nkchat_mm_proxy_ws_handle_info(Msg::term(), state()) ->
     {ok, State::map()}.
 
-chat_mm_proxy_handle_info(Msg, State) ->
+nkchat_mm_proxy_ws_handle_info(Msg, State) ->
     lager:error("Module ~p received unexpected info: ~p", [?MODULE, Msg]),
     {ok, State}.
 

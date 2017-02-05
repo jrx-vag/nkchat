@@ -23,14 +23,20 @@
 -module(nkchat_mm_proxy_server_ws).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([get_all/0, send_reply/2]).
+-export([get_all/0, send_reply/2, send/2]).
 -export([transports/1, default_port/1]).
 -export([conn_init/1, conn_encode/2, conn_parse/3, conn_stop/3,
          conn_handle_call/4, conn_handle_cast/3, conn_handle_info/3]).
 
 
 -define(LLOG(Type, Txt, Args, State),
-    lager:Type("MM Proxy Server (~s) "++Txt, [State#state.remote | Args])).
+    lager:Type("MM Proxy WS (~s) "++Txt, [State#state.remote | Args])).
+
+-define(MSG(Txt, Args, State),
+    case erlang:get(nkchat_mm_proxy_client_ws_debug) of
+        true -> print(Txt, Args, State);
+        _ -> ok
+    end).
 
 
 
@@ -47,6 +53,12 @@
 
 get_all() ->
     [{Local, Remote} || {Remote, Local} <- nklib_proc:values(?MODULE)].
+
+
+send(Pid, Msg) ->
+    gen_server:cast(Pid, {send, Msg}).
+
+
 
 
 send_reply(Pid, Event) ->
@@ -84,22 +96,24 @@ default_port(wss) -> 9443.
     {ok, #state{}}.
 
 conn_init(NkPort) ->
-    {ok, {_, SrvId}, _} = nkpacket:get_user(NkPort),
+    {ok, #{headers:=Hds}} = nkpacket:get_meta(NkPort),
+    Cookie = nklib_util:get_value(<<"cookie">>, Hds),
+    {ok, {_, SrvId}, User} = nkpacket:get_user(NkPort),
+    #{proxy_to:={Proto, Ip, Port}} = User,
     {ok, Remote} = nkpacket:get_remote_bin(NkPort),
     State = #state{srv_id=SrvId, remote=Remote},
     ?LLOG(notice, "new connection (~p)", [self()], State),
-    {ok, State2} = handle(nkchat_mm_proxy_init, [NkPort], State).
-    % Ip = {45, 32, 144, 41},
-    % case nkchat_mm_proxy_client:start(Ip) of
-    %     {ok, ProxyPid} ->
-    %         ?LLOG(notice, "connected to MM server ~p", [Ip], State),
-    %         monitor(process, ProxyPid),
-    %         nklib_proc:put(?MODULE, {proxy_client, ProxyPid}),
-    %         {ok, State2#state{proxy=ProxyPid}};
-    %     {error, _Error} ->
-    %         ?LLOG(warning, "not connected to MM server ~p", [_Error], State),
-    %         {error, no_server_available}
-    % end.
+    {ok, State2} = handle(nkchat_mm_proxy_ws_init, [NkPort], State),
+    case nkchat_mm_proxy_client_ws:start(Proto, Ip, Port, Cookie, self()) of
+        {ok, ProxyPid} ->
+            ?LLOG(notice, "connected to MM server ~p", [Ip], State),
+            monitor(process, ProxyPid),
+            nklib_proc:put(?MODULE, {proxy_client, ProxyPid}),
+            {ok, State2#state{proxy=ProxyPid}};
+        {error, _Error} ->
+            ?LLOG(warning, "not connected to MM server ~p", [_Error], State),
+            {error, no_server_available}
+    end.
 
 
   
@@ -118,8 +132,8 @@ conn_parse({text, Data}, _NkPort, #state{proxy=Pid}=State) ->
         Json ->
             Json
     end,
-    ?LLOG(info, "received\n~s", [nklib_json:encode_pretty(Msg)], State),
-    case handle(nkchat_mm_proxy_in, [Msg], State) of
+    ?LLOG(warning, "received\n~s", [nklib_json:encode_pretty(Msg)], State),
+    case handle(nkchat_mm_proxy_ws_in, [Msg], State) of
         {ok, Msg2, State2} ->
             ok = nkchat_mm_proxy_client:send(Pid, Msg2),
             {ok, State2};
@@ -145,7 +159,7 @@ conn_encode(Msg, _NkPort) when is_binary(Msg) ->
 
 conn_handle_call({send_reply, Event}, From, NkPort, State) ->
     ?LLOG(info, "sending\n~s", [nklib_json:encode_pretty(Event)], State),
-    case handle(nkchat_mm_proxy_out, [Event], State) of
+    case handle(nkchat_mm_proxy_ws_out, [Event], State) of
         {ok, Event2, State2} ->
             case nkpacket_connection:send(NkPort, Event2) of
                 ok -> 
@@ -161,14 +175,17 @@ conn_handle_call({send_reply, Event}, From, NkPort, State) ->
     end;
 
 conn_handle_call(Msg, From, _NkPort, State) ->
-    handle(nkchat_mm_proxy_handle_call, [Msg, From], State).
+    handle(nkchat_mm_proxy_ws_handle_call, [Msg, From], State).
 
 
 -spec conn_handle_cast(term(), nkpacket:nkport(), #state{}) ->
     {ok, #state{}} | {stop, Reason::term(), #state{}}.
 
+conn_handle_cast({send, Msg}, NkPort, State) ->
+    send(Msg, NkPort, State);
+
 conn_handle_cast(Msg, _NkPort, State) ->
-    handle(nkchat_mm_proxy_handle_cast, [Msg], State).
+    handle(nkchat_mm_proxy_ws_handle_cast, [Msg], State).
 
 
 %% @doc Called when the connection received an erlang message
@@ -181,7 +198,7 @@ conn_handle_info({'DOWN', _Ref, process, Pid, Reason}, _NkPort,
     {stop, normal, State};
 
 conn_handle_info(Msg, _NkPort, State) ->
-    handle(nkchat_mm_proxy_handle_info, [Msg], State).
+    handle(nkchat_mm_proxy_ws_handle_info, [Msg], State).
 
 
 %% @doc Called when the connection stops
@@ -189,7 +206,7 @@ conn_handle_info(Msg, _NkPort, State) ->
     ok.
 
 conn_stop(Reason, _NkPort, State) ->
-    catch handle(nkchat_mm_proxy_terminate, [Reason], State).
+    catch handle(nkchat_mm_proxy_ws_terminate, [Reason], State).
 
 
 
@@ -202,3 +219,30 @@ conn_stop(Reason, _NkPort, State) ->
 handle(Fun, Args, State) ->
     nklib_gen_server:handle_any(Fun, Args, State, #state.srv_id, #state.user_state).
     
+
+
+
+%% @private
+send(Msg, NkPort, State) ->
+    ?MSG("sending ~s", [Msg], State),
+    case do_send(Msg, NkPort) of
+        ok -> 
+            {ok, State};
+        error -> 
+            ?LLOG(info, "error sending msg", [], State),
+            {stop, normal, State}
+    end.
+
+
+%% @private
+do_send(Msg, NkPort) ->
+    nkpacket_connection:send(NkPort, Msg).
+
+
+
+%% @private
+print(Txt, [#{}=Map], State) ->
+    print(Txt, [nklib_json:encode_pretty(Map)], State);
+print(Txt, Args, State) ->
+    ?LLOG(debug, Txt, Args, State).
+

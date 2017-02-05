@@ -211,7 +211,7 @@ init(Req, [{srv_id, SrvId}]) ->
     set_log(State1),
     ?DEBUG("received ~p (~p) from ~s", [Method, Url, Remote], State1),
     try
-        Reply = handle(chat_mm_proxy_http, [Method, Path2, State1], State1),
+        Reply = handle(nkchat_mm_proxy_http, [Method, Path2, State1], State1),
         process(Reply)
     catch
         throw:{Code, Hds, Body} ->
@@ -247,13 +247,14 @@ process({proxy, #state{path=[<<"static">>|_]}=State}) ->
 process({proxy, #state{path=[<<"select_team">>]}=State}) ->
     send_static_proxy(State);
 
-process({proxy, #state{path=[<<"api">>, <<"v3">>|Rest]}=State}) ->
-    Body = case State of
-        #state{method=post} ->
+process({proxy, #state{path=[<<"api">>, <<"v3">>|Rest], method=Method}=State}) ->
+    Body = case Method of
+        post ->
             get_body(State, #{parse=>true});
         _ ->
             <<>>
     end,
+    ?LLOG(info, "processing API ~p ~p", [Method, Rest], State),
     process_api(Rest, Body, State);
 
 
@@ -270,12 +271,14 @@ process({proxy, #state{path=Path}=State}) ->
 
 %% @private
 %% Body is be already decoded
-process_api([<<"initial_load">>], Body, State) ->
+process_api([<<"users">>, <<"initial_load">>], Body, State) ->
     case do_proxy(Body, State) of
         {ok, 200, RespHds, RespBody} ->
+
             #{<<"client_cfg">>:=Cfg1} = RespBody,
-            Cfg2 = Cfg1#{<<"SiteURL">>=><<"https://chat.dkv.netc.io">>},
+            Cfg2 = Cfg1#{<<"SiteURL">>=><<"http://casa.carlosj.net:8200">>},
             RespBody2 = RespBody#{<<"client_cfg">>:=Cfg2},
+            lager:error("Updated inital_load"),
             send_http_reply(200, RespHds, RespBody2, State);
         error ->
             send_http_error(State)
@@ -329,12 +332,13 @@ do_proxy(Body, State) ->
     #state{method=Method, path=Path} = State, 
     Url = nklib_util:bjoin([<<"http://", ?HOST>>|Path], <<"/">>),
     Hds = get_headers(State),
-    ?LLOG(notice, "to: ~s", [Url], State),
+    % ?LLOG(info, "to: ~s", [Url], State),
     % ?DEBUG("orig headers: ~p", [Hds], State),
     case is_map(Body) orelse is_list(Body) of
         true ->
-            ?LLOG(info, "~p ~s request: ~s", 
-                  [Method, Url, nklib_json:encode_pretty(Body)], State);
+            % ?LLOG(debug, "~p ~s request: ~s", 
+            %       [Method, Url, nklib_json:encode_pretty(Body)], State);
+            ok;
         false ->
             ok
     end,
@@ -342,8 +346,9 @@ do_proxy(Body, State) ->
         {ok, Code, RespHds, RespBody} ->
             case is_map(RespBody) orelse is_list(RespBody) of
                 true ->
-                    ?LLOG(info, "~p ~s response (~p): ~s", 
-                          [Method, Url, Code, nklib_json:encode_pretty(RespBody)], State);
+                    % ?LLOG(debug, "~p ~s response (~p): ~s", 
+                          % [Method, Url, Code, nklib_json:encode_pretty(RespBody)], State);
+                    ok;
                 false ->
                     ok
             end,
@@ -361,7 +366,7 @@ send_static_proxy(State) ->
     Url = nklib_util:bjoin([<<"http://", ?HOST>>|Path], <<"/">>),
     Hds = get_headers(State),
     Body = get_body(State, #{}),
-    ?LLOG(debug, "static proxy to: ~s", [Url], State),
+    % ?LLOG(debug, "static proxy to: ~s", [Url], State),
     case http_raw(Method, Url, Hds, Body) of
         {ok, Code, RespHds, RespBody} ->
             send_http_reply(Code, RespHds, RespBody, State);
