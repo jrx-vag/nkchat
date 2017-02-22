@@ -295,7 +295,7 @@ do_proxy(Body, #state{method=Method}=State) ->
         false ->
             ok
     end,
-    case http(Method, Url, Hds, Body) of
+    case nkchat_util:http(Method, Url, Hds, Body) of
         {ok, Code, RespHds, RespBody} ->
             case is_map(RespBody) orelse is_list(RespBody) of
                 true ->
@@ -318,7 +318,7 @@ send_static_proxy(#state{method=Method}=State) ->
     Hds = get_headers(State),
     Body = get_body(State, #{}),
     ?DEBUG("static proxy to: ~s", [Url], State),
-    case http_raw(Method, Url, Hds, Body) of
+    case nkchat_util:http_raw(Method, Url, Hds, Body) of
         {ok, Code, RespHds, RespBody} ->
             send_http_reply(Code, RespHds, RespBody, State);
         {error, Error} ->
@@ -385,49 +385,6 @@ send_http_error(State) ->
 
 
 
-
-
-%% @private
-http(Method, Url, Hds, Body) ->
-    case http_raw(Method, Url, Hds, Body) of
-        {ok, Code, RespHds, RespBody} ->
-            RespBody2 = case nklib_util:get_value(<<"Content-Type">>, RespHds) of
-                <<"application/json">> ->
-                    nklib_json:decode(RespBody);
-                _ ->
-                    RespBody
-            end,
-            {ok, Code, RespHds, RespBody2};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @private
-http_raw(Method, Url, Hds, Body) ->
-    Body2 = case is_map(Body) orelse is_list(Body) of
-        true -> nklib_json:encode(Body);
-        false -> Body
-    end,
-    Hds2 = case nklib_store:get({?MODULE, token}) of
-        not_found ->
-            % lager:warning("NOT Added token for ~s", [Url]),
-            Hds;
-        Token -> 
-            % lager:warning("Added token for ~s", [Url]),
-            [{<<"Authorization">>, <<"Bearer ", Token/binary>>}|Hds]
-    end,
-    Ciphers = ssl:cipher_suites(),
-    % Hackney fails with its default set of ciphers
-    % See hackney.ssl#44
-    HttpOpts = [
-        {connect_timeout, 15000},
-        {recv_timeout, 15000},
-        insecure,
-        with_body,
-        {ssl_options, [{ciphers, Ciphers}]}
-    ],
-    hackney:request(Method, Url, Hds2, Body2, HttpOpts).
 
 
 
