@@ -20,8 +20,9 @@
 
 -module(nkchat_callbacks).
 
--export([plugin_deps/0]).
--export([chat_mm_proxy_init/2, 
+-export([plugin_deps/0, error_code/1]).
+-export([api_server_cmd/2, api_server_syntax/4]).
+-export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
          chat_mm_proxy_handle_cast/2, chat_mm_proxy_handle_info/2]).
@@ -42,6 +43,37 @@ plugin_deps() ->
 
 
 
+error_code(obj_not_found)   		-> {0, "Object not found"};
+error_code(_) -> continue.
+
+
+
+
+%% ===================================================================
+%% API CMD
+%% ===================================================================
+
+%% @private
+api_server_cmd(
+    #api_req{class=chat, subclass=Sub, cmd=Cmd}=Req, State) ->
+    nkchat_api:cmd(Sub, Cmd, Req, State);
+
+api_server_cmd(_Req, _State) ->
+    continue.
+
+
+%% @private
+api_server_syntax(#api_req{class=chat, subclass=Sub, cmd=Cmd},
+    Syntax, Defaults, Mandatory) ->
+    nkchat_syntax:syntax(Sub, Cmd, Syntax, Defaults, Mandatory);
+
+api_server_syntax(_Req, _Syntax, _Defaults, _Mandatory) ->
+    continue.
+
+
+
+
+
 
 %% ===================================================================
 %% Types
@@ -49,6 +81,9 @@ plugin_deps() ->
 
 -type state() :: term().
 -type continue() :: continue | {continue, list()}.
+
+
+
 
 
 

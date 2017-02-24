@@ -19,12 +19,8 @@ start() ->
 
 %% @private OTP standard start callback
 start(_Type, _Args) ->
-	Syntax = #{
-    },
-    Defaults = #{
-        % login_cache_ttl => 5
-    },
-    case nklib_config:load_env(?APP, Syntax, Defaults) of
+	Syntax = #{},
+    case nklib_config:load_env(?APP, Syntax) of
         {ok, _} ->
             {ok, Pid} = nkchat_sup:start_link(),
             {ok, Vsn} = application:get_key(?APP, vsn),
