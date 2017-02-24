@@ -21,40 +21,12 @@
 
 -module(nkchat).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
--export([start/0, stop/0]).
 
 %% ===================================================================
 %% Types
 %% ===================================================================
 
 
-
-start() ->
-    Spec1 = #{
-    	callback => ?MODULE,
-        plugins => [nkchat_mm_proxy],  
-        mm_proxy_listen => "http://all:8200",
-        %web_server => "https:all:8081",
-        %web_server_path => "./www",
-        % api_server => "ws:all:10106/dkv, http://all:10107/dkv",
-        % api_server_timeout => 180,
-        % elastic_url => "https://cluster.netc.io/es/",
-        % elastic_user => "user",
-        % elastic_pass => "es",
-        debug => [
-        	nkchat_mm_proxy_server_http
-        	% nkchat_mm_proxy_server_ws, 
-        	% nkchat_mm_proxy_client_ws
-        ]
-        % api_gelf_server => "c2.netc.io"
-    },
-    % Spec2 = nkmedia_util:add_certs(Spec1),
-    nkservice:start(mm, Spec1).
-
-
-stop() ->
-    nkservice:stop(mm).
-	
 
 
 %% ===================================================================

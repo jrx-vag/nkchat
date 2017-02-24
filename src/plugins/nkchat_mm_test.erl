@@ -11,36 +11,25 @@
 
 
 
-login() ->
-    Data = #{
-        name => <<"pruebas">>,
-        login_id => <<"carlosj.gf@gmail.com">>,
-        password => <<"carlos12">>
-    },
-    Url = "https://dkv.netc.io:9443/api/v3/users/login",
-    case dkv_util:http(post, Url, #{body=>Data}) of
-        {ok, Hds, Resp, _} ->
-            Token = nklib_util:get_value(<<"Token">>, Hds),
-            User = nklib_json:decode(Resp),
-            {ok, Token, User};
-        {error, Error} ->
-            {error, Error}
-    end.
+%%login() ->
+%%    Data = #{
+%%        name => <<"pruebas">>,
+%%        login_id => <<"carlosj.gf@gmail.com">>,
+%%        password => <<"carlos12">>
+%%    },
+%%    Url = "https://chat.netc.io:9443/api/v3/users/login",
+%%    case dkv_util:http(post, Url, #{body=>Data}) of
+%%        {ok, Hds, Resp, _} ->
+%%            Token = nklib_util:get_value(<<"Token">>, Hds),
+%%            User = nklib_json:decode(Resp),
+%%            {ok, Token, User};
+%%        {error, Error} ->
+%%            {error, Error}
+%%    end.
 
 
 cmd(T, Cmd) ->
     get(T, nklib_util:to_list(Cmd)).
-
-
-get(Token, Cmd) ->
-    Url = "https://dkv.netc.io:9443/api/v3/" ++ Cmd,
-    Hds = [{<<"Authorization">>, <<"Bearer ", Token/binary>>}],
-    case dkv_util:http(get, Url, #{headers=>Hds}) of
-        {ok, _Hds, Resp, _} ->
-             {ok, nklib_json:decode(Resp)};
-        {error, Error} ->
-            {error, Error}
-    end.
 
 
 
@@ -49,18 +38,17 @@ get(Token, Cmd) ->
 
 
 
-post1() ->
-    Opts = #{
-        body => #{
-            % icon_url=> <<"http://www.jaraxa.com/img/jaraxa-logo.png">>,
-            % username => <<"NetComposer">>,
-            % channel => <<"off-topic">>,
-            channel => <<"@carlos2">>,
-            text => post_text1()
-        }
-    },
-    Url = "https://dkv.netc.io:9443/hooks/8376mxck33y97qhgtnx1e3uq5y",
-    dkv_util:http(post, Url, Opts).
+%%post1() ->
+%%    Opts = #{
+%%        body => #{
+%%            % icon_url=> <<"http://www.jaraxa.com/img/jaraxa-logo.png">>,
+%%            % username => <<"NetComposer">>,
+%%            % channel => <<"off-topic">>,
+%%            channel => <<"@carlos2">>,
+%%            text => post_text1()
+%%        }
+%%    },
+%%    Url = "https://dkv.netc.io:9443/hooks/8376mxck33y97qhgtnx1e3uq5y",
 
 
 
@@ -79,17 +67,17 @@ For @carlos2
 
 
 post2() ->
-    Opts = #{
-        body => #{
-            icon_url=> <<"http://www.jaraxa.com/img/jaraxa-logo.png">>,
-            username => <<"NetComposer">>,
-            % channel => <<"off-topic">>,
-            % channel => <<"@carlos2">>,
-            attachments => [post_attach1()]
-        }
-    },
-    Url = "https://dkv.netc.io:9443/hooks/gg7fmp4nofb6me634qe6tj7j1e",
-    dkv_util:http(post, Url, Opts).
+%%    Opts = #{
+%%        body => #{
+%%            icon_url=> <<"http://www.jaraxa.com/img/jaraxa-logo.png">>,
+%%            username => <<"NetComposer">>,
+%%            % channel => <<"off-topic">>,
+%%            % channel => <<"@carlos2">>,
+%%            attachments => [post_attach1()]
+%%        }
+%%    },
+%%    Url = "https://dkv.netc.io:9443/hooks/gg7fmp4nofb6me634qe6tj7j1e",
+%%    dkv_util:http(post, Url, Opts).
 
 
 

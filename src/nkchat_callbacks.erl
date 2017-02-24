@@ -169,17 +169,3 @@ chat_mm_proxy_handle_info(Msg, State) ->
 %% Internal
 %% ===================================================================
 
-
-% parse_listen(_Key, {parsed, Raw, Opts}, _Ctx) ->
-%     {ok, {parsed, Raw, Opts}};
-
-% parse_listen(Key, Url, _Ctx) ->
-%     Schemes = case Key of
-%         dkv_rpc_listen -> [https];
-%         _ -> []
-%     end,
-%     Opts = #{valid_schemes=>Schemes, resolve_type=>listen},
-%     case nkpacket:resolve(Url, Opts) of
-%         {ok, [Raw], RawOpts} -> {ok, {parsed, Raw, RawOpts}};
-%         Err -> lager:warning("ERR: ~p, ~p, ~p", [Url, Opts, Err])
-%     end.
