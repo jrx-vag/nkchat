@@ -71,7 +71,13 @@ delete_all_users(SrvId) ->
 
 %% @private
 list_users(SrvId, Opts) ->
-    list(SrvId, ?ES_USER_ALIAS, ?ES_USER_TYPE, Opts).
+    Opts2 = Opts#{
+        sort_fields => #{
+            <<"name">> => <<"name.keyword">>,
+            <<"surname">> => <<"surname.keyword">>
+        }
+    },
+    list(SrvId, ?ES_USER_ALIAS, ?ES_USER_TYPE, Opts2).
 
 
 
@@ -100,7 +106,13 @@ delete_all_conversations(SrvId) ->
 
 %% @private
 list_conversations(SrvId, Opts) ->
-    list(SrvId, ?ES_CONV_ALIAS, ?ES_CONV_TYPE, Opts).
+    Opts2 = Opts#{
+        sort_fields => #{
+            <<"name">> => <<"name.keyword">>,
+            <<"description">> => <<"description.keyword">>
+        }
+    },
+    list(SrvId, ?ES_CONV_ALIAS, ?ES_CONV_TYPE, Opts2).
 
 
 
@@ -303,82 +315,10 @@ delete(SrvId, Index, Type, Id) ->
 
 
 %% @private
-search(SrvId, Index, Type, Str) ->
-    nkelastic_api:url_search(SrvId, Index, Type, Str).
-
-
-%% @private
 delete_all(SrvId, Index, Type) ->
     nkelastic_api:delete_all(SrvId, Index, Type).
 
 
 %% @private
 list(SrvId, Index, Type, Opts) ->
-    Source = list_get_source(Opts),
-    Query = case Opts of
-                #{filter:=Filter} when is_map(Filter) ->
-                    list_get_query(maps:to_list(Filter), []);
-                _ ->
-                    <<>>
-            end,
-    From = case Opts of
-               #{from:=F} -> <<"&from=", (to_bin(F))/binary>>;
-               _ -> <<>>
-           end,
-    Size = case Opts of
-               #{size:=S} -> <<"&size=", (to_bin(S))/binary>>;
-               _ -> <<>>
-           end,
-    Sort = list_get_sort(Opts),
-    Str = ["?", Source, Query, From, Size, Sort],
-    case search(SrvId, Index, Type, Str) of
-        {ok, Num, Hits} ->
-            Data = lists:map(
-                fun(#{<<"_id">>:=Id}=Hit) ->
-                    FieldMap = maps:get(<<"_source">>, Hit, #{}),
-                    maps:put(<<"_id">>, Id, FieldMap)
-                end,
-                Hits),
-            {ok, Num, Data};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @private
-list_get_source(#{fields:=[<<"_all">>]}) ->
-    <<"&_source=true">>;
-
-list_get_source(#{fields:=Fields}) when is_list(Fields) ->
-    <<"&_source_includes=", (nklib_util:bjoin(Fields))/binary>>;
-
-list_get_source(_) ->
-    <<"&_source=false">>.
-
-
-%% @private
-list_get_query([], []) ->
-    [];
-
-list_get_query([], Acc) ->
-    [<<"&default_operator=AND&q=">>, Acc];
-
-list_get_query([{Field, Value}|Rest], Acc) ->
-    Term = <<"+", (to_bin(Field))/binary, $:, (to_bin(Value))/binary>>,
-    list_get_query(Rest, [Term|Acc]).
-
-
-
-%% @private
-list_get_sort(#{sort_by:=Sort}=Opts) when is_list(Sort), length(Sort)>0 ->
-    Order = to_bin(maps:get(sort_order, Opts, asc)),
-    Fields = [<<(to_bin(Field))/binary, $:, Order/binary>> || Field<-Sort],
-    [<<"&sort=", (nklib_util:bjoin(Fields))/binary>>];
-
-list_get_sort(_) ->
-    [].
-
-
-%% @private
-to_bin(T) -> nklib_util:to_binary(T).
-
+    nkelastic_api:list(SrvId, Index, Type, Opts).

@@ -61,7 +61,7 @@ syntax(conversation, create, Syntax, Defaults, Mandatory) ->
         Syntax#{
             name => binary,
             description => binary,
-            user_ids => [binary]
+            user_ids => {list, binary}
         },
         Defaults#{user_ids=>[]},
         [name|Mandatory]
@@ -166,7 +166,7 @@ search_syntax(Base) ->
         size => pos_integer,
         from => pos_integer,
         sort_by => {list, binary},
-        sort_order => {atom, [asc, desc]}
+        sort_order => {enum, [asc, desc]}
     }.
 
 

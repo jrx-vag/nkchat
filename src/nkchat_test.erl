@@ -5,6 +5,7 @@
 -compile([export_all]).
 
 -define(WS, "ws://127.0.0.1:10201/chat").
+%%-define(WS, "wss://v1.netc.io/netcomp/chat/v00/nkapi/ws").
 -define(HTTP, "http://127.0.0.1:10201/chat").
 
 
@@ -66,6 +67,15 @@ user_delete(UserId) ->
 
 user_search(Spec) ->
     cmd(user, search, Spec).
+
+
+user_search2() ->
+    Spec = #{
+        fields => '_all',
+        sort_by => [name],
+        sort_order => desc
+    },
+    user_search(Spec).
 
 
 conversation_create(Name, Desc, UserIds) ->
