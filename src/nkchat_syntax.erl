@@ -28,6 +28,15 @@
 %% Syntax
 %% ===================================================================
 
+syntax(user, get, Syntax, Defaults, Mandatory) ->
+    {
+        Syntax#{
+            user_id => binary
+        },
+        Defaults,
+        [user_id|Mandatory]
+    };
+
 syntax(user, create, Syntax, Defaults, Mandatory) ->
     {
         Syntax#{
@@ -54,6 +63,15 @@ syntax(user, search, Syntax, Defaults, Mandatory) ->
         search_syntax(Syntax),
         Defaults,
         Mandatory
+    };
+
+syntax(conversation, get, Syntax, Defaults, Mandatory) ->
+    {
+        Syntax#{
+            conversation_id => binary
+        },
+        Defaults,
+        [conversation_id|Mandatory]
     };
 
 syntax(conversation, create, Syntax, Defaults, Mandatory) ->
@@ -112,6 +130,15 @@ syntax(conversation, get_members, Syntax, Defaults, Mandatory) ->
         [conversation_id|Mandatory]
     };
 
+syntax(message, get, Syntax, Defaults, Mandatory) ->
+    {
+        Syntax#{
+            message_id => binary
+        },
+        Defaults,
+        [message_id|Mandatory]
+    };
+
 syntax(message, create, Syntax, Defaults, Mandatory) ->
     {
         Syntax#{
@@ -133,20 +160,22 @@ syntax(message, search, Syntax, Defaults, Mandatory) ->
 syntax(message, update, Syntax, Defaults, Mandatory) ->
     {
         Syntax#{
+            conversation_id => binary,
             message_id => binary,
             message => binary
         },
         Defaults,
-        [message_id, message|Mandatory]
+        [conversation_id, message_id, message|Mandatory]
     };
 
 syntax(message, delete, Syntax, Defaults, Mandatory) ->
     {
         Syntax#{
+            conversation_id => binary,
             message_id => binary
         },
         Defaults,
-        [message_id|Mandatory]
+        [conversation_id, message_id|Mandatory]
     };
 
 syntax(_Sub, _Cmd, Syntax, Defaults, Mandatory) ->

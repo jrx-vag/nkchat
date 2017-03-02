@@ -6,6 +6,13 @@
 
 All commands must use `class: "chat"`.
 
+**Events**
+
+Many commands generate events that the client can subscribe to. See description for each command.
+
+
+
+
 
 ### User Commands
 
@@ -53,9 +60,26 @@ Example:
 ```
 
 
+It generates the following **event**:
+
+Field|Value
+---|---
+subclass|`user`
+type|`created`
+obj_id|The user's id
+
+
 #### delete
 
 Use command `delete` to remove and user. Must use the field `user_id`.
+
+**Event**
+
+Field|Value
+---|---
+subclass|`user`
+type|`deleted`
+obj_id|The user's id
 
 
 #### search
@@ -88,10 +112,27 @@ Field|Desc
 
 The sever will return the newly created `conversation_id`.
 
+**Event**
+
+Field|Value
+---|---
+subclass|`conversation`
+type|`created`
+obj_id|The conversation's id
+
+
 
 #### delete
 
 Use command `delete`, and field `conversation_id`.
+
+**Event**
+
+Field|Value
+---|---
+subclass|`conversation`
+type|`deleted`
+obj_id|The conversation's id
 
 
 #### add_members
@@ -99,9 +140,31 @@ Use command `delete`, and field `conversation_id`.
 Use command `add_members` to add users to a conversation. Must set the `conversation_id` field and the list of users in the field `user_ids`.
 
 
+**Event**
+
+Field|Value
+---|---
+subclass|`conversation`
+type|`added_memebers`
+obj_id|The conversation's id
+body|Includes field `user_ids`
+
+
+
 #### remove_members
 
 Use command `remove_members` to remove users from a conversation. Must set the `conversation_id` field and the list of users in the field `user_ids`.
+
+
+**Event**
+
+Field|Value
+---|---
+subclass|`conversation`
+type|`removed_memebers`
+obj_id|The conversation's id
+body|Includes field `user_ids`
+
 
 
 #### get_members
@@ -112,9 +175,6 @@ Use command `get_members` to get the list of users from a conversation. Must set
 #### search
 
 Use command `search` to find conversations. Use the same fields as for [user search](#search).
-
-
-
 
 
 
@@ -135,14 +195,44 @@ Field|Desc
 The sever will return the newly created `message_id`.
 
 
+**Event**
+
+Field|Value
+---|---
+subclass|`conversation`
+type|`created_message`
+obj_id|The conversation's id
+body|Includes field `message_id`
+
+
 #### delete
 
-Use command `delete`, and field `message_id`.
+Use command `delete`, and fields `conversation_id` and `message_id`.
+
+
+**Event**
+
+Field|Value
+---|---
+subclass|`conversation`
+type|`deleted_message`
+obj_id|The conversation's id
+body|Includes field `message_id`
 
 
 #### update
 
-Use command `update`, and fields `message_id` and `message` to update message's content.
+Use command `update`, and fields `conversation_id`, `message_id` and `message` to update message's content.
+
+
+**Event**
+
+Field|Value
+---|---
+subclass|`conversation`
+type|`updated_message`
+obj_id|The conversation's id
+body|Includes field `message_id`
 
 
 #### search

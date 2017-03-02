@@ -32,6 +32,15 @@
 
 
 %% @doc
+cmd(user, get, Req, State) ->
+    #api_req{srv_id = SrvId, data = #{user_id:=UserId}} = Req,
+    case nkchat_es:read_user(SrvId, UserId) of
+        {ok, User, _Vsn} ->
+            {ok, User, State};
+        {error, Error} ->
+            {error, Error, State}
+    end;
+
 cmd(user, create, Req, State) ->
     #api_req{srv_id = SrvId, data = Data} = Req,
     UserId = nklib_util:luid(),
@@ -41,6 +50,7 @@ cmd(user, create, Req, State) ->
     },
     case nkchat_es:write_user(SrvId, UserId, Obj) of
         {ok, _Vsn} ->
+            event(SrvId, user, created, UserId, #{}),
             {ok, #{user_id=>UserId}, State};
         {error, Error} ->
             {error, Error, State}
@@ -51,6 +61,7 @@ cmd(user, delete, Req, State) ->
     #{user_id:=UserId} = Data,
     case nkchat_es:delete_user(SrvId, UserId) of
         ok ->
+            event(SrvId, user, deleted, UserId, #{}),
             {ok, #{}, State};
         {error, Error} ->
             {error, Error, State}
@@ -65,6 +76,15 @@ cmd(user, search, Req, State) ->
             {error, Error, State}
     end;
 
+cmd(conversation, get, Req, State) ->
+    #api_req{srv_id = SrvId, data = #{conversation_id:=ConvId}} = Req,
+    case nkchat_es:read_conversation(SrvId, ConvId) of
+        {ok, User, _Vsn} ->
+            {ok, User, State};
+        {error, Error} ->
+            {error, Error, State}
+    end;
+
 cmd(conversation, create, Req, State) ->
     #api_req{srv_id = SrvId, data = Data} = Req,
     ConvId = nklib_util:luid(),
@@ -74,24 +94,27 @@ cmd(conversation, create, Req, State) ->
     },
     case nkchat_es:write_conversation(SrvId, ConvId, Obj) of
         {ok, _Vsn} ->
+            event(SrvId, conversation, created, ConvId, #{}),
             {ok, #{conversation_id=>ConvId}, State};
         {error, Error} ->
             {error, Error, State}
     end;
 
-%%cmd(conversation, search, Req, State) ->
-%%    #api_req{srv_id=SrvId, data=Data} = Req,
-%%    #{
-%%        conversation_id := ConvId,
-%%        searc_spec := _Spec
-%%    } = Data,
-%%    {ok, #{}, State};
+cmd(conversation, search, Req, State) ->
+    #api_req{srv_id=SrvId, data=Data} = Req,
+    case nkchat_es:list_conversations(SrvId, Data) of
+        {ok, Total, List} ->
+            {ok, #{total=>Total, data=>List}, State};
+        {error, Error} ->
+            {error, Error, State}
+    end;
 
 cmd(conversation, delete, Req, State) ->
     #api_req{srv_id = SrvId, data = Data} = Req,
     #{conversation_id := ConvId} = Data,
     case nkchat_es:delete_conversation(SrvId, ConvId) of
         ok ->
+            event(SrvId, conversation, deleted, ConvId, #{}),
             {ok, #{}, State};
         {error, Error} ->
             {error, Error, State}
@@ -106,6 +129,8 @@ cmd(conversation, add_members, Req, State) ->
             Obj2 = Obj#{<<"user_ids">>=>UserIds2},
             case nkchat_es:write_conversation(SrvId, ConvId, Obj2) of
                 {ok, _Vsn2} ->
+                    event(SrvId, conversation, added_members, ConvId,
+                          #{user_ids=>UserIds}),
                     {ok, #{}, State};
                 {error, Error} ->
                     {error, Error, State}
@@ -123,6 +148,8 @@ cmd(conversation, remove_members, Req, State) ->
             Obj2 = Obj#{<<"user_ids">>:=UserIds2},
             case nkchat_es:write_conversation(SrvId, ConvId, Obj2) of
                 {ok, _Vsn} ->
+                    event(SrvId, conversation, removed_members, ConvId,
+                    #{user_ids=>UserIds}),
                     {ok, #{}, State};
                 {error, Error} ->
                     {error, Error, State}
@@ -141,6 +168,15 @@ cmd(conversation, get_members, Req, State) ->
             {error, Error, State}
     end;
 
+cmd(message, get, Req, State) ->
+    #api_req{srv_id = SrvId, data = #{message_id:=MsgId}} = Req,
+    case nkchat_es:read_message(SrvId, MsgId) of
+        {ok, User, _Vsn} ->
+            {ok, User, State};
+        {error, Error} ->
+            {error, Error, State}
+    end;
+
 cmd(message, create, Req, State) ->
     #api_req{srv_id = SrvId, data = Data} = Req,
     MsgId = nklib_util:luid(),
@@ -150,18 +186,22 @@ cmd(message, create, Req, State) ->
     },
     case nkchat_es:write_message(SrvId, MsgId, Obj) of
         {ok, _Vsn} ->
+            #{conversation_id:=ConvId} = Data,
+            event(SrvId, conversation, created_message, ConvId,
+                  #{message_id=>MsgId}),
             {ok, #{message_id=>MsgId}, State};
         {error, Error} ->
             {error, Error, State}
     end;
 
-%%cmd(message, search, Req, State) ->
-%%    #api_req{srv_id=SrvId, data=Data} = Req,
-%%    #{
-%%        user_id := _UserId,
-%%        searc_spec := _Spec
-%%    } = Data,
-%%    {ok, #{}, State};
+cmd(message, search, Req, State) ->
+    #api_req{srv_id=SrvId, data=Data} = Req,
+    case nkchat_es:list_messages(SrvId, Data) of
+        {ok, Total, List} ->
+            {ok, #{total=>Total, data=>List}, State};
+        {error, Error} ->
+            {error, Error, State}
+    end;
 
 cmd(message, update, Req, State) ->
     #api_req{srv_id = SrvId, data = Data} = Req,
@@ -171,6 +211,9 @@ cmd(message, update, Req, State) ->
             Obj2 = Obj#{<<"message">>=>Msg},
             case nkchat_es:write_message(SrvId, MsgId, Obj2) of
                 {ok, _Vsn2} ->
+                    #{conversation_id:=ConvId} = Data,
+                    event(SrvId, conversation, updated_message, ConvId,
+                        #{message_id=>MsgId}),
                     {ok, #{}, State};
                 {error, Error} ->
                     {error, Error, State}
@@ -184,6 +227,9 @@ cmd(message, delete, Req, State) ->
     #{message_id := MsgId} = Data,
     case nkchat_es:delete_message(SrvId, MsgId) of
         ok ->
+            #{conversation_id:=ConvId} = Data,
+            event(SrvId, conversation, deleted_message, ConvId,
+                #{message_id=>MsgId}),
             {ok, #{}, State};
         {error, Error} ->
             {error, Error, State}
@@ -197,7 +243,7 @@ cmd(_Sub, _Cmd, _Req, _State) ->
 %% Commands
 %% ===================================================================
 
-
+%% @private
 get_conv_users(SrvId, ConvId) ->
     case nkchat_es:read_conversation(SrvId, ConvId) of
         {ok, #{<<"user_ids">>:=UserIds} = Obj, _Vsn} ->
@@ -208,3 +254,16 @@ get_conv_users(SrvId, ConvId) ->
         {error, Error} ->
             {error, Error}
     end.
+
+
+%% @private
+event(SrvId, Sub, Type, ObjId, Body) ->
+    Event = #event{
+        srv_id = SrvId,
+        class = <<"chat">>,
+        subclass = nklib_util:to_binary(Sub),
+        type = nklib_util:to_binary(Type),
+        obj_id = ObjId,
+        body = Body
+    },
+    nkservice_events:send(Event).

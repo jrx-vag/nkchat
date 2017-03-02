@@ -51,6 +51,19 @@ login() ->
     C.
 
 
+subs() ->
+    Pid = get_client(),
+    Data = #{
+        class => chat
+    },
+    nkservice_api_client:cmd(Pid, core, event, subscribe, Data).
+
+
+
+user_get(UserId) ->
+    cmd(user, get, #{user_id=>UserId}).
+
+
 user_create(Name, Surname, Login, Pass) ->
     Data = #{name=>Name, surname=>Surname, login=>Login, password=>Pass},
     case cmd(user, create, Data) of
@@ -78,6 +91,10 @@ user_search2() ->
     user_search(Spec).
 
 
+conversation_get(ConvId) ->
+    cmd(conversation, get, #{conversation_id=>ConvId}).
+
+
 conversation_create(Name, Desc, UserIds) ->
     Data = #{name=>Name, description=>Desc, user_ids=>UserIds},
     case cmd(conversation, create, Data) of
@@ -100,12 +117,16 @@ conversation_del(ConvId, UserIds) ->
     cmd(conversation, remove_members, #{conversation_id=>ConvId, user_ids=>UserIds}).
 
 
-conversation_get(ConvId) ->
+conversation_get_members(ConvId) ->
     cmd(conversation, get_members, #{conversation_id=>ConvId}).
 
 
 conversation_search(Spec) ->
-    cmd(conversation, search, #{search_spec=>Spec}).
+    cmd(conversation, search, Spec).
+
+
+message_get(MsgId) ->
+    cmd(message, get, #{message_id=>MsgId}).
 
 
 message_create(ConvId, UserId, Message) ->
@@ -118,16 +139,16 @@ message_create(ConvId, UserId, Message) ->
     end.
 
 
-message_update(MsgId, Message) ->
-    cmd(message, update, #{message_id=>MsgId, message=>Message}).
+message_update(ConvId, MsgId, Message) ->
+    cmd(message, update, #{conversation_id=>ConvId, message_id=>MsgId, message=>Message}).
 
 
-message_delete(MsgId) ->
-    cmd(message, delete, #{message_id=>MsgId}).
+message_delete(ConvId, MsgId) ->
+    cmd(message, delete, #{conversation_id=>ConvId, message_id=>MsgId}).
 
 
 message_search(Spec) ->
-    cmd(message, search, #{search_spec=>Spec}).
+    cmd(message, search, Spec).
 
 
 %% ===================================================================
