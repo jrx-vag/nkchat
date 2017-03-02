@@ -69,6 +69,11 @@ type|`created`
 obj_id|The user's id
 
 
+#### get
+
+Use command `get` and field `user_id`
+
+
 #### delete
 
 Use command `delete` to remove and user. Must use the field `user_id`.
@@ -120,6 +125,10 @@ subclass|`conversation`
 type|`created`
 obj_id|The conversation's id
 
+
+#### get
+
+Use command `get` and field `conversation_id`
 
 
 #### delete
@@ -203,6 +212,11 @@ subclass|`conversation`
 type|`created_message`
 obj_id|The conversation's id
 body|Includes field `message_id`
+
+
+#### get
+
+Use command `get` and field `message_id`.
 
 
 #### delete
