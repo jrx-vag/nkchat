@@ -21,9 +21,9 @@ start() ->
         plugins => [nkelastic, nkchat],
         api_server => "ws:all:10201/chat, http://all:10201/chat",
         api_server_timeout => 180,
-        elastic_url => "https://cluster.netc.io/es/",
-        elastic_user => "user",
-        elastic_pass => "es",
+        elastic_url => application:get_env(nkchat, test_url),
+        elastic_user => application:get_env(nkchat, test_user),
+        elastic_pass => application:get_env(nkchat, test_pass),
         debug => [
         ]
     },
