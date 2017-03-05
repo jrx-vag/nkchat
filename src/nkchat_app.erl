@@ -25,6 +25,7 @@ start(_Type, _Args) ->
             {ok, Pid} = nkchat_sup:start_link(),
             {ok, Vsn} = application:get_key(?APP, vsn),
             lager:info("NkCHAT v~s has started.", [Vsn]),
+            register_types(),
             {ok, Pid};
         {error, Error} ->
             lager:error("Config error: ~p", [Error]),
@@ -38,6 +39,9 @@ stop(_) ->
     ok.
 
 
+%% @private
+register_types() ->
+    ok = nkdomain_types:register_type(chat_conversation, nkchat_conversation_obj).
 
 
 %% Config Management

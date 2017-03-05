@@ -26,7 +26,6 @@
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
          chat_mm_proxy_handle_cast/2, chat_mm_proxy_handle_info/2]).
--export([domain_get_types/1, domain_store_mapping/1]).
 
 -include_lib("nkservice/include/nkservice.hrl").
 
@@ -158,22 +157,3 @@ chat_mm_proxy_handle_info(Msg, State) ->
     lager:error("Module ~p received unexpected info: ~p", [?MODULE, Msg]),
     {ok, State}.
 
-
-
-%% ===================================================================
-%% NkDOMAIN
-%% ===================================================================
-
-%% @private
-domain_get_types(Acc) ->
-    Acc ++ [chat_conversation].
-
-
-%% @private
-domain_store_mapping(chat_conversation) ->
-    #{
-        member_ids => #{type => keyword}
-    };
-
-domain_store_mapping(_) ->
-    continue.
