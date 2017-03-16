@@ -23,8 +23,8 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([object_get_desc/0, object_get_mapping/0, object_get_syntax/0,
-         object_store/1]).
+-export([object_get_desc/0, object_get_mapping/0, object_add_load_syntax/1,
+    object_add_update_syntax/1, object_store/1]).
 
 %% ===================================================================
 %% Types
@@ -48,10 +48,17 @@ object_get_mapping() ->
     }.
 
 
-object_get_syntax() ->
-    #{
-        member_ids => {list, binary}
+object_add_load_syntax(Base) ->
+    Base2 = nkdomain_types:make_syntax(?MODULE, [member_ids], Base),
+    Base2#{
+        ?MODULE => #{
+            member_ids => {list, binary}
+        }
     }.
+
+%% @private
+object_add_update_syntax(Base) ->
+    object_add_load_syntax(Base).
 
 
 object_store(#{?MODULE:=Obj}) ->

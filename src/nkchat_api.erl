@@ -23,6 +23,7 @@
 
 -export([cmd/4]).
 
+-include_lib("nkapi/include/nkapi.hrl").
 -include_lib("nkservice/include/nkservice.hrl").
 
 
@@ -33,7 +34,7 @@
 
 %% @doc
 cmd(user, get, Req, State) ->
-    #api_req{srv_id = SrvId, data = #{user_id:=UserId}} = Req,
+    #nkapi_req{srv_id = SrvId, data = #{user_id:=UserId}} = Req,
     case nkchat_es:read_user(SrvId, UserId) of
         {ok, User, _Vsn} ->
             {ok, User, State};
@@ -42,7 +43,7 @@ cmd(user, get, Req, State) ->
     end;
 
 cmd(user, create, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     UserId = nklib_util:luid(),
     Obj = Data#{
         user_id => UserId,
@@ -57,7 +58,7 @@ cmd(user, create, Req, State) ->
     end;
 
 cmd(user, delete, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     #{user_id:=UserId} = Data,
     case nkchat_es:delete_user(SrvId, UserId) of
         ok ->
@@ -68,7 +69,7 @@ cmd(user, delete, Req, State) ->
     end;
 
 cmd(user, search, Req, State) ->
-    #api_req{srv_id=SrvId, data=Data} = Req,
+    #nkapi_req{srv_id=SrvId, data=Data} = Req,
     case nkchat_es:list_users(SrvId, Data) of
         {ok, Total, List} ->
             {ok, #{total=>Total, data=>List}, State};
@@ -77,7 +78,7 @@ cmd(user, search, Req, State) ->
     end;
 
 cmd(conversation, get, Req, State) ->
-    #api_req{srv_id = SrvId, data = #{conversation_id:=ConvId}} = Req,
+    #nkapi_req{srv_id = SrvId, data = #{conversation_id:=ConvId}} = Req,
     case nkchat_es:read_conversation(SrvId, ConvId) of
         {ok, User, _Vsn} ->
             {ok, User, State};
@@ -86,7 +87,7 @@ cmd(conversation, get, Req, State) ->
     end;
 
 cmd(conversation, create, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     ConvId = nklib_util:luid(),
     Obj = Data#{
         conversation_id => ConvId,
@@ -101,7 +102,7 @@ cmd(conversation, create, Req, State) ->
     end;
 
 cmd(conversation, search, Req, State) ->
-    #api_req{srv_id=SrvId, data=Data} = Req,
+    #nkapi_req{srv_id=SrvId, data=Data} = Req,
     case nkchat_es:list_conversations(SrvId, Data) of
         {ok, Total, List} ->
             {ok, #{total=>Total, data=>List}, State};
@@ -110,7 +111,7 @@ cmd(conversation, search, Req, State) ->
     end;
 
 cmd(conversation, delete, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     #{conversation_id := ConvId} = Data,
     case nkchat_es:delete_conversation(SrvId, ConvId) of
         ok ->
@@ -121,7 +122,7 @@ cmd(conversation, delete, Req, State) ->
     end;
 
 cmd(conversation, add_members, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     #{conversation_id := ConvId, user_ids := UserIds} = Data,
     case get_conv_users(SrvId, ConvId) of
         {ok, OldUserIds, Obj} ->
@@ -140,7 +141,7 @@ cmd(conversation, add_members, Req, State) ->
     end;
 
 cmd(conversation, remove_members, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     #{conversation_id := ConvId, user_ids := UserIds} = Data,
     case get_conv_users(SrvId, ConvId) of
         {ok, OldUserIds, Obj} ->
@@ -159,7 +160,7 @@ cmd(conversation, remove_members, Req, State) ->
     end;
 
 cmd(conversation, get_members, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     #{conversation_id := ConvId} = Data,
     case get_conv_users(SrvId, ConvId) of
         {ok, Users, _} ->
@@ -169,7 +170,7 @@ cmd(conversation, get_members, Req, State) ->
     end;
 
 cmd(message, get, Req, State) ->
-    #api_req{srv_id = SrvId, data = #{message_id:=MsgId}} = Req,
+    #nkapi_req{srv_id = SrvId, data = #{message_id:=MsgId}} = Req,
     case nkchat_es:read_message(SrvId, MsgId) of
         {ok, User, _Vsn} ->
             {ok, User, State};
@@ -178,7 +179,7 @@ cmd(message, get, Req, State) ->
     end;
 
 cmd(message, create, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     MsgId = nklib_util:luid(),
     Obj = Data#{
         message_id => MsgId,
@@ -195,7 +196,7 @@ cmd(message, create, Req, State) ->
     end;
 
 cmd(message, search, Req, State) ->
-    #api_req{srv_id=SrvId, data=Data} = Req,
+    #nkapi_req{srv_id=SrvId, data=Data} = Req,
     case nkchat_es:list_messages(SrvId, Data) of
         {ok, Total, List} ->
             {ok, #{total=>Total, data=>List}, State};
@@ -204,7 +205,7 @@ cmd(message, search, Req, State) ->
     end;
 
 cmd(message, update, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     #{message_id:=MsgId, message:=Msg} = Data,
     case nkchat_es:read_message(SrvId, MsgId) of
         {ok, Obj, _Vsn} ->
@@ -223,7 +224,7 @@ cmd(message, update, Req, State) ->
     end;
 
 cmd(message, delete, Req, State) ->
-    #api_req{srv_id = SrvId, data = Data} = Req,
+    #nkapi_req{srv_id = SrvId, data = Data} = Req,
     #{message_id := MsgId} = Data,
     case nkchat_es:delete_message(SrvId, MsgId) of
         ok ->

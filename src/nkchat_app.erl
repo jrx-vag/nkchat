@@ -41,7 +41,7 @@ stop(_) ->
 
 %% @private
 register_types() ->
-    ok = nkdomain_types:register_type(nkchat_conversation).
+    ok = nkdomain_types:register_type(nkchat_conversation, 'chat.conversation').
 
 
 %% Config Management

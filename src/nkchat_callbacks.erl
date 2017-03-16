@@ -27,7 +27,7 @@
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
          chat_mm_proxy_handle_cast/2, chat_mm_proxy_handle_info/2]).
 
--include_lib("nkservice/include/nkservice.hrl").
+-include_lib("nkapi/include/nkapi.hrl").
 
 
 
@@ -52,7 +52,7 @@ error_code(_) -> continue.
 
 %% @private
 api_server_cmd(
-    #api_req{class=chat, subclass=Sub, cmd=Cmd}=Req, State) ->
+    #nkapi_req{class=chat, subclass=Sub, cmd=Cmd}=Req, State) ->
     nkchat_api:cmd(Sub, Cmd, Req, State);
 
 api_server_cmd(_Req, _State) ->
@@ -60,7 +60,7 @@ api_server_cmd(_Req, _State) ->
 
 
 %% @private
-api_server_syntax(#api_req{class=chat, subclass=Sub, cmd=Cmd},
+api_server_syntax(#nkapi_req{class=chat, subclass=Sub, cmd=Cmd},
     Syntax, Defaults, Mandatory) ->
     nkchat_syntax:syntax(Sub, Cmd, Syntax, Defaults, Mandatory);
 
