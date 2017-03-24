@@ -25,6 +25,10 @@
 %% Defines
 %% ===================================================================
 
+-define(CHAT_CONVERSATION, <<"chat.conversation">>).
+-define(CHAT_MESSAGE, <<"chat.message">>).
+-define(CHAT_SESSION, <<"chat.session">>).
+
 
 
 %% ===================================================================

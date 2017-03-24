@@ -6,6 +6,9 @@
 
 -define(APP, nkchat).
 
+-include("nkchat.hrl").
+
+
 
 %% doc Start manually
 start() ->
@@ -41,7 +44,9 @@ stop(_) ->
 
 %% @private
 register_types() ->
-    ok = nkdomain_types:register_type(nkchat_conversation, 'chat.conversation').
+    ok = nkdomain_types:register_type(nkchat_conversation_obj, ?CHAT_CONVERSATION),
+    ok = nkdomain_types:register_type(nkchat_message_obj, ?CHAT_MESSAGE),
+    ok = nkdomain_types:register_type(nkchat_session_obj, ?CHAT_SESSION).
 
 
 %% Config Management
