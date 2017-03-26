@@ -19,7 +19,6 @@
 %% -------------------------------------------------------------------
 
 %% @doc Conversation Object Syntax
-
 -module(nkchat_conversation_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 

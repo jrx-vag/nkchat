@@ -27,7 +27,8 @@ conv_remove_members(Id, Members) ->
 conv_delete() -> ok.
 
 
-
+message_create(ConvId, Msg) ->
+    cmd('chat.message', create, #{conversation_id=>ConvId, message=>Msg}).
 
 
 

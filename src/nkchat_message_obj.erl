@@ -23,6 +23,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
+-export([create/4]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 
@@ -34,6 +35,30 @@
 %% ===================================================================
 
 
+
+%% @doc
+%% Data must follow object's syntax
+-spec create(nkservice:id(), nkdomain:name(), nkdomain:id(), binary()) ->
+    {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
+
+create(Srv, ConvId, AuthorId, Message) ->
+    Opts = #{father=>ConvId, referred_id=>AuthorId},
+    Base = #{
+        ?CHAT_MESSAGE => #{message => nklib_util:to_binary(Message)}
+    },
+    case nkdomain_obj_lib:make_obj(Srv, ?CHAT_MESSAGE, Base, Opts) of
+        {ok, Obj} ->
+            lager:error("CREATE: ~p", [Obj]),
+            case nkdomain:create(Srv, Obj, #{}) of
+                {ok, ?CHAT_MESSAGE, ObjId, Path, Pid} ->
+                    {ok, ObjId, Path, Pid};
+                {error, Error} ->
+                    {error, Error}
+            end;        {error, Error} ->
+        {error, Error}
+    end.
+
+
 %% ===================================================================
 %% nkdomain_obj behaviour
 %% ===================================================================
@@ -42,27 +67,35 @@
 %% @private
 object_get_info() ->
     #{
-        type => ?CHAT_CONVERSATION
+        type => ?CHAT_MESSAGE
     }.
 
 
 %% @private
 object_mapping() ->
     #{
-        member_ids => #{type => keyword}
+        message => #{
+            type => text,
+            fields => #{keyword => #{type=>keyword}}
+        }
     }.
 
 
 %% @private
-object_syntax(_) ->
+object_syntax(load) ->
     #{
-        member_ids => {list, binary}
+        message => binary
+    };
+
+object_syntax(update) ->
+    #{
+        message => binary
     }.
 
 
 %% @private
 object_api_syntax(Sub, Cmd, Syntax) ->
-    nkchat_conversation_obj_syntax:api(Sub, Cmd, Syntax).
+    nkchat_message_obj_syntax:api(Sub, Cmd, Syntax).
 
 
 %% @private
@@ -72,7 +105,7 @@ object_api_allow(_Sub, _Cmd, _Data, State) ->
 
 %% @private
 object_api_cmd(Sub, Cmd, Data, State) ->
-    nkchat_conversation_obj_api:cmd(Sub, Cmd, Data, State).
+    nkchat_message_obj_api:cmd(Sub, Cmd, Data, State).
 
 
 

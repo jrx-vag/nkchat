@@ -16,7 +16,7 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
-%% -------------------------------------------------------------------
+%% ------------------------------------------------------------------
 
 %% @doc Message Object API
 -module(nkchat_message_obj_api).
@@ -31,40 +31,13 @@
 %% ===================================================================
 
 %% @doc
-cmd('', create, #{obj_name:=Name, user:=User}, #{srv_id:=SrvId}=State) ->
-    case nkdomain_user_obj:create(SrvId, Name, User) of
-        {ok, ObjId, _Pid} ->
-            {ok, #{obj_id=>ObjId}, State};
+cmd('', create, #{conversation_id:=ConvId, message:=Msg}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
+    case nkchat_message_obj:create(SrvId, ConvId, UserId, Msg) of
+        {ok, ObjId, Path, _Pid} ->
+            {ok, #{obj_id=>ObjId, path=>Path}, State};
         {error, Error} ->
             {error, Error, State}
     end;
-
-cmd('', login, #{id:=User}=Data, #{srv_id:=SrvId}=State) ->
-    LoginMeta1 = maps:with([session_type, session_id, local, remote], State),
-    LoginMeta2 = LoginMeta1#{
-        password => maps:get(password, Data, <<>>),
-        login_meta => maps:get(meta, Data, #{}),
-        session_pid => self()
-    },
-    case nkdomain_user_obj:login(SrvId, User, LoginMeta2) of
-        {ok, UserId, SessId, LoginMeta3} ->
-            {login, #{obj_id=>UserId, session_id=>SessId}, UserId, LoginMeta3, State};
-        {error, Error} ->
-            {error, Error, State}
-    end;
-
-cmd('', get_token, #{id:=User}=Data, #{srv_id:=SrvId}=State) ->
-    Password = maps:get(password, Data, <<>>),
-    case nkdomain_user_obj:login(SrvId, User, Password, #{}) of
-        {ok, UserId} ->
-            {ok, #{obj_id=>UserId}, State};
-        {error, Error} ->
-            {error, Error, State}
-    end;
-
-cmd('', find_referred, #{id:=Id}=Data, #{srv_id:=SrvId}=State) ->
-    Search = nkdomain_user_obj:find_referred(SrvId, Id, Data),
-    nkdomain_util:api_search(Search, State);
 
 cmd('', Cmd, Data, State) ->
     nkdomain_util:api_cmd_common(?CHAT_MESSAGE, Cmd, Data, State);

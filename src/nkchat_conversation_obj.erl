@@ -37,10 +37,6 @@
 %% ===================================================================
 
 
-%% ===================================================================
-%% API
-%% ===================================================================
-
 %% @doc
 %% Data must follow object's syntax
 -spec create(nkservice:id(), nkdomain:name(), nkdomain:id(), binary()) ->
@@ -63,7 +59,7 @@ create(Srv, Name, Domain, Desc) ->
                 {error, Error} ->
                     {error, Error}
             end;        {error, Error} ->
-            {error, Error}
+        {error, Error}
     end.
 
 %% @doc

@@ -31,58 +31,31 @@
 
 
 %% @doc
-api('', login, Syntax) ->
+api('', get, Syntax) ->
     Syntax2 = Syntax#{
-        id => binary,
-        password => binary,
-        domain => binary,
-        meta => map
-    },
-    nklib_syntax:add_mandatory([id], Syntax2);
-
-api('', get_token, Syntax) ->
-    Syntax2 = Syntax#{
-        id => binary,
-        password => binary,
-        domain => binary
+        id => binary
     },
     nklib_syntax:add_mandatory([id], Syntax2);
 
 api('', create, Syntax) ->
     Syntax2 = Syntax#{
-        obj_name => binary,
-        user => #{
-            name => binary,
-            surname => binary,
-            password => binary,
-            email => email
-        },
-        domain => binary
+        conversation_id => binary,
+        message => binary
     },
-    nklib_syntax:add_mandatory([obj_name, 'user.name', 'user.surname'], Syntax2);
+    nklib_syntax:add_mandatory([conversation_id, message], Syntax2);
 
 api('', delete, Syntax) ->
-    Syntax#{
-        id => binary,
-        reason => binary
-    };
+    Syntax2 = Syntax#{
+        id => binary
+    },
+    nklib_syntax:add_mandatory([id], Syntax2);
 
 api('', update, Syntax) ->
-    Syntax#{
+    Syntax2 = Syntax#{
         id => binary,
-        user => #{
-            name => binary,
-            surname => binary,
-            password => binary,
-            email => email
-        }
-    };
-
-api('', find_referred, Syntax) ->
-    Syntax#{
-        id => binary,
-        type => binary
-    };
+        message => binary
+    },
+    nklib_syntax:add_mandatory([conversation_id, message], Syntax2);
 
 api(_Sub, _Cmd, Syntax) ->
     lager:error("unknown syntax: ~p, ~p", [_Sub, _Cmd]),
