@@ -23,15 +23,34 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
+-export([create/4]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 
 -include("nkchat.hrl").
 
 
+
 %% ===================================================================
-%% Types
+%% Public
 %% ===================================================================
+
+
+%% Data must follow object's syntax
+-spec create(nkservice:id(), nkdomain:id(), nkdomain:name(), binary()) ->
+    {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
+
+create(Srv, Parent, Name, Desc) ->
+    Opts = #{
+        name => Name,
+        description => Desc
+    },
+    nkdomain_obj_lib:make_and_create(Srv, Parent, ?CHAT_CONVERSATION, Opts).
+
+
+
+
+
 
 
 %% ===================================================================

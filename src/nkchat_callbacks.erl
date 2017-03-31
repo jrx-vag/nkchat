@@ -20,7 +20,7 @@
 
 -module(nkchat_callbacks).
 
--export([plugin_deps/0]).
+-export([plugin_deps/0, api_error/1]).
 -export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
@@ -42,6 +42,15 @@ plugin_deps() ->
 %%error_code(obj_not_found)   		-> {0, "Object not found"};
 %%error_code(_) -> continue.
 
+
+
+%% ===================================================================
+%% Errors
+%% ===================================================================
+
+%% @doc
+api_error(conversation_not_found)       -> "Conversartion not found";
+api_error(_)   		                        -> continue.
 
 
 

@@ -33,10 +33,9 @@
 
 %% @doc
 api('', get, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary
-    },
-    nklib_syntax:add_mandatory([id], Syntax2);
+    };
 
 api('', create, Syntax) ->
     Syntax2 = Syntax#{
@@ -47,19 +46,18 @@ api('', create, Syntax) ->
     nklib_syntax:add_mandatory([obj_name, description], Syntax2);
 
 api('', delete, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
         reason => binary,
         delete_childs => boolean
-    },
-    nklib_syntax:add_mandatory([id], Syntax2);
+    };
 
 api('', update, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
         decription => binary
     },
-    nklib_syntax:add_mandatory([id], Syntax2);
+    nklib_syntax:add_mandatory([decription], Syntax2);
 
 api('', add_members, Syntax) ->
     Syntax2 = Syntax#{

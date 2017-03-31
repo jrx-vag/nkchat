@@ -28,6 +28,7 @@
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 
 -include("nkchat.hrl").
+-include_lib("nkdomain/include/nkdomain.hrl").
 
 
 %% ===================================================================
@@ -42,20 +43,18 @@
     {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
 
 create(Srv, ConvId, AuthorId, Message) ->
-    Opts = #{father=>ConvId, referred_id=>AuthorId},
-    Base = #{
-        ?CHAT_MESSAGE => #{message => nklib_util:to_binary(Message)}
-    },
-    case nkdomain_obj_lib:make_obj(Srv, ?CHAT_MESSAGE, Base, Opts) of
-        {ok, Obj} ->
-            lager:error("CREATE: ~p", [Obj]),
-            case nkdomain:create(Srv, Obj, #{}) of
-                {ok, ?CHAT_MESSAGE, ObjId, Path, Pid} ->
-                    {ok, ObjId, Path, Pid};
-                {error, Error} ->
-                    {error, Error}
-            end;        {error, Error} ->
-        {error, Error}
+    case nkdomain_obj_lib:load(Srv, ConvId, #{}) of
+        #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvObjId} ->
+            Opts = #{
+                referred_id => AuthorId,
+                parent => ConvObjId,
+                obj_data => #{message => nklib_util:to_binary(Message)}
+            },
+            nkdomain_obj_lib:make_and_create(Srv, ConvId, ?CHAT_MESSAGE, Opts);
+        {error, object_not_found} ->
+            {error, conversation_not_found};
+        {error, Error} ->
+            {error, Error}
     end.
 
 

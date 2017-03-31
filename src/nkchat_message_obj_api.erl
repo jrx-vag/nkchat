@@ -40,7 +40,7 @@ cmd('', create, #{conversation_id:=ConvId, message:=Msg}, #{srv_id:=SrvId, user_
     end;
 
 cmd('', Cmd, Data, State) ->
-    nkdomain_util:api_cmd_common(?CHAT_MESSAGE, Cmd, Data, State);
+    nkdomain_api_util:cmd_common(?CHAT_MESSAGE, Cmd, Data, State);
 
 cmd(_Sub, _Cmd, _Data, State) ->
     {error, not_implemented, State}.

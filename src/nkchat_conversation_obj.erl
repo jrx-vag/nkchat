@@ -39,35 +39,24 @@
 
 %% @doc
 %% Data must follow object's syntax
--spec create(nkservice:id(), nkdomain:name(), nkdomain:id(), binary()) ->
+-spec create(nkservice:id(), nkdomain:id(), nkdomain:name(), binary()) ->
     {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
 
-create(Srv, Name, Domain, Desc) ->
-    Opts = #{father=>Domain, name=>Name},
-    Base = #{
+create(Srv, Domain, Name, Desc) ->
+    Opts = #{
+        name=>Name,
         description => Desc,
-        ?CHAT_CONVERSATION => #{
-            member_ids => []
-        }
+        type_obj => #{member_ids => []}
     },
-    case nkdomain_obj_lib:make_obj(Srv, ?CHAT_CONVERSATION, Base, Opts) of
-        {ok, Obj} ->
-            lager:error("CREATE: ~p", [Obj]),
-            case nkdomain:create(Srv, Obj, #{}) of
-                {ok, ?CHAT_CONVERSATION, ObjId, Path, Pid} ->
-                    {ok, ObjId, Path, Pid};
-                {error, Error} ->
-                    {error, Error}
-            end;        {error, Error} ->
-        {error, Error}
-    end.
+    nkdomain_obj_lib:make_and_create(Srv, Domain, ?CHAT_CONVERSATION, Opts).
+
 
 %% @doc
 -spec add_members(nkservice:id(), nkdomain:id(), [nkdomain:obj_id()]) ->
     {ok, map()} | {error, term()}.
 
 add_members(Srv, Id, MemberIds) ->
-    Fun = fun(#obj_session{obj_id=ObjId, obj=Obj}=Session) ->
+    Fun = fun(#obj_session{obj=Obj}=Session) ->
         case Obj of
             #{?CHAT_CONVERSATION:=#{member_ids:=MemberIds0}=Conv} ->
                 MemberIds2 = lists:usort(MemberIds++MemberIds0),
@@ -86,7 +75,7 @@ add_members(Srv, Id, MemberIds) ->
     {ok, map()} | {error, term()}.
 
 remove_members(Srv, Id, MemberIds) ->
-    Fun = fun(#obj_session{obj_id=ObjId, obj=Obj}=Session) ->
+    Fun = fun(#obj_session{obj=Obj}=Session) ->
         case Obj of
             #{?CHAT_CONVERSATION:=#{member_ids:=MemberIds0}=Conv} ->
                 MemberIds2 = MemberIds0 -- MemberIds,

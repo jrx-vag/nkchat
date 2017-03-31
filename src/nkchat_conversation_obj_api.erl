@@ -30,41 +30,49 @@
 %% API
 %% ===================================================================
 
-%% @doc
-cmd('', create, #{obj_name:=Name, description:=Desc}=Data, #{srv_id:=SrvId}=State) ->
-    Domain = case Data of
-        #{domain:=Domain0} -> Domain0;
-        _ -> nkdomain_util:get_service_domain(SrvId)
-    end,
-    case nkchat_conversation_obj:create(SrvId, Name, Domain, Desc) of
+cmd('', create, Data, State) ->
+    #{obj_name:=Name, description:=Desc} = Data,
+    #{srv_id:=SrvId, domain:=Domain} = State,
+    case nkchat_conversation_obj:create(SrvId, Domain, Name, Desc) of
         {ok, ObjId, Path, _Pid} ->
-            {ok, #{obj_id=>ObjId, path=>Path}, State};
+            State2 = nkdomain_api_util:add_id(?CHAT_CONVERSATION, ObjId, State),
+            {ok, #{obj_id=>ObjId, path=>Path}, State2};
         {error, Error} ->
             {error, Error, State}
     end;
 
-cmd('', add_members, #{id:=Id, member_ids:=MemberIds}, #{srv_id:=SrvId}=State) ->
-    case nkchat_conversation_obj:add_members(SrvId, Id, MemberIds) of
-        {ok, Reply} ->
-            {ok, Reply, State};
-        {error, Error} ->
-            {error, Error, State}
+cmd('', add_members, #{member_ids:=MemberIds}=Data, #{srv_id:=SrvId}=State) ->
+    case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
+        {ok, Id} ->
+            case nkchat_conversation_obj:add_members(SrvId, Id, MemberIds) of
+                {ok, Reply} ->
+                    {ok, Reply, State};
+                {error, Error} ->
+                    {error, Error, State}
+            end;
+        Error ->
+            Error
     end;
 
-cmd('', remove_members, #{id:=Id, member_ids:=MemberIds}, #{srv_id:=SrvId}=State) ->
-    case nkchat_conversation_obj:remove_members(SrvId, Id, MemberIds) of
-        {ok, Reply} ->
-            {ok, Reply, State};
-        {error, Error} ->
-            {error, Error, State}
+cmd('', remove_members, #{member_ids:=MemberIds}=Data, #{srv_id:=SrvId}=State) ->
+    case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
+        {ok, Id} ->
+            case nkchat_conversation_obj:remove_members(SrvId, Id, MemberIds) of
+                {ok, Reply} ->
+                    {ok, Reply, State};
+                {error, Error} ->
+                    {error, Error, State}
+            end;
+        Error ->
+            Error
     end;
 
 cmd('', find_referred, #{id:=Id}=Data, #{srv_id:=SrvId}=State) ->
     Search = nkdomain_user_obj:find_referred(SrvId, Id, Data),
-    nkdomain_util:api_search(Search, State);
+    nkdomain_api_util:search(Search, State);
 
 cmd('', Cmd, Data, State) ->
-    nkdomain_util:api_cmd_common(?CHAT_CONVERSATION, Cmd, Data, State);
+    nkdomain_api_util:cmd_common(?CHAT_CONVERSATION, Cmd, Data, State);
 
 cmd(_Sub, _Cmd, _Data, State) ->
     {error, not_implemented, State}.
