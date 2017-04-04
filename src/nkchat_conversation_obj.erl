@@ -24,7 +24,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/4, add_members/3, remove_members/3]).
+-export([create/4, add_members/3, remove_members/3, get_messages/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 
@@ -44,7 +44,7 @@
 
 create(Srv, Domain, Name, Desc) ->
     Opts = #{
-        name=>Name,
+        name => Name,
         description => Desc,
         type_obj => #{member_ids => []}
     },
@@ -87,6 +87,36 @@ remove_members(Srv, Id, MemberIds) ->
         end
     end,
     nkdomain_util:update(Srv, ?CHAT_CONVERSATION, Id, Fun).
+
+
+%% @doc
+get_messages(Srv, Id, Spec) ->
+    case nkdomain_obj_lib:load(Srv, Id, #{}) of
+        #obj_id_ext{obj_id=ConvId} ->
+            Search1 = maps:with([from, size], Spec),
+            Filters1 = #{parent_id => ConvId},
+            Filters2 = case Spec of
+                #{start_date:=Date} ->
+                    Filters1#{created_time => {Date, none}};
+                _ ->
+                    Filters1
+            end,
+            Search2 = Search1#{
+                sort => [#{created_time => #{order => desc}}],
+                fields => [created_time, 'chat.message.message'],
+                filters => Filters2
+            },
+
+            case nkdomain_store:find(Srv, Search2) of
+                {ok, N, List, _Meta} ->
+                    {ok, #{total=>N, data=>List}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        _ ->
+            {error, conversation_not_found}
+    end.
+
 
 
 %% ===================================================================

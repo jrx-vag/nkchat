@@ -32,58 +32,48 @@
 
 
 %% @doc
-api('', login, Syntax) ->
-    Syntax2 = Syntax#{
-        id => binary,
-        password => binary,
-        domain => binary,
-        meta => map
-    },
-    nklib_syntax:add_mandatory([id], Syntax2);
-
-api('', get_token, Syntax) ->
-    Syntax2 = Syntax#{
-        id => binary,
-        password => binary,
-        domain => binary
-    },
-    nklib_syntax:add_mandatory([id], Syntax2);
+api('', find, Syntax) ->
+    Syntax#{
+        user_id => binary
+    };
 
 api('', create, Syntax) ->
-    Syntax2 = Syntax#{
-        obj_name => binary,
-        user => #{
-            name => binary,
-            surname => binary,
-            password => binary,
-            email => email
-        },
-        domain => binary
-    },
-    nklib_syntax:add_mandatory([obj_name, 'user.name', 'user.surname'], Syntax2);
+    Syntax#{
+        user_id => binary
+    };
 
-api('', delete, Syntax) ->
+api('', start, Syntax) ->
+    Syntax2 = Syntax#{
+        id => binary
+    },
+    nklib_syntax:add_mandatory([id], Syntax2);
+
+api('', stop, Syntax) ->
     Syntax#{
         id => binary,
         reason => binary
     };
 
-api('', update, Syntax) ->
-    Syntax#{
+api('', set_active_conversation, Syntax) ->
+    Syntax2 = Syntax#{
         id => binary,
-        user => #{
-            name => binary,
-            surname => binary,
-            password => binary,
-            email => email
-        }
-    };
+        conversation_id => binary
+    },
+    nklib_syntax:add_mandatory([conversation_id], Syntax2);
 
-api('', find_referred, Syntax) ->
-    Syntax#{
+api('', add_conversation, Syntax) ->
+    Syntax2 = Syntax#{
         id => binary,
-        type => binary
-    };
+        conversation_id => binary
+    },
+    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+
+api('', remove_conversation, Syntax) ->
+    Syntax2 = Syntax#{
+        id => binary,
+        conversation_id => binary
+    },
+    nklib_syntax:add_mandatory([conversation_id], Syntax2);
 
 api(_Sub, _Cmd, Syntax) ->
     lager:error("unknown syntax: ~p, ~p", [_Sub, _Cmd]),

@@ -48,7 +48,7 @@ create(Srv, ConvId, AuthorId, Message) ->
             Opts = #{
                 referred_id => AuthorId,
                 parent => ConvObjId,
-                obj_data => #{message => nklib_util:to_binary(Message)}
+                type_obj => #{message => nklib_util:to_binary(Message)}
             },
             nkdomain_obj_lib:make_and_create(Srv, ConvId, ?CHAT_MESSAGE, Opts);
         {error, object_not_found} ->

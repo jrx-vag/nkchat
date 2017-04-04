@@ -57,14 +57,14 @@ api('', update, Syntax) ->
         id => binary,
         decription => binary
     },
-    nklib_syntax:add_mandatory([decription], Syntax2);
+    nklib_syntax:add_mandatory([description], Syntax2);
 
 api('', add_members, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
         member_ids => {list, binary}
     },
-    nklib_syntax:add_mandatory([id, member_ids], Syntax2);
+    nklib_syntax:add_mandatory([member_ids], Syntax2);
 
 api('', remove_members, Syntax) ->
     Syntax2 = Syntax#{
@@ -74,11 +74,12 @@ api('', remove_members, Syntax) ->
     nklib_syntax:add_mandatory([id, member_ids], Syntax2);
 
 api('', get_messages, Syntax) ->
-    Syntax2 = Syntax#{
-        id => binary
-    },
-    Syntax2 = maps:merge(Syntax2, nkelastic_search:syntax()),
-    nklib_syntax:add_mandatory([id], Syntax2);
+    Syntax#{
+        id => binary,
+        size => integer,
+        from => integer,
+        start_date => integer
+    };
 
 api(_Sub, _Cmd, Syntax) ->
     lager:error("unknown syntax: ~p, ~p", [_Sub, _Cmd]),

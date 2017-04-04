@@ -11,6 +11,16 @@
 -include_lib("nkapi/include/nkapi.hrl").
 
 
+login() ->
+    nkdomain_test:login().
+
+
+t() ->
+    nklib_syntax:parse([{fields, all}], #{fields=>{list, binary}}).
+
+
+
+
 conv_create(Domain, Name, Desc) ->
     cmd('chat.conversation', create, #{obj_name=>Name, description=>Desc, domain=>Domain}).
 
@@ -27,7 +37,12 @@ conv_add_members(Id, Members) ->
 conv_remove_members(Id, Members) ->
     cmd('chat.conversation', remove_members, #{id=>Id, member_ids=>Members}).
 
-conv_delete() -> ok.
+conv_delete(Id) ->
+    cmd('chat.conversation', delete, #{id=>Id}).
+
+conv_get_messages(Id, Spec) ->
+    cmd('chat.conversation', get_messages, Spec#{id=>Id}).
+
 
 
 message_create(ConvId, Msg) ->
@@ -41,6 +56,29 @@ message_update(MsgId, Msg) ->
 
 message_delete(MsgId) ->
     cmd('chat.message', delete, #{id=>MsgId}).
+
+
+session_find(UserId) ->
+    cmd('chat.session', find, #{user_id=>UserId}).
+
+session_create(UserId) ->
+    cmd('chat.session', find, #{user_id=>UserId}).
+
+session_start(SessId) ->
+    cmd('chat.session', find, #{id=>SessId}).
+
+session_stop() ->
+    cmd('chat.session', find, #{}).
+
+session_set_active(ConvId) ->
+    cmd('chat.session', set_active_conversation, #{conversation_id=>ConvId}).
+
+session_add_conversation(ConvId) ->
+    cmd('chat.session', add_conversation, #{conversation_id=>ConvId}).
+
+session_remove_conversation(ConvId) ->
+    cmd('chat.session', remove_conversation, #{conversation_id=>ConvId}).
+
 
 
 

@@ -25,6 +25,7 @@
 -export([cmd/4]).
 
 -include("nkchat.hrl").
+-include_lib("nkdomain/include/nkdomain.hrl").
 
 %% ===================================================================
 %% API
@@ -67,9 +68,18 @@ cmd('', remove_members, #{member_ids:=MemberIds}=Data, #{srv_id:=SrvId}=State) -
             Error
     end;
 
-cmd('', find_referred, #{id:=Id}=Data, #{srv_id:=SrvId}=State) ->
-    Search = nkdomain_user_obj:find_referred(SrvId, Id, Data),
-    nkdomain_api_util:search(Search, State);
+cmd('', get_messages, Data, #{srv_id:=SrvId}=State) ->
+    case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
+        {ok, Id} ->
+            case nkchat_conversation_obj:get_messages(SrvId, Id, Data) of
+                {ok, Reply} ->
+                    {ok, Reply, State};
+                {error, Error} ->
+                    {error, Error, State}
+            end;
+        Error ->
+            Error
+    end;
 
 cmd('', Cmd, Data, State) ->
     nkdomain_api_util:cmd_common(?CHAT_CONVERSATION, Cmd, Data, State);
