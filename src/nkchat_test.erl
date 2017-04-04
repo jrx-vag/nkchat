@@ -58,17 +58,23 @@ message_delete(MsgId) ->
     cmd('chat.message', delete, #{id=>MsgId}).
 
 
+session_find() ->
+    cmd('chat.session', find, #{}).
+
 session_find(UserId) ->
     cmd('chat.session', find, #{user_id=>UserId}).
 
+session_create() ->
+    cmd('chat.session', create, #{}).
+
 session_create(UserId) ->
-    cmd('chat.session', find, #{user_id=>UserId}).
+    cmd('chat.session', create, #{user_id=>UserId}).
 
 session_start(SessId) ->
-    cmd('chat.session', find, #{id=>SessId}).
+    cmd('chat.session', start, #{id=>SessId}).
 
 session_stop() ->
-    cmd('chat.session', find, #{}).
+    cmd('chat.session', stop, #{}).
 
 session_set_active(ConvId) ->
     cmd('chat.session', set_active_conversation, #{conversation_id=>ConvId}).

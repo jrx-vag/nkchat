@@ -27,7 +27,7 @@
 -export([set_active_conversation/3, set_last_message/5, add_conversation/3, remove_conversation/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
--export([object_init/1, object_stop/2, object_sync_op/3, object_async_op/2]).
+-export([object_init/1, object_save/1, object_sync_op/3, object_async_op/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -163,6 +163,14 @@ remove_conversation(Srv, Id, ConvId) ->
 %% ===================================================================
 
 
+-record(?MODULE, {
+    conversations :: #{nkdomain:obj_id() =>map()},
+    meta :: map()
+}).
+
+
+
+
 %% @private
 object_get_info() ->
     #{
@@ -223,28 +231,47 @@ object_api_cmd(Sub, Cmd, Data, State) ->
 
 
 %% @private When the object is loaded, we make our cache
-object_init(#obj_session{obj=Obj}=Session) ->
+object_init(#obj_session{obj=Obj, srv_id=SrvId}=Session) ->
     #{?CHAT_SESSION := #{conversations:=Convs}} = Obj,
-    ConvsMap1 = lists:map(fun(#{obj_id:=ObjId}=Conv) -> {ObjId, Conv} end, Convs),
+    ConvsMap1 = lists:map(
+        fun(#{obj_id:=ObjId}=Conv) ->
+            case nkdomain_obj_lib:load(SrvId, ObjId, #{register=>{?MODULE, self()}}) of
+                #obj_id_ext{} ->
+                    ok;
+                {error, Error} ->
+                    lager:error("Could not load conv ~s: ~p", [ObjId, Error])
+            end,
+            {ObjId, Conv}
+        end,
+        Convs),
     ConvsMap2 = maps:from_list(ConvsMap1),
-    {ok, Session#obj_session{internal_obj=ConvsMap2}}.
+    ChatSess = #?MODULE{
+        conversations = ConvsMap2,
+        meta = #{}
+    },
+    {ok, Session#obj_session{data=ChatSess}}.
 
 
-%% @private When stopping, we prepare the object for saving
-object_stop(_Reason, #obj_session{obj=Obj, internal_obj=ConvsMap}=Session) ->
-    #{?CHAT_SESSION := ChatSession} = Obj,
-    ChatSession2 = ChatSession#{conversations:=maps:values(ConvsMap)},
-    Obj2 = ?ADD_TO_OBJ(?CHAT_SESSION, ChatSession2, Obj),
-    {ok, Session#obj_session{obj=Obj2, is_dirty=true}}.
+%% @private Prepare the object for saving
+object_save(#obj_session{obj=Obj, data=ChatSess}=Session) ->
+    #?MODULE{conversations=ConvsMap} = ChatSess,
+    ChatObj = #{
+        conversations => maps:values(ConvsMap)
+    },
+    Obj2 = ?ADD_TO_OBJ(?CHAT_SESSION, ChatObj, Obj),
+    {ok, Session#obj_session{obj=Obj2}};
+
+object_save(Session) ->
+    {ok, Session}.
 
 
 %% @private
-object_sync_op({?MODULE, get_convs}, _From, Session) ->
+object_sync_op({?MODULE, get_convs}, _From, #obj_session{obj_id=ObjId}=Session) ->
     List = get_conv_list(Session),
-    {reply, {ok, List}, Session};
+    {reply, {ok, ObjId, #{conversations=>List}}, Session};
 
 object_sync_op({?MODULE, set_active_conv, ConvId}, _From, Session) ->
-    case find_conv3(ConvId, Session) of
+    case find_conv(ConvId, Session) of
         {ok, Conv} ->
             Session2 = update_conv(ConvId, Conv, set_active, Session),
             {reply, ok, Session2};
@@ -253,7 +280,7 @@ object_sync_op({?MODULE, set_active_conv, ConvId}, _From, Session) ->
     end;
 
 object_sync_op({?MODULE, add_conv, ConvId}, _From, #obj_session{srv_id=SrvId}=Session) ->
-    case find_conv3(ConvId, Session) of
+    case find_conv(ConvId, Session) of
         {ok, _Conv} ->
             {reply, {error, conversation_already_exists}, Session};
         not_found ->
@@ -263,6 +290,7 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, #obj_session{srv_id=SrvId}=Se
                         obj_id => ObjId,
                         last_active_time => 0,
                         last_read_message_id => <<>>,
+
                         last_read_message_time => 0
                     },
                     Session2 = add_conv(ConvId, Conv, Session),
@@ -275,7 +303,7 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, #obj_session{srv_id=SrvId}=Se
     end;
 
 object_sync_op({?MODULE, rm_conv, ConvId}, _From, Session) ->
-    case find_conv3(ConvId, Session) of
+    case find_conv(ConvId, Session) of
         {ok, _Conv} ->
             Session2 = rm_conv(ConvId, Session),
             nkdomain_obj:unregister(ConvId, {?MODULE, self()}),
@@ -290,7 +318,7 @@ object_sync_op(_Op, _From, _Session) ->
 
 %% @private
 object_async_op({?MODULE, set_last_msg, ConvId, MsgId, Time}, Session) ->
-    case find_conv3(ConvId, Session) of
+    case find_conv(ConvId, Session) of
         {ok, Conv} ->
             Session2 = update_conv(ConvId, Conv, {last_msg, MsgId, Time}, Session),
             {noreply, Session2};
@@ -309,7 +337,7 @@ object_async_op(_Op, _Session) ->
 
 
 %% @private
-find_conv3(ConvId, #obj_session{internal_obj=ConvsMap}) ->
+find_conv(ConvId, #obj_session{data=#?MODULE{conversations=ConvsMap}}) ->
     case maps:find(ConvId, ConvsMap) of
         {ok, Conv} ->
             {ok, Conv};
@@ -319,19 +347,25 @@ find_conv3(ConvId, #obj_session{internal_obj=ConvsMap}) ->
 
 
 %% @private
-add_conv(ConvId, Conv, #obj_session{internal_obj=ConvsMap}=Session) ->
-    ConvsMap2 = ConvsMap#{ConvId => Conv},
-    Session#obj_session{internal_obj=ConvsMap2}.
+add_conv(ConvId, Conv, #obj_session{data=#?MODULE{conversations=ConvsMap}=Data}=Session) ->
+    Data2 = Data#?MODULE{
+        conversations = ConvsMap#{ConvId => Conv}
+%%        is_dirty = true
+    },
+    Session#obj_session{data=Data2, is_dirty=true}.
 
 
 %% @private
-rm_conv(ConvId, #obj_session{internal_obj=ConvsMap}=Session) ->
-    ConvsMap2 = maps:remove(ConvId, ConvsMap),
-    Session#obj_session{internal_obj=ConvsMap2}.
+rm_conv(ConvId, #obj_session{data=#?MODULE{conversations=ConvsMap}=Data}=Session) ->
+    Data2 = Data#?MODULE{
+        conversations = maps:remove(ConvId, ConvsMap)
+%%        is_dirty = true
+    },
+    Session#obj_session{data=Data2, is_dirty=true}.
 
 
 %% @private
-update_conv(ConvId, Conv, Update, #obj_session{internal_obj=ConvsMap}=Session) ->
+update_conv(ConvId, Conv, Update, #obj_session{data=#?MODULE{conversations=ConvsMap}=Data}=Session) ->
     Conv2 = case Update of
         set_active ->
             Conv#{last_active_time=>nklib_util:m_timestamp()};
@@ -341,12 +375,15 @@ update_conv(ConvId, Conv, Update, #obj_session{internal_obj=ConvsMap}=Session) -
                 last_read_message_time => Time
             }
     end,
-    ConvsMap2 = ConvsMap#{ConvId => Conv2},
-    Session#obj_session{internal_obj=ConvsMap2}.
+    Data2 = Data#?MODULE{
+        conversations=ConvsMap#{ConvId => Conv2}
+%%        is_dirty = true
+    },
+    Session#obj_session{data=Data2, is_dirty=true}.
 
 
 %% @private
-get_conv_list(#obj_session{internal_obj=ConvsMap}) ->
+get_conv_list(#obj_session{data=#?MODULE{conversations=ConvsMap}}) ->
     List1 = lists:map(
         fun({_ObjId, #{last_active_time:=Time}=Conv}) -> {Time, Conv} end,
         maps:to_list(ConvsMap)
