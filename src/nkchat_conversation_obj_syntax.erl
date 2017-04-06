@@ -59,17 +59,17 @@ api('', update, Syntax) ->
     },
     nklib_syntax:add_mandatory([description], Syntax2);
 
-api('', add_members, Syntax) ->
+api('', add_member, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
-        member_ids => {list, binary}
+        member_id => binary
     },
     nklib_syntax:add_mandatory([member_ids], Syntax2);
 
-api('', remove_members, Syntax) ->
+api('', remove_member, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
-        member_ids => {list, binary}
+        member_ids => binary
     },
     nklib_syntax:add_mandatory([id, member_ids], Syntax2);
 

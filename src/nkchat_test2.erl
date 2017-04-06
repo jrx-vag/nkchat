@@ -4,196 +4,165 @@
 
 -compile([export_all]).
 
--define(WS, "ws://127.0.0.1:10201/chat").
+-define(WS, "ws://127.0.0.1:9202/api/ws").
 %%-define(WS, "wss://v1.netc.io/netcomp/chat/v00/nkapi/ws").
--define(HTTP, "http://127.0.0.1:10201/chat").
+%%-define(HTTP, "http://127.0.0.1:10201/chat").
+
+-include("nkchat.hrl").
+-include_lib("nkapi/include/nkapi.hrl").
+-include_lib("nkdomain/include/nkdomain.hrl").
 
 
-%% ===================================================================
-%% Types
-%% ===================================================================
 
-
-
-start() ->
-    Spec = #{
-    	callback => ?MODULE,
-        plugins => [nkelastic, nkchat],
-        api_server => "ws:all:10201/chat, http://all:10201/chat",
-        api_server_timeout => 180,
-        elastic_url => application:get_env(nkchat, test_url),
-        elastic_user => application:get_env(nkchat, test_user),
-        elastic_pass => application:get_env(nkchat, test_pass),
-        debug => [
-        ]
-    },
-    nkservice:start(chat, Spec).
-
-
-stop() ->
-    nkservice:stop(chat).
-	
-
-
-%% ===================================================================
-%% Public functions
-%% ===================================================================
-
-create_indices() ->
-    nkchat_es:create_indices(chat).
-
-
-%% @doc
 login() ->
+    login(admin, "1234").
+
+login(User, Pass) ->
     Fun = fun ?MODULE:api_client_fun/2,
-    Login = #{user => <<"test">>, password => <<>>},
-    {ok, _, C, _} = nkservice_api_client:start(chat, ?WS, Login, Fun, #{}),
-    C.
-
-
-subs() ->
-    Pid = get_client(),
-    Data = #{
-        class => chat
+    Login = #{
+        id => nklib_util:to_binary(User),
+        password=> nklib_util:to_binary(Pass),
+        meta => #{a=>nklib_util:to_binary(User)}
     },
-    nkservice_api_client:cmd(Pid, core, event, subscribe, Data).
+    {ok, _SessId, _Pid, _Reply} = nkapi_client:start(root, ?WS, Login, Fun, #{}).
 
 
 
-user_get(UserId) ->
-    cmd(user, get, #{user_id=>UserId}).
+clear() ->
+    nkdomain_store:delete_all_childs(root, "/chattest"),
+    nkdomain_domain_obj:create(root, "/", "chattest", "Chat test").
 
 
-user_create(Name, Surname, Login, Pass) ->
-    Data = #{name=>Name, surname=>Surname, login=>Login, password=>Pass},
-    case cmd(user, create, Data) of
-        {ok, #{<<"user_id">>:=UserId}} ->
-            {ok, UserId};
-        {error, Error} ->
-            {error, Error}
-    end.
+create() ->
+    nkdomain_domain_obj:create(root, "/", "chattest", "Chat test"),
+    nkdomain_user_obj:create(root, "/chattest", u1, #{name=>u1, surname=>s1}),
+    nkdomain_user_obj:create(root, "/chattest", u2, #{name=>u2, surname=>s2}),
+    nkdomain_user_obj:create(root, "/chattest", u3, #{name=>u2, surname=>s3}),
+    {ok, _, _, _} = nkchat_conversation_obj:create(root, "/chattest", "conv1", "Conv 1"),
+    {ok, _, _, _} = nkchat_conversation_obj:create(root, "/chattest", "conv2", "Conv 2").
 
 
-user_delete(UserId) ->
-    cmd(user, delete, #{user_id=>UserId}).
+% f(C1), f(C2), [C1, C2] = nkchat_test2:get_cons().
+get_cons() ->
+    Search = #{filters => #{type => ?CHAT_CONVERSATION}, sort => [created_time]},
+    {ok, 2, List} = nkdomain_domain_obj:find_childs(root, "/chattest", Search),
+    [ObjId || {?CHAT_CONVERSATION, ObjId, _Path} <- List].
+
+d() ->
+    nkdomain_obj_lib:delete(root, "/chattest/chat.conversations/conv1", normal),
+    lager:error("deleted"),
+    nkchat_conversation_obj:create(root, "/chattest", "conv1", "Conv 1").
+
+conv_t1() ->
+    nkdomain_obj_lib:delete(root, "/chattest/users/u1", normal),
+    nkdomain_obj_lib:delete(root, "/chattest/users/u2", normal),
+    nkdomain_obj_lib:delete(root, "/chattest/chat.conversations/conv1", normal),
+    timer:sleep(500),
+
+    nkdomain_user_obj:create(root, "/chattest", u1, #{name=>u1, surname=>s1}),
+    nkdomain_user_obj:create(root, "/chattest", u2, #{name=>u2, surname=>s2}),
+    {ok, C, _, CP} = nkchat_conversation_obj:create(root, "/chattest", "conv1", "Conv 1"),
+    timer:sleep(500),
+
+    {ok, <<"admin">>} = nkchat_conversation_obj:add_member(root, C, admin),
+    {error,member_already_present} = nkchat_conversation_obj:add_member(root, C, admin),
+    ok = nkchat_conversation_obj:remove_member(root, C, admin),
+    {error,member_not_found} = nkchat_conversation_obj:remove_member(root, C, admin),
+
+    {ok, U1} = nkchat_conversation_obj:add_member(root, C, "/chattest/users/u1"),
+    {ok, U2} = nkchat_conversation_obj:add_member(root, C, "/chattest/users/u2"),
+    timer:sleep(100),
+    {ok, #{<<"chat.conversation">>:=#{<<"member_ids">>:=Ids1}}} =
+        nkdomain_store_es:object_store_read_raw(axft4mi, C),
+    Ids1S = lists:sort([U1, U2]),
+    Ids1S = lists:sort(Ids1),
+
+    {ok, #obj_session{data=Data1}} = nkdomain_obj:get_session(C),
+    Mon1 = element(2, Data1),
+    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon1)),
+    [] = nkdomain_monitor:get_disabled(Mon1),
+    nkdomain_obj:unload(U1, normal),
+    timer:sleep(500),
+    {ok, #obj_session{data=Data2}} = nkdomain_obj:get_session(C),
+    Mon2 = element(2, Data2),
+    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon2)),
+    [{U1, Time}] = nkdomain_monitor:get_disabled(Mon2),
+    true = (nklib_util:timestamp() - Time) < 2,
+    {ok, _, _, _, Pid} = nkdomain:find(C),
+    Pid ! {nkchat_conversation_obj, check_time},
+    timer:sleep(100),
+    {ok, #obj_session{data=Data3}} = nkdomain_obj:get_session(C),
+    Mon3 = element(2, Data3),
+    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon3)),
+    [] = nkdomain_monitor:get_disabled(Mon1),
+
+    ok = nkdomain_obj_lib:delete(root, U1, normal),
+    timer:sleep(100),
+    {ok, #obj_session{data=Data4}} = nkdomain_obj:get_session(C),
+    Mon4 = element(2, Data4),
+    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon4)),
+    [{U1, _Time}] = nkdomain_monitor:get_disabled(Mon2),
+    nkdomain_obj:unload(C, normal),
+    timer:sleep(100),
+    false = is_process_alive(CP),
+
+    {ok, _, _, _} = nkdomain:load(C),
+    {ok, #obj_session{data=Data5}} = nkdomain_obj:get_session(C),
+    Mon5 = element(2, Data5),
+    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon5)),
+    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon4)),
+    [{U1, _Time}] = nkdomain_monitor:get_disabled(Mon2),
 
 
-user_search(Spec) ->
-    cmd(user, search, Spec).
+    ok2.
 
 
-user_search2() ->
-    Spec = #{
-        fields => '_all',
-        sort_by => [name],
-        sort_order => desc
-    },
-    user_search(Spec).
 
 
-conversation_get(ConvId) ->
-    cmd(conversation, get, #{conversation_id=>ConvId}).
 
 
-conversation_create(Name, Desc, UserIds) ->
-    Data = #{name=>Name, description=>Desc, user_ids=>UserIds},
-    case cmd(conversation, create, Data) of
-        {ok, #{<<"conversation_id">>:=ConvId}} ->
-            {ok, ConvId};
-        {error, Error} ->
-            {error, Error}
-    end.
 
 
-conversation_delete(ConvId) ->
-    cmd(conversation, delete, #{conversation_id=>ConvId}).
 
 
-conversation_add(ConvId, UserIds) ->
-    cmd(conversation, add_members, #{conversation_id=>ConvId, user_ids=>UserIds}).
 
 
-conversation_del(ConvId, UserIds) ->
-    cmd(conversation, remove_members, #{conversation_id=>ConvId, user_ids=>UserIds}).
 
 
-conversation_get_members(ConvId) ->
-    cmd(conversation, get_members, #{conversation_id=>ConvId}).
+
+add1(C) ->
+    nkchat_conversation_obj:add_member(root, C, admin).
+
+rem1(C) ->
+    nkchat_conversation_obj:remove_member(root, C, admin).
 
 
-conversation_search(Spec) ->
-    cmd(conversation, search, Spec).
-
-
-message_get(MsgId) ->
-    cmd(message, get, #{message_id=>MsgId}).
-
-
-message_create(ConvId, UserId, Message) ->
-    Data = #{conversation_id=>ConvId, user_id=>UserId, message=>Message},
-    case cmd(message, create, Data) of
-        {ok, #{<<"message_id">>:=MsgId}} ->
-            {ok, MsgId};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-message_update(ConvId, MsgId, Message) ->
-    cmd(message, update, #{conversation_id=>ConvId, message_id=>MsgId, message=>Message}).
-
-
-message_delete(ConvId, MsgId) ->
-    cmd(message, delete, #{conversation_id=>ConvId, message_id=>MsgId}).
-
-
-message_search(Spec) ->
-    cmd(message, search, Spec).
 
 
 %% ===================================================================
-%% Service callbacks
+%% Client fun
 %% ===================================================================
 
-api_server_allow(_Req, State) ->
-%%    lager:error("Allow: ~p", [_Req]),
-    {true, State}.
 
+api_client_fun(#nkapi_req{class=event, data=Event}, UserData) ->
+    lager:notice("CLIENT event ~p", [lager:pr(Event, nkservice_events)]),
 
-api_server_login(#{user:=User}, State) ->
-    {true, User, #{}, State}.
-
-
-
-%% ===================================================================
-%% Internal
-%% ===================================================================
-
+    {ok, UserData};
 
 api_client_fun(_Req, UserData) ->
-    lager:error("TEST CLIENT req: ~p", [lager:pr(_Req, ?MODULE)]),
+    % lager:error("API REQ: ~p", [lager:pr(_Req, ?MODULE)]),
     {error, not_implemented, UserData}.
 
-
 get_client() ->
-    [{_, Pid}|_] = nkservice_api_client:get_all(),
+    [{_, Pid}|_] = nkapi_client:get_all(),
     Pid.
 
 
-cmd(Sub, Cmd, Data) ->
-    cmd(get_client(), Sub, Cmd, Data).
+%% Test calling with class=test, cmd=op1, op2, data=#{nim=>1}
+cmd(Class, Cmd, Data) ->
+    Pid = get_client(),
+    cmd(Pid, Class, Cmd, Data).
 
-
-cmd(Pid, Sub, Cmd, Data) ->
-    nkservice_api_client:cmd(Pid, chat, Sub, Cmd, Data).
-
-
-cmd_http(Sub, Cmd, Data) ->
-    Body = #{
-        class => admin,
-        subclass => Sub,
-        cmd => Cmd,
-        data => Data
-    },
-    nkservice_util:http(post, [?HTTP, "/rpc"], #{body=>Body}).
+cmd(Pid, Class, Cmd, Data) ->
+    nkapi_client:cmd(Pid, Class, <<>>, Cmd, Data).
 

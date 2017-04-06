@@ -15,12 +15,6 @@ login() ->
     nkdomain_test:login().
 
 
-t() ->
-    nklib_syntax:parse([{fields, all}], #{fields=>{list, binary}}).
-
-
-
-
 conv_create(Domain, Name, Desc) ->
     cmd('chat.conversation', create, #{obj_name=>Name, description=>Desc, domain=>Domain}).
 
@@ -43,20 +37,17 @@ conv_delete(Id) ->
 conv_get_messages(Id, Spec) ->
     cmd('chat.conversation', get_messages, Spec#{id=>Id}).
 
-
-
 message_create(ConvId, Msg) ->
     cmd('chat.message', create, #{conversation_id=>ConvId, message=>Msg}).
 
 message_get(MsgId) ->
-    cmd('chat.message', get, #{id=>MsgId}).
+     cmd('chat.message', get, #{id=>MsgId}).
 
 message_update(MsgId, Msg) ->
     cmd('chat.message', update, #{id=>MsgId, message=>Msg}).
 
 message_delete(MsgId) ->
     cmd('chat.message', delete, #{id=>MsgId}).
-
 
 session_find() ->
     cmd('chat.session', find, #{}).

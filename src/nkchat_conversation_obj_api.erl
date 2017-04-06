@@ -42,12 +42,12 @@ cmd('', create, Data, State) ->
             {error, Error, State}
     end;
 
-cmd('', add_members, #{member_ids:=MemberIds}=Data, #{srv_id:=SrvId}=State) ->
+cmd('', add_member, #{member_ids:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
-            case nkchat_conversation_obj:add_members(SrvId, Id, MemberIds) of
-                {ok, Reply} ->
-                    {ok, Reply, State};
+            case nkchat_conversation_obj:add_member(SrvId, Id, MemberId) of
+                ok ->
+                    {ok, #{}, State};
                 {error, Error} ->
                     {error, Error, State}
             end;
@@ -55,12 +55,12 @@ cmd('', add_members, #{member_ids:=MemberIds}=Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', remove_members, #{member_ids:=MemberIds}=Data, #{srv_id:=SrvId}=State) ->
+cmd('', remove_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
-            case nkchat_conversation_obj:remove_members(SrvId, Id, MemberIds) of
-                {ok, Reply} ->
-                    {ok, Reply, State};
+            case nkchat_conversation_obj:remove_member(SrvId, Id, MemberId) of
+                ok ->
+                    {ok, #{}, State};
                 {error, Error} ->
                     {error, Error, State}
             end;
