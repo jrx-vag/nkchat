@@ -25,10 +25,12 @@
 
 -export([create/4]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
-         object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
+         object_api_syntax/3, object_api_allow/4, object_api_cmd/4,
+         object_start/1, object_deleted/2, object_updated/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
+-include_lib("nkdomain/include/nkdomain_debug.hrl").
 
 
 %% ===================================================================
@@ -106,6 +108,25 @@ object_api_allow(_Sub, _Cmd, _Data, State) ->
 object_api_cmd(Sub, Cmd, Data, State) ->
     nkchat_message_obj_api:cmd(Sub, Cmd, Data, State).
 
+
+%% @private
+object_start(#obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj}=Session) ->
+    #{?CHAT_MESSAGE:=Msg} = Obj,
+    ok = nkchat_conversation_obj:message_created(Pid, ObjId, Msg),
+    {ok, Session}.
+
+
+%% @private
+object_deleted(_Reason, #obj_session{parent_pid=Pid, obj_id=ObjId}=Session) ->
+    ok = nkchat_conversation_obj:message_deleted(Pid, ObjId),
+    {ok, Session}.
+
+
+%% @private
+object_updated(_Update, #obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj}=Session) ->
+    #{?CHAT_MESSAGE:=Msg} = Obj,
+    ok = nkchat_conversation_obj:message_updated(Pid, ObjId, Msg),
+    {ok, Session}.
 
 
 

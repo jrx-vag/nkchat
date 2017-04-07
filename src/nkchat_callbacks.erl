@@ -21,6 +21,7 @@
 -module(nkchat_callbacks).
 
 -export([plugin_deps/0, api_error/1]).
+-export([object_session_message/2]).
 -export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
@@ -51,6 +52,7 @@ plugin_deps() ->
 %% @doc
 api_error(conversation_not_found)       -> "Conversation not found";
 api_error(conversation_already_exists)  -> "Conversation already exists";
+api_error(conversation_is_disabled)     -> "Conversation is currently disabled";
 api_error(_)   		                        -> continue.
 
 
@@ -89,7 +91,16 @@ api_error(_)   		                        -> continue.
 -type continue() :: continue | {continue, list()}.
 
 
+%% ===================================================================
+%% Object
+%% ===================================================================
 
+
+object_session_message({nkchat_session, ConvId, Pid}, Msg) ->
+    nkchat_session_obj:conversation_msg(Pid, ConvId, Msg);
+
+object_session_message(_Link, _Msg) ->
+    continue.
 
 
 

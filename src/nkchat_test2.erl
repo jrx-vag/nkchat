@@ -30,7 +30,8 @@ login(User, Pass) ->
 
 clear() ->
     nkdomain_store:delete_all_childs(root, "/chattest"),
-    nkdomain_domain_obj:create(root, "/", "chattest", "Chat test").
+    nkdomain_domain_obj:create(root, "/", "chattest", "Chat test"),
+    ok.
 
 
 create() ->
@@ -39,7 +40,8 @@ create() ->
     nkdomain_user_obj:create(root, "/chattest", u2, #{name=>u2, surname=>s2}),
     nkdomain_user_obj:create(root, "/chattest", u3, #{name=>u2, surname=>s3}),
     {ok, _, _, _} = nkchat_conversation_obj:create(root, "/chattest", "conv1", "Conv 1"),
-    {ok, _, _, _} = nkchat_conversation_obj:create(root, "/chattest", "conv2", "Conv 2").
+    {ok, _, _, _} = nkchat_conversation_obj:create(root, "/chattest", "conv2", "Conv 2"),
+    ok.
 
 
 % f(C1), f(C2), [C1, C2] = nkchat_test2:get_cons().
@@ -48,27 +50,26 @@ get_cons() ->
     {ok, 2, List} = nkdomain_domain_obj:find_childs(root, "/chattest", Search),
     [ObjId || {?CHAT_CONVERSATION, ObjId, _Path} <- List].
 
-d() ->
-    nkdomain_obj_lib:delete(root, "/chattest/chat.conversations/conv1", normal),
-    lager:error("deleted"),
-    nkchat_conversation_obj:create(root, "/chattest", "conv1", "Conv 1").
+
 
 conv_t1() ->
-    nkdomain_obj_lib:delete(root, "/chattest/users/u1", normal),
-    nkdomain_obj_lib:delete(root, "/chattest/users/u2", normal),
-    nkdomain_obj_lib:delete(root, "/chattest/chat.conversations/conv1", normal),
-    timer:sleep(500),
+
+    % Delete (if exists) and create test data
+    nkdomain:delete(root, "/chattest/users/u1", normal),
+    nkdomain:delete(root, "/chattest/users/u2", normal),
+    nkdomain:delete(root, "/chattest/chat.conversations/conv1", normal),
 
     nkdomain_user_obj:create(root, "/chattest", u1, #{name=>u1, surname=>s1}),
     nkdomain_user_obj:create(root, "/chattest", u2, #{name=>u2, surname=>s2}),
     {ok, C, _, CP} = nkchat_conversation_obj:create(root, "/chattest", "conv1", "Conv 1"),
-    timer:sleep(500),
 
+    % Add user admin to conv1 and remove it
     {ok, <<"admin">>} = nkchat_conversation_obj:add_member(root, C, admin),
-    {error,member_already_present} = nkchat_conversation_obj:add_member(root, C, admin),
+    {error, member_already_present} = nkchat_conversation_obj:add_member(root, C, admin),
     ok = nkchat_conversation_obj:remove_member(root, C, admin),
-    {error,member_not_found} = nkchat_conversation_obj:remove_member(root, C, admin),
+    {error, member_not_found} = nkchat_conversation_obj:remove_member(root, C, admin),
 
+    %% Ad users u1 and u2
     {ok, U1} = nkchat_conversation_obj:add_member(root, C, "/chattest/users/u1"),
     {ok, U2} = nkchat_conversation_obj:add_member(root, C, "/chattest/users/u2"),
     timer:sleep(100),
@@ -77,6 +78,7 @@ conv_t1() ->
     Ids1S = lists:sort([U1, U2]),
     Ids1S = lists:sort(Ids1),
 
+    % Check the user monitors are working, disabling u1
     {ok, #obj_session{data=Data1}} = nkdomain_obj:get_session(C),
     Mon1 = element(2, Data1),
     Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon1)),
@@ -89,6 +91,8 @@ conv_t1() ->
     [{U1, Time}] = nkdomain_monitor:get_disabled(Mon2),
     true = (nklib_util:timestamp() - Time) < 2,
     {ok, _, _, _, Pid} = nkdomain:find(C),
+
+    % Force check of disabled users
     Pid ! {nkchat_conversation_obj, check_time},
     timer:sleep(100),
     {ok, #obj_session{data=Data3}} = nkdomain_obj:get_session(C),
@@ -96,25 +100,28 @@ conv_t1() ->
     Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon3)),
     [] = nkdomain_monitor:get_disabled(Mon1),
 
-    ok = nkdomain_obj_lib:delete(root, U1, normal),
+    % We delete U1, must be disabled again
+    ok = nkdomain:delete(root, U1, normal),
     timer:sleep(100),
     {ok, #obj_session{data=Data4}} = nkdomain_obj:get_session(C),
     Mon4 = element(2, Data4),
     Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon4)),
     [{U1, _Time}] = nkdomain_monitor:get_disabled(Mon2),
+
+    % We unload conv1, when we reload it will remain disabled
     nkdomain_obj:unload(C, normal),
     timer:sleep(100),
     false = is_process_alive(CP),
-
-    {ok, _, _, _} = nkdomain:load(C),
+    {ok, _, _, _, _} = nkdomain:load(C),
     {ok, #obj_session{data=Data5}} = nkdomain_obj:get_session(C),
     Mon5 = element(2, Data5),
     Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon5)),
     Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon4)),
     [{U1, _Time}] = nkdomain_monitor:get_disabled(Mon2),
 
-
-    ok2.
+    % Lets remove it from the conversation, or it will try to find it forever
+    ok = nkchat_conversation_obj:remove_member(root, C, U1),
+    ok3.
 
 
 

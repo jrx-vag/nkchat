@@ -25,14 +25,19 @@
 
 -export([create/2, find/2, start/3, stop/2]).
 -export([set_active_conversation/3, set_last_message/5, add_conversation/3, remove_conversation/3]).
+-export([conversation_msg/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
--export([object_init/1, object_save/1, object_sync_op/3, object_async_op/2, object_handle_info/2]).
+-export([object_start/1, object_save/1, object_sync_op/3, object_async_op/2, object_handle_info/2]).
 -export([find_unread/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
+
+
+%% Period to find for inactive conversations
+-define(CHECK_TIME, 5*60*1000).
 
 
 %% ===================================================================
@@ -52,7 +57,7 @@ create(Srv, User) ->
     end.
 
 
-%% Data must follow object's syntax
+%% @doc Tries to find a previous session for this user
 -spec find(nkservice:id(), nkdomain:id()) ->
     {ok, nkdomain:obj_id()} | {error, term()}.
 
@@ -79,12 +84,11 @@ find(Srv, User) ->
     end.
 
 
-%% @doc
-start(Srv, Id, Caller) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{}) of
+%% @doc Starts a new session, connected to the Caller
+start(Srv, Id, CallerPid) ->
+    case nkdomain_obj_lib:load(Srv, Id, #{register=>{?MODULE, CallerPid}}) of
         #obj_id_ext{pid=Pid} ->
-            nkdomain_obj:register(Pid, {?MODULE, Caller}),
-            nkdomain_obj:sync_op(Pid, {?MODULE, get_convs});
+            nkdomain_obj:sync_op(Pid, {?MODULE, get_conversations});
         {error, Error} ->
             {error, Error}
     end.
@@ -92,69 +96,41 @@ start(Srv, Id, Caller) ->
 
 %% @doc
 stop(Srv, Id) ->
-    case nkdomain_obj_lib:find(Srv, Id) of
-        #obj_id_ext{pid=Pid} ->
-            nkdomain_obj:unload(Pid, user_stop);
-        _ ->
-            {error, session_not_found}
-    end.
+    nkdomain_obj_lib:unload(Srv, Id, user_stop, session_not_found).
 
 
 %% @doc
 set_active_conversation(Srv, Id, ConvId) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{}) of
-        #obj_id_ext{pid=Pid} when is_pid(Pid) ->
-            nkdomain_obj:sync_op(Pid, {?MODULE, set_active_conv, ConvId});
-        {error, object_not_found} ->
-            {error, session_not_found};
-        {error, Error} ->
-            {error, Error}
-    end.
+    sync_op(Srv, Id, {?MODULE, set_active_conv, ConvId}).
 
 
 %% @doc
 set_last_message(Srv, Id, ConvId, MsgId, Time) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{}) of
-        #obj_id_ext{pid=Pid} when is_pid(Pid) ->
-            nkdomain_obj:async_op(Pid, {?MODULE, set_last_msg, ConvId, MsgId, Time});
-        {error, object_not_found} ->
-            {error, session_not_found};
-        {error, Error} ->
-            {error, Error}
-    end.
+    async_op(Srv, Id, {?MODULE, set_last_msg, ConvId, MsgId, Time}).
 
 
 %% @doc
 add_conversation(Srv, Id, ConvId) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{}) of
-        #obj_id_ext{srv_id=SrvId, pid=Pid} when is_pid(Pid) ->
-            case nkdomain_obj_lib:find(SrvId, ConvId) of
-                #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvId2} ->
-                    nkdomain_obj:sync_op(Pid, {?MODULE, add_conv, ConvId2});
-                #obj_id_ext{} ->
-                    {error, conversation_not_found};
-                {error, object_not_found} ->
-                    {error, conversation_not_found};
-                {error, Error} ->
-                    {error, Error}
-            end;
+    case nkdomain_obj_lib:find(Srv, ConvId) of
+        #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvId2} ->
+            sync_op(Srv, Id, {?MODULE, add_conv, ConvId2});
+        #obj_id_ext{} ->
+            {error, conversation_not_found};
         {error, object_not_found} ->
-            {error, session_not_found};
+            {error, conversation_not_found};
         {error, Error} ->
             {error, Error}
     end.
-
 
 %% @doc
 remove_conversation(Srv, Id, ConvId) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{}) of
-        #obj_id_ext{pid=Pid} when is_pid(Pid) ->
-            nkdomain_obj:sync_op(Pid, {?MODULE, rm_conv, ConvId});
-        {error, object_not_found} ->
-            {error, session_not_found};
-        {error, Error} ->
-            {error, Error}
-    end.
+    sync_op(Srv, Id, {?MODULE, rm_conv, ConvId}).
+
+
+%% @doc
+conversation_msg(Pid, ConvId, Msg) ->
+    nkdomain_obj:async_op(Pid, {conversation_msg, ConvId, Msg}).
+
 
 
 %% ===================================================================
@@ -163,11 +139,9 @@ remove_conversation(Srv, Id, ConvId) ->
 
 
 -record(?MODULE, {
-    convs = #{} :: #{nkdomain:obj_id() => map()},
+    monitor :: nkdomain_monitor:monitor(),
     active :: undefined | nkdomain:obj_id(),
     unread = #{} :: #{ConvId::nkdomain:obj_id() => integer()},
-    disabled = #{} :: #{ConvId::nkdomain:obj_id() => boolean()},
-    pids = #{} :: #{ConvId::nkdomain:obj_id() => pid()},
     meta = #{} :: map()
 }).
 
@@ -232,18 +206,35 @@ object_api_cmd(Sub, Cmd, Data, State) ->
 
 
 %% @private When the object is loaded, we make our cache
-object_init(#obj_session{obj=Obj}=Session) ->
+object_start(#obj_session{srv_id=SrvId, obj=Obj, parent_id=UserId}=Session) ->
     #{?CHAT_SESSION := #{conversations:=Convs}} = Obj,
-    ChatSess = load_convs(Convs, #?MODULE{}, Session),
-    {ok, Session#obj_session{data=ChatSess}}.
+    Monitor = lists:foldl(
+        fun(#{obj_id:=ConvId}=Conv, Acc) ->
+            case nkdomain_monitor:load_obj(ConvId, Conv, Acc) of
+                {enabled, Acc2} ->
+                    Acc2;
+                {disabled, Acc2} ->
+                    ?LLOG(notice, "could not active conversation ~s", [ConvId], Session),
+                    Acc2;
+                {error, Error} ->
+                    ?LLOG(notice, "could not load conversation ~s: ~p", [ConvId, Error], Session),
+                    Acc
+            end
+        end,
+        nkdomain_monitor:new(SrvId, {?MODULE, UserId}),
+        Convs),
+    self() ! {?MODULE, check_time},
+    Data = #?MODULE{
+        monitor = Monitor
+    },
+    {ok, Session#obj_session{data=Data}}.
 
 
 %% @private Prepare the object for saving
-object_save(#obj_session{obj=Obj, data=ChatSess}=Session) ->
-    #?MODULE{convs=ConvsMap} = ChatSess,
-    ChatObj = #{
-        conversations => maps:values(ConvsMap)
-    },
+object_save(#obj_session{obj=Obj}=Session) ->
+    Monitor = get_monitor(Session),
+    Convs = [Obj || {_Enabled, Obj} <- nkdomain_monitor:get_obj_values(Monitor)],
+    ChatObj = #{conversations => Convs},
     Obj2 = ?ADD_TO_OBJ(?CHAT_SESSION, ChatObj, Obj),
     {ok, Session#obj_session{obj=Obj2}};
 
@@ -252,55 +243,63 @@ object_save(Session) ->
 
 
 %% @private
-object_sync_op({?MODULE, get_convs}, _From, #obj_session{obj_id=ObjId, data=ChatSess}=Session) ->
-    List = get_conv_list(ChatSess),
-    {reply, {ok, ObjId, #{conversations=>List}}, Session};
+object_sync_op({?MODULE, get_conversations}, _From, #obj_session{obj_id=ObjId}=Session) ->
+    Monitor = get_monitor(Session),
+    Convs = lists:map(
+        fun
+            ({enabled, Obj}) -> Obj#{enabled=>true};
+            ({disabled, Obj}) -> Obj#{enabled=>false}
+        end,
+        nkdomain_monitor:get_obj_values(Monitor)),
+    {reply, {ok, ObjId, #{conversations=>Convs}}, Session};
 
 object_sync_op({?MODULE, set_active_conv, ConvId}, _From, Session) ->
-    case find_conv(ConvId, Session) of
-        {ok, Conv} ->
-            #obj_session{data=ChatSess} = Session,
-            ChatSess2 = update_conv(ConvId, Conv, set_active, ChatSess),
-            Session2 = Session#obj_session{data=ChatSess2, is_dirty=true},
-            {reply, ok, Session2};
+    Monitor = get_monitor(Session),
+    case nkdomain_monitor:get_obj(ConvId, Monitor) of
+        {enabled, Conv, _Pid} ->
+            ?DEBUG("activated conversation ~s", [ConvId], Session),
+            Conv2 = Conv#{
+                last_active_time => nklib_util:m_timestamp()
+            },
+            {ok, Monitor2} = nkdomain_monitor:update_obj(ConvId, Conv2, Monitor),
+            Session2 = update_active(ConvId, Monitor2, Session),
+            {reply_and_save, ok, Session2};
+        {disabled, _, _} ->
+            {reply, {error, conversation_is_disabled}, Session};
         not_found ->
             {reply, {error, conversation_not_found}, Session}
     end;
 
-object_sync_op({?MODULE, add_conv, ConvId}, _From, #obj_session{srv_id=SrvId}=Session) ->
-    case find_conv(ConvId, Session) of
-        {ok, _Conv} ->
-            {reply, {error, conversation_already_exists}, Session};
-        not_found ->
-            case nkdomain_obj_lib:load(SrvId, ConvId, #{register=>{?MODULE, self()}}) of
-                #obj_id_ext{obj_id=ObjId, pid=Pid} ->
-                    Conv = #{
-                        obj_id => ObjId,
-                        last_active_time => 0,
-                        last_read_message_id => <<>>,
-                        last_read_message_time => 0
-                    },
-                    #obj_session{data=ChatSess} = Session,
-                    ChatSess2 = add_conv(ConvId, Conv, Pid, ChatSess),
-                    Session2 = Session#obj_session{data=ChatSess2, is_dirty=true},
-                    {reply, {ok, ConvId}, Session2};
-                {error, object_not_found} ->
-                    {reply, {error, conversation_not_found}, Session};
-                {error, Error} ->
-                    {reply, {error, Error}, Session}
-            end
+object_sync_op({?MODULE, add_conv, ConvId}, _From, Session) ->
+    Monitor = get_monitor(Session),
+    Conv = #{
+        obj_id => ConvId,
+        last_active_time => 0,
+        last_read_message_id => <<>>,
+        last_read_message_time => 0
+    },
+    case nkdomain_monitor:add_obj(ConvId, Conv, Monitor) of
+        {ok, _, Monitor2} ->
+            Session2 = update_monitor(Monitor2, Session),
+            ?DEBUG("added conversation ~s", [ConvId], Session),
+            {reply_and_save, {ok, ConvId}, Session2};
+        {error, object_not_found} ->
+            {reply, {error, conversation_not_found}, Session};
+        {error, Error} ->
+            {reply, {error, Error}, Session}
     end;
 
 object_sync_op({?MODULE, rm_conv, ConvId}, _From, Session) ->
-    case find_conv(ConvId, Session) of
-        {ok, _Conv} ->
-            nkdomain_obj:unregister(ConvId, {?MODULE, self()}),
-            #obj_session{data=ChatSess} = Session,
-            ChatSess2 = rm_conv(ConvId, ChatSess),
-            Session2 = Session#obj_session{data=ChatSess2, is_dirty=true},
-            {reply, ok, Session2};
-        not_found ->
-            {reply, {error, conversation_not_found}, Session}
+    Monitor = get_monitor(Session),
+    case nkdomain_monitor:rm_obj(ConvId, Monitor) of
+        {ok, Monitor2} ->
+            Session2 = update_monitor(Monitor2, Session),
+            ?DEBUG("removed conversation ~s", [ConvId], Session),
+            {reply_and_save, ok, Session2};
+        {error, object_not_found} ->
+            {reply, {error, conversation_not_found}, Session};
+        {error, Error} ->
+            {reply, {error, Error}, Session}
     end;
 
 object_sync_op(_Op, _From, _Session) ->
@@ -309,11 +308,18 @@ object_sync_op(_Op, _From, _Session) ->
 
 %% @private
 object_async_op({?MODULE, set_last_msg, ConvId, MsgId, Time}, Session) ->
-    case find_conv(ConvId, Session) of
-        {ok, Conv} ->
-            Session2 = update_conv(ConvId, Conv, {last_msg, MsgId, Time}, Session),
+    Monitor = get_monitor(Session),
+    case nkdomain_monitor:get_obj(ConvId, Monitor) of
+        {enabled, Conv, _Pid} ->
+            Conv2 = Conv#{
+                last_read_message_id => MsgId,
+                last_read_message_time => Time
+            },
+            {ok, Monitor2} = nkdomain_monitor:update_obj(ConvId, Conv2, Monitor),
+            Session2 = update_monitor( Monitor2, Session),
+            ?DEBUG("set last message for conversation ~s", [ConvId], Session),
             {noreply, Session2};
-        _ ->
+        not_found ->
             {noreply, Session}
     end;
 
@@ -322,132 +328,62 @@ object_async_op(_Op, _Session) ->
 
 
 %% @private
-object_handle_info({'DOWN', _Ref, process, Pid}, #obj_session{data=ChatSess}=Session) ->
-    #?MODULE{convs=Convs, pids=Pids, disabled=Disabled} = ChatSess,
-    case maps:find(Pid, Pids) of
-        {ok, ConvId} ->
-            ChatSess2 = case maps:is_key(ConvId, Convs) of
-                false ->
-                    ChatSess#?MODULE{
-                        pids = maps:remove(pid, Pids)
-                    };
-                true ->
-                    ?LLOG(notice, "conversation ~s is disabled", [ConvId], Session),
-                    ChatSess#?MODULE{
-                        pids = maps:remove(pid, Pids),
-                        disabled = Disabled#{ConvId => true}
-                    }
-            end,
-            {noreply, Session#obj_session{data=ChatSess2}};
-        error ->
+object_handle_info({?MODULE, check_time}, Session) ->
+    Monitor = get_monitor(Session),
+    Session2 = case nkdomain_monitor:reload_disabled(Monitor) of
+        {[], _} ->
+            Session;
+        {ObjIds, Monitor2} ->
+            ?LLOG(notice, "reloaded objects ~p", [ObjIds], Session),
+            update_monitor(Monitor2, Session)
+    end,
+    erlang:send_after(?CHECK_TIME, self(), {?MODULE, check_time}),
+    {noreply, Session2};
+
+object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, Session) ->
+    Monitor1 = get_monitor(Session),
+    case nkdomain_monitor:down_obj(Pid, Monitor1) of
+        {ok, ObjId, _Obj, Monitor2} ->
+            ?LLOG(notice, "member ~s is disabled", [ObjId], Session),
+            {noreply, update_monitor(Monitor2, Session)};
+        not_found ->
             continue
-    end.
+    end;
+
+object_handle_info(_Info, _Session) ->
+    continue.
 
 
 %% ===================================================================
 %% Internal
 %% ===================================================================
 
-
 %% @private
-load_convs([], ChatSess, _Session) ->
-    ChatSess;
-
-load_convs([#{obj_id:=ObjId}=Conv|Rest], ChatSess, #obj_session{srv_id=SrvId}=Session) ->
-    ChatSess2 = case nkdomain_obj_lib:load(SrvId, ObjId, #{register=>{?MODULE, self()}}) of
-        #obj_id_ext{pid=Pid} ->
-            add_conv(ObjId, Conv, Pid, ChatSess);
-        {error, _Error} ->
-            #?MODULE{convs=Convs, disabled=Disabled} = ChatSess,
-            Convs2 = Convs#{ObjId => Conv#{disabled=>true}},
-            Disabled2 = Disabled#{ObjId => true},
-            ChatSess#?MODULE{convs=Convs2, disabled=Disabled2}
-    end,
-    load_convs(Rest, ChatSess2, Session).
+sync_op(Srv, Id, Op) ->
+    nkdomain_obj_lib:sync_op(Srv, Id, Op, session_not_found).
 
 
 %% @private
-reload_disabled(#obj_session{srv_id=SrvId, data=ChatSess}=Session) ->
-    #?MODULE{convs=Convs, disabled=Disabled} = ChatSess,
-    ChatSess2 = lists:foldl(
-        fun(ConvId, Acc) ->
-            case nkdomain_obj_lib:load(SrvId, ConvId, #{register=>{?MODULE, self()}}) of
-                #obj_id_ext{pid=Pid} ->
-                    #?MODULE{disabled=Disabled2} = Acc,
-                    Acc2 = Acc#?MODULE{disabled=maps:remove(ConvId, Disabled2)},
-                    Conv = maps:get(ConvId, Convs),
-                    add_conv(ConvId, Conv, Pid, Acc2);
-                {error, _Error} ->
-                    Acc
-            end
-        end,
-        ChatSess,
-        maps:to_list(Disabled)),
-    Session#obj_session{data=ChatSess2}.
+async_op(Srv, Id, Op) ->
+    nkdomain_obj_lib:async_op(Srv, Id, Op, session_not_found).
 
 
 %% @private
-find_conv(ConvId, #obj_session{data=#?MODULE{convs=ConvsMap}}) ->
-    case maps:find(ConvId, ConvsMap) of
-        {ok, Conv} ->
-            {ok, Conv};
-        error ->
-            not_found
-    end.
+get_monitor(#obj_session{data=SessData}) ->
+    #?MODULE{monitor=Monitor} = SessData,
+    Monitor.
 
 
 %% @private
-add_conv(ConvId, Conv, Pid, ChatSess) ->
-    #?MODULE{convs=Convs, pids=Pids} = ChatSess,
-    Convs2 = Convs#{ConvId => Conv},
-    Pids2 = case maps:find(Pid, Pids) of
-        true ->
-            Pids;
-        false ->
-            monitor(process, Pid),
-            Pids#{Pid => ConvId}
-    end,
-    ChatSess#?MODULE{convs=Convs2, pids=Pids2}.
+update_active(ConvId, Monitor, #obj_session{data=SessData}=Session) ->
+    SessData2 = SessData#?MODULE{monitor=Monitor, active=ConvId},
+    Session#obj_session{data=SessData2, is_dirty=true}.
 
 
 %% @private
-rm_conv(ConvId, ChatSess) ->
-    #?MODULE{convs=Convs, disabled=Disabled} = ChatSess,
-    ChatSess#?MODULE{
-        convs = maps:remove(ConvId, Convs),
-        disabled = maps:remove(ConvId, Disabled)
-    }.
-
-
-%% @private
-update_conv(ConvId, Conv, Update, ChatSess) ->
-    #?MODULE{convs=Convs} = ChatSess,
-    case Update of
-        set_active ->
-            Conv2 = Conv#{last_active_time=>nklib_util:m_timestamp()},
-            ChatSess#?MODULE{
-                convs = Convs#{ConvId => Conv2},
-                active = ConvId
-            };
-        {last_msg, MsgId, Time} ->
-            Conv2 = Conv#{
-                last_read_message_id => MsgId,
-                last_read_message_time => Time
-            },
-            ChatSess#?MODULE{
-                convs = Convs#{ConvId => Conv2}
-            }
-    end.
-
-
-%% @private
-get_conv_list(#?MODULE{convs=Convs}) ->
-    List1 = lists:map(
-        fun({_ObjId, #{last_active_time:=Time}=Conv}) -> {Time, Conv} end,
-        maps:to_list(Convs)
-    ),
-    List2 = lists:keysort(1, List1),
-    [Conv || {_, Conv} <- lists:reverse(List2)].
+update_monitor(Monitor, #obj_session{data=SessData}=Session) ->
+    SessData2 = SessData#?MODULE{monitor=Monitor},
+    Session#obj_session{data=SessData2, is_dirty=tue}.
 
 
 find_unread(Conv, #{srv_id:=SrvId}) ->
