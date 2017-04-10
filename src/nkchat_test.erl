@@ -8,11 +8,18 @@
 %%-define(WS, "wss://v1.netc.io/netcomp/chat/v00/nkapi/ws").
 %%-define(HTTP, "http://127.0.0.1:10201/chat").
 
+-include_lib("nkchat.hrl").
 -include_lib("nkapi/include/nkapi.hrl").
 
 
 login() ->
     nkdomain_test:login().
+
+domain_find_convs() ->
+    cmd(domain, find_all_childs, #{type=>?CHAT_CONVERSATION, sort=>[type, path]}).
+
+
+
 
 
 conv_create(Domain, Name, Desc) ->
@@ -24,12 +31,11 @@ conv_get() ->
 conv_get(Id) ->
     cmd('chat.conversation', get, #{id=>Id}).
 
+conv_add_member(Id, Member) ->
+    cmd('chat.conversation', add_member, #{id=>Id, member_id=>Member}).
 
-conv_add_members(Id, Members) ->
-    cmd('chat.conversation', add_members, #{id=>Id, member_ids=>Members}).
-
-conv_remove_members(Id, Members) ->
-    cmd('chat.conversation', remove_members, #{id=>Id, member_ids=>Members}).
+conv_remove_member(Id, Member) ->
+    cmd('chat.conversation', remove_member, #{id=>Id, member_id=>Member}).
 
 conv_delete(Id) ->
     cmd('chat.conversation', delete, #{id=>Id}).
@@ -37,17 +43,21 @@ conv_delete(Id) ->
 conv_get_messages(Id, Spec) ->
     cmd('chat.conversation', get_messages, Spec#{id=>Id}).
 
+
+
 message_create(ConvId, Msg) ->
-    cmd('chat.message', create, #{conversation_id=>ConvId, message=>Msg}).
+    cmd('chat.message', create, #{conversation_id=>ConvId, 'chat.message'=>#{message=>Msg}}).
 
 message_get(MsgId) ->
      cmd('chat.message', get, #{id=>MsgId}).
 
 message_update(MsgId, Msg) ->
-    cmd('chat.message', update, #{id=>MsgId, message=>Msg}).
+    cmd('chat.message', update, #{id=>MsgId, 'chat.message'=>#{message=>Msg}}).
 
 message_delete(MsgId) ->
     cmd('chat.message', delete, #{id=>MsgId}).
+
+
 
 session_find() ->
     cmd('chat.session', find, #{}).
@@ -64,8 +74,17 @@ session_create(UserId) ->
 session_start(SessId) ->
     cmd('chat.session', start, #{id=>SessId}).
 
+session_info() ->
+    cmd('chat.session', get_info, #{}).
+
+session_info(SessId) ->
+    cmd('chat.session', get_info, #{id=>SessId}).
+
 session_stop() ->
     cmd('chat.session', stop, #{}).
+
+session_delete(Id) ->
+    cmd('chat.session', delete, #{id=>Id}).
 
 session_set_active(ConvId) ->
     cmd('chat.session', set_active_conversation, #{conversation_id=>ConvId}).

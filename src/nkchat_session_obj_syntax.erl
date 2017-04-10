@@ -54,6 +54,17 @@ api('', stop, Syntax) ->
         reason => binary
     };
 
+api('', get_info, Syntax) ->
+    Syntax#{
+        id => binary
+    };
+
+api('', delete, Syntax) ->
+    Syntax#{
+        id => binary,
+        reason => binary
+    };
+
 api('', set_active_conversation, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,

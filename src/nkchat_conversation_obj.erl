@@ -61,16 +61,16 @@ create(Srv, Domain, Name, Desc) ->
 -spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id()) ->
     {ok, nkdomain:obj_id()} | {error, term()}.
 
-add_member(Srv, Id, Id) ->
-    sync_op(Srv, Id, {?MODULE, add_member, Id}).
+add_member(Srv, Id, MemberId) ->
+    sync_op(Srv, Id, {?MODULE, add_member, MemberId}).
 
 
 %% @doc
 -spec remove_member(nkservice:id(), nkdomain:id(), nkdomain:id()) ->
     ok | {error, term()}.
 
-remove_member(Srv, Id, Id) ->
-    sync_op(Srv, Id, {?MODULE, remove_member, Id}).
+remove_member(Srv, Id, MemberId) ->
+    sync_op(Srv, Id, {?MODULE, remove_member, MemberId}).
 
 
 %% @doc
@@ -253,12 +253,12 @@ object_handle_info(_Info, _Session) ->
 
 %% @private
 sync_op(Srv, Id, Op) ->
-    nkdomain_obj_lib:sync_op(Srv, Id, Op, conversation_not_found).
+    nkdomain_obj_lib:sync_op(Srv, Id, ?CHAT_CONVERSATION, Op, conversation_not_found).
 
 
 %%%% @private
 %%async_op(Srv, Id, Op) ->
-%%    nkdomain_obj_lib:async_op(Srv, Id, Op, conversation_not_found).
+%%    nkdomain_obj_lib:async_op(Srv, Id, ?CHAT_CONVERSATION, Op, conversation_not_found).
 
 
 %% @private
@@ -290,7 +290,7 @@ add_member(Id, Session) ->
             MemberIds = get_members(Session),
             Session2 = set_members([MemberId|MemberIds], Session),
             send_msg({started_member, MemberId}, without_push, Session),
-            {ok, Session2};
+            {ok, MemberId, Session2};
         {true, _} ->
             {error, member_already_present};
         {error, Error} ->
@@ -373,15 +373,16 @@ send_msg([MemberId|Rest], Msg, Sessions, Push, #obj_session{srv_id=SrvId, obj_id
 
 
 %% @private
-send_push(Msg, MemberId, with_push, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
-    case SrvId:object_send_push(MemberId, ?CHAT_CONVERSATION, ConvId, Msg) of
+send_push(MemberId, Msg, with_push, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
+    case SrvId:object_send_push(SrvId, MemberId, ?CHAT_CONVERSATION, ConvId, Msg) of
         ok ->
+            lager:warning("Send push: ~p", [{SrvId, MemberId, ?CHAT_CONVERSATION, ConvId, Msg}]),
             ok;
         {error, Error} ->
             ?LLOG(info, "error sending push to ~s: ~p", [MemberId], Error)
     end;
 
-send_push(_Msg, _MemberId, without_push, _Session) ->
+send_push(_MemberId, _Msg, without_push, _Session) ->
     ok.
 
 

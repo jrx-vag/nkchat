@@ -42,12 +42,12 @@ cmd('', create, Data, State) ->
             {error, Error, State}
     end;
 
-cmd('', add_member, #{member_ids:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
+cmd('', add_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
             case nkchat_conversation_obj:add_member(SrvId, Id, MemberId) of
-                ok ->
-                    {ok, #{}, State};
+                {ok, MemberObjId} ->
+                    {ok, #{member_obj_id=>MemberObjId}, State};
                 {error, Error} ->
                     {error, Error, State}
             end;

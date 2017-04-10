@@ -64,14 +64,14 @@ api('', add_member, Syntax) ->
         id => binary,
         member_id => binary
     },
-    nklib_syntax:add_mandatory([member_ids], Syntax2);
+    nklib_syntax:add_mandatory([member_id], Syntax2);
 
 api('', remove_member, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
-        member_ids => binary
+        member_id => binary
     },
-    nklib_syntax:add_mandatory([id, member_ids], Syntax2);
+    nklib_syntax:add_mandatory([member_id], Syntax2);
 
 api('', get_messages, Syntax) ->
     Syntax#{

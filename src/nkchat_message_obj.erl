@@ -110,10 +110,14 @@ object_api_cmd(Sub, Cmd, Data, State) ->
 
 
 %% @private
-object_start(#obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj}=Session) ->
+object_start(#obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj, is_dirty=true}=Session) ->
     #{?CHAT_MESSAGE:=Msg} = Obj,
     ok = nkchat_conversation_obj:message_created(Pid, ObjId, Msg),
+    {ok, Session};
+
+object_start(Session) ->
     {ok, Session}.
+
 
 
 %% @private

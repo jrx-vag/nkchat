@@ -34,9 +34,11 @@
 api('', create, Syntax) ->
     Syntax2 = Syntax#{
         conversation_id => binary,
-        message => binary
+        'chat.message' => #{
+            message => binary
+        }
     },
-    nklib_syntax:add_mandatory([conversation_id, message], Syntax2);
+    nklib_syntax:add_mandatory([conversation_id, 'chat.message.message'], Syntax2);
 
 api('', get, Syntax) ->
     Syntax2 = Syntax#{
@@ -57,7 +59,7 @@ api('', update, Syntax) ->
             message => binary
         }
     },
-    nklib_syntax:add_mandatory([id, message], Syntax2);
+    nklib_syntax:add_mandatory([id, 'chat.message.message'], Syntax2);
 
 api(_Sub, _Cmd, Syntax) ->
     lager:error("unknown syntax: ~p, ~p", [_Sub, _Cmd]),

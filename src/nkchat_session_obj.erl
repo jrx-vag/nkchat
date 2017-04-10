@@ -23,7 +23,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/2, find/2, start/3, stop/2]).
+-export([create/2, find/2, start/3, stop/2, get_info/2]).
 -export([set_active_conversation/3, set_last_message/5, add_conversation/3, remove_conversation/3]).
 -export([conversation_msg/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
@@ -100,16 +100,6 @@ stop(Srv, Id) ->
 
 
 %% @doc
-set_active_conversation(Srv, Id, ConvId) ->
-    sync_op(Srv, Id, {?MODULE, set_active_conv, ConvId}).
-
-
-%% @doc
-set_last_message(Srv, Id, ConvId, MsgId, Time) ->
-    async_op(Srv, Id, {?MODULE, set_last_msg, ConvId, MsgId, Time}).
-
-
-%% @doc
 add_conversation(Srv, Id, ConvId) ->
     case nkdomain_obj_lib:find(Srv, ConvId) of
         #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvId2} ->
@@ -125,6 +115,21 @@ add_conversation(Srv, Id, ConvId) ->
 %% @doc
 remove_conversation(Srv, Id, ConvId) ->
     sync_op(Srv, Id, {?MODULE, rm_conv, ConvId}).
+
+
+%% @doc
+get_info(Srv, Id) ->
+    sync_op(Srv, Id, {?MODULE, get_conversations}).
+
+
+%% @doc
+set_active_conversation(Srv, Id, ConvId) ->
+    sync_op(Srv, Id, {?MODULE, set_active_conv, ConvId}).
+
+
+%% @doc
+set_last_message(Srv, Id, ConvId, MsgId, Time) ->
+    async_op(Srv, Id, {?MODULE, set_last_msg, ConvId, MsgId, Time}).
 
 
 %% @doc
@@ -233,7 +238,7 @@ object_start(#obj_session{srv_id=SrvId, obj=Obj, parent_id=UserId}=Session) ->
 %% @private Prepare the object for saving
 object_save(#obj_session{obj=Obj}=Session) ->
     Monitor = get_monitor(Session),
-    Convs = [Obj || {_Enabled, Obj} <- nkdomain_monitor:get_obj_values(Monitor)],
+    Convs = [O || {_Enabled, O} <- nkdomain_monitor:get_obj_values(Monitor)],
     ChatObj = #{conversations => Convs},
     Obj2 = ?ADD_TO_OBJ(?CHAT_SESSION, ChatObj, Obj),
     {ok, Session#obj_session{obj=Obj2}};
@@ -360,12 +365,12 @@ object_handle_info(_Info, _Session) ->
 
 %% @private
 sync_op(Srv, Id, Op) ->
-    nkdomain_obj_lib:sync_op(Srv, Id, Op, session_not_found).
+    nkdomain_obj_lib:sync_op(Srv, Id, ?CHAT_SESSION, Op, session_not_found).
 
 
 %% @private
 async_op(Srv, Id, Op) ->
-    nkdomain_obj_lib:async_op(Srv, Id, Op, session_not_found).
+    nkdomain_obj_lib:async_op(Srv, Id, ?CHAT_SESSION, Op, session_not_found).
 
 
 %% @private
