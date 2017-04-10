@@ -40,6 +40,9 @@ conv_remove_member(Id, Member) ->
 conv_delete(Id) ->
     cmd('chat.conversation', delete, #{id=>Id}).
 
+conv_get_messages(Id) ->
+    conv_get_messages(Id, #{}).
+
 conv_get_messages(Id, Spec) ->
     cmd('chat.conversation', get_messages, Spec#{id=>Id}).
 

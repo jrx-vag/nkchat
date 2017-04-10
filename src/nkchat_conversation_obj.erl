@@ -25,7 +25,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/4, add_member/3, remove_member/3, get_messages/3]).
--export([message_created/3, message_deleted/2, message_updated/3]).
+-export([message_created/4, message_deleted/2, message_updated/3]).
 -export([register_session/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4,
@@ -110,8 +110,8 @@ register_session(ConvPid, UserId, Link) ->
 
 
 %% @private
-message_created(ConvPid, MsgId, Msg) ->
-    nkdomain_obj:async_op(ConvPid, {?MODULE, message_created, MsgId, Msg}).
+message_created(ConvPid, MsgId, Time, Msg) ->
+    nkdomain_obj:async_op(ConvPid, {?MODULE, message_created, MsgId, Time, Msg}).
 
 
 %% @private
@@ -205,9 +205,9 @@ object_sync_op(_Op, _From, _Session) ->
 
 
 %% @private
-object_async_op({?MODULE, message_created, MsgId, Msg}, Session) ->
+object_async_op({?MODULE, message_created, MsgId, Time, Msg}, Session) ->
     ?LLOG(notice, "message ~s created", [MsgId], Session),
-    send_msg({message, MsgId, {created, Msg}}, with_push, Session),
+    send_msg({message, MsgId, {created, Time, Msg}}, with_push, Session),
     {noreply, Session};
 
 object_async_op({?MODULE, message_deleted, MsgId}, Session) ->

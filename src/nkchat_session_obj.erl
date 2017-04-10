@@ -24,7 +24,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/2, find/2, start/3, stop/2, get_info/2]).
--export([set_active_conversation/3, set_last_message/5, add_conversation/3, remove_conversation/3]).
+-export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_msg/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
@@ -127,9 +127,9 @@ set_active_conversation(Srv, Id, ConvId) ->
     sync_op(Srv, Id, {?MODULE, set_active_conv, ConvId}).
 
 
-%% @doc
-set_last_message(Srv, Id, ConvId, MsgId, Time) ->
-    async_op(Srv, Id, {?MODULE, set_last_msg, ConvId, MsgId, Time}).
+%%%% @doc
+%%set_last_message(Srv, Id, ConvId, MsgId, Time) ->
+%%    async_op(Srv, Id, {?MODULE, set_last_msg, ConvId, MsgId, Time}).
 
 
 %% @doc
@@ -146,6 +146,7 @@ conversation_msg(Pid, ConvId, Msg) ->
 -record(?MODULE, {
     monitor :: nkdomain_monitor:monitor(),
     active :: undefined | nkdomain:obj_id(),
+    convs = #{} :: #{ConvId::nkdomain:obj_id() => integer()},
     unread = #{} :: #{ConvId::nkdomain:obj_id() => integer()},
     api_pids = [] :: [pid()],
     meta = #{} :: map()
@@ -230,10 +231,13 @@ object_start(#obj_session{srv_id=SrvId, obj=Obj, parent_id=UserId}=Session) ->
         end,
         nkdomain_monitor:new(SrvId, {?MODULE, UserId}),
         Convs),
-    self() ! {?MODULE, check_time},
+    ConvIds = nkdomain_monitor:get_obj_ids(Monitor),
+    Unread = add_unread(ConvIds, #{}, Monitor, Session),
     Data = #?MODULE{
-        monitor = Monitor
+        monitor = Monitor,
+        unread = Unread
     },
+    self() ! {?MODULE, check_time},
     {ok, Session#obj_session{data=Data}}.
 
 
@@ -261,8 +265,8 @@ object_sync_op({?MODULE, get_conversations}, _From, #obj_session{obj_id=ObjId}=S
     Monitor = get_monitor(Session),
     Convs = lists:map(
         fun
-            ({enabled, Obj}) -> Obj#{enabled=>true};
-            ({disabled, Obj}) -> Obj#{enabled=>false}
+            ({enabled, Obj}) -> add_unread(Obj#{'_enabled'=>true}, Session);
+            ({disabled, Obj}) -> add_unread(Obj#{'_enabled'=>false}, Session)
         end,
         nkdomain_monitor:get_obj_values(Monitor)),
     {reply, {ok, ObjId, #{conversations=>Convs}}, Session};
@@ -322,27 +326,56 @@ object_sync_op(_Op, _From, _Session) ->
     continue.
 
 
-%% @private
-object_async_op({?MODULE, set_last_msg, ConvId, MsgId, Time}, Session) ->
-    Monitor = get_monitor(Session),
-    case nkdomain_monitor:get_obj(ConvId, Monitor) of
-        {enabled, Conv, _Pid} ->
-            Conv2 = Conv#{
-                last_read_message_id => MsgId,
-                last_read_message_time => Time
-            },
-            {ok, Monitor2} = nkdomain_monitor:update_obj(ConvId, Conv2, Monitor),
-            Session2 = update_monitor( Monitor2, Session),
-            ?DEBUG("set last message for conversation ~s", [ConvId], Session),
-            {noreply, Session2};
-        not_found ->
-            {noreply, Session}
+%%%% @private
+%%object_async_op({?MODULE, set_last_msg, ConvId, MsgId, Time}, Session) ->
+%%    Monitor = get_monitor(Session),
+%%    case nkdomain_monitor:get_obj(ConvId, Monitor) of
+%%        {enabled, Conv, _Pid} ->
+%%            Conv2 = Conv#{
+%%                last_read_message_id => MsgId,
+%%                last_read_message_time => Time
+%%            },
+%%            {ok, Monitor2} = nkdomain_monitor:update_obj(ConvId, Conv2, Monitor),
+%%            Session2 = update_monitor( Monitor2, Session),
+%%            ?DEBUG("set last message for conversation ~s", [ConvId], Session),
+%%            {noreply, Session2};
+%%        not_found ->
+%%            {noreply, Session}
+%%    end;
+
+object_async_op({?MODULE, conversation_msg, ConvId, {message, MsgId, {created, Time, Body}}}, Session) ->
+    #obj_session{data=Data} = Session,
+    #?MODULE{active=Active, unread=Unread} = Data,
+    case Active of
+        ConvId ->
+            Event = #{conversation_id=>ConvId, message_id=>MsgId, created_time=>Time, message=>Body},
+            send_api_event(message, new, Event, Session),
+            Monitor = get_monitor(Session),
+            case nkdomain_monitor:get_obj(ConvId, Monitor) of
+                {enabled, Conv, _Pid} ->
+                    Conv2 = Conv#{
+                        last_read_message_id => MsgId,
+                        last_read_message_time => Time
+                    },
+                    {ok, Monitor2} = nkdomain_monitor:update_obj(ConvId, Conv2, Monitor),
+                    Session2 = update_monitor( Monitor2, Session),
+                    ?DEBUG("set last message for conversation ~s", [ConvId], Session),
+                    {noreply_and_save, Session2};
+                not_found ->
+                    ?LLOG(error, "received message for unknown conv", [], Session),
+                    {noreply, Session}
+            end;
+        _ ->
+            Count = maps:get(ConvId, Unread, 0),
+            Unread2 = Unread#{ConvId => Count+1},
+            Session2 = Session#obj_session{data=Data#?MODULE{unread=Unread2}},
+            Event = #{conversation_id=>ConvId, unread=>Count+1},
+            send_api_event(conversation, unread_count, Event, Session2),
+            {noreply, Session2}
     end;
 
 object_async_op({?MODULE, conversation_msg, ConvId, {message, MsgId, Op}}, Session) ->
     {Type, Event} = case Op of
-        {created, Body} ->
-            {new, #{message=>Body}};
         deleted ->
             {deleted, #{}};
         {updated, Body} ->
@@ -355,7 +388,6 @@ object_async_op({?MODULE, conversation_msg, ConvId, {message, MsgId, Op}}, Sessi
 object_async_op({?MODULE, conversation_msg, ConvId, Msg}, Session) ->
     lager:error("SESS CONV MSG: ~p, ~p", [ConvId, Msg]),
     {noreply, Session};
-
 
 object_async_op(_Op, _Session) ->
     continue.
@@ -397,31 +429,50 @@ sync_op(Srv, Id, Op) ->
     nkdomain_obj_lib:sync_op(Srv, Id, ?CHAT_SESSION, Op, session_not_found).
 
 
-%% @private
-async_op(Srv, Id, Op) ->
-    nkdomain_obj_lib:async_op(Srv, Id, ?CHAT_SESSION, Op, session_not_found).
+%%%% @private
+%%async_op(Srv, Id, Op) ->
+%%    nkdomain_obj_lib:async_op(Srv, Id, ?CHAT_SESSION, Op, session_not_found).
 
 
 %% @private
-get_monitor(#obj_session{data=SessData}) ->
-    #?MODULE{monitor=Monitor} = SessData,
+get_monitor(#obj_session{data=Data}) ->
+    #?MODULE{monitor=Monitor} = Data,
     Monitor.
 
 
 %% @private
-update_active(ConvId, Monitor, #obj_session{data=SessData}=Session) ->
-    SessData2 = SessData#?MODULE{monitor=Monitor, active=ConvId},
-    Session#obj_session{data=SessData2, is_dirty=true}.
+update_active(ConvId, Monitor, #obj_session{data=Data}=Session) ->
+    #?MODULE{unread=Unread} = Data,
+    Unread2 = Unread#{ConvId => 0},
+    Data2 = Data#?MODULE{monitor=Monitor, active=ConvId, unread=Unread2},
+    Session#obj_session{data=Data2, is_dirty=true}.
 
 
 %% @private
-update_monitor(Monitor, #obj_session{data=SessData}=Session) ->
-    SessData2 = SessData#?MODULE{monitor=Monitor},
-    Session#obj_session{data=SessData2, is_dirty=tue}.
+update_monitor(Monitor, #obj_session{data=Data}=Session) ->
+    Data2 = Data#?MODULE{monitor=Monitor},
+    Session#obj_session{data=Data2, is_dirty=tue}.
 
 
 %% @private
-find_unread(Conv, #{srv_id:=SrvId}) ->
+add_unread([], Unread, _Monitor, _Session) ->
+    Unread;
+
+add_unread([ConvId|Rest], Unread, Monitor, Session) ->
+    {_, Conv, _} = nkdomain_monitor:get_obj(ConvId, Monitor),
+    {Num, Time} = find_unread(Conv, Session),
+    lager:error("UNREAD FOR ~s: ~p (~p)", [ConvId, Num, Time]),
+    add_unread(Rest, Unread#{ConvId=>Num}, Monitor, Session).
+
+
+%% @private
+add_unread(Conv, Session) ->
+    {Num, _Time} = find_unread(Conv, Session),
+    Conv#{'_unread_count'=>Num}.
+
+
+%% @private
+find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
     #{obj_id:=ConvId, last_read_message_id:=_MsgId, last_read_message_time:=Time} = Conv,
     Search = #{
         filters => #{
@@ -431,7 +482,13 @@ find_unread(Conv, #{srv_id:=SrvId}) ->
         },
         size => 0
     },
-    nkdomain_store:find(SrvId, Search).
+    case nkdomain_store:find(SrvId, Search) of
+        {ok, Num, [], _Meta} ->
+            {Num, Time};
+        {error, Error} ->
+            ?LLOG(error, "error reading unread count: ~p", [Error], Session),
+            {-1, Time}
+    end.
 
 
 %% @private
