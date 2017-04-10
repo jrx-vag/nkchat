@@ -13,7 +13,7 @@
 
 
 login() ->
-    nkdomain_test:login().
+    nkdomain_test:login("/chattest/users/u2", "1234").
 
 domain_find_convs() ->
     cmd(domain, find_all_childs, #{type=>?CHAT_CONVERSATION, sort=>[type, path]}).

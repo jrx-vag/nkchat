@@ -88,7 +88,7 @@ find(Srv, User) ->
 start(Srv, Id, CallerPid) ->
     case nkdomain_obj_lib:load(Srv, Id, #{register=>{?MODULE, CallerPid}}) of
         #obj_id_ext{pid=Pid} ->
-            nkdomain_obj:sync_op(Pid, {?MODULE, get_conversations});
+            nkdomain_obj:sync_op(Pid, {?MODULE, start, CallerPid});
         {error, Error} ->
             {error, Error}
     end.
@@ -134,7 +134,7 @@ set_last_message(Srv, Id, ConvId, MsgId, Time) ->
 
 %% @doc
 conversation_msg(Pid, ConvId, Msg) ->
-    nkdomain_obj:async_op(Pid, {conversation_msg, ConvId, Msg}).
+    nkdomain_obj:async_op(Pid, {?MODULE, conversation_msg, ConvId, Msg}).
 
 
 
@@ -147,6 +147,7 @@ conversation_msg(Pid, ConvId, Msg) ->
     monitor :: nkdomain_monitor:monitor(),
     active :: undefined | nkdomain:obj_id(),
     unread = #{} :: #{ConvId::nkdomain:obj_id() => integer()},
+    api_pids = [] :: [pid()],
     meta = #{} :: map()
 }).
 
@@ -216,7 +217,8 @@ object_start(#obj_session{srv_id=SrvId, obj=Obj, parent_id=UserId}=Session) ->
     Monitor = lists:foldl(
         fun(#{obj_id:=ConvId}=Conv, Acc) ->
             case nkdomain_monitor:load_obj(ConvId, Conv, Acc) of
-                {enabled, Acc2} ->
+                {enabled, _ObjId, Pid, Acc2} ->
+                    nkchat_conversation_obj:register_session(Pid, UserId, {?MODULE, self()}),
                     Acc2;
                 {disabled, Acc2} ->
                     ?LLOG(notice, "could not active conversation ~s", [ConvId], Session),
@@ -248,6 +250,13 @@ object_save(Session) ->
 
 
 %% @private
+object_sync_op({?MODULE, start, Pid}, From, #obj_session{data=Data}=Session) ->
+    #?MODULE{api_pids=Pids} = Data,
+    Data2 = Data#?MODULE{api_pids=[Pid|Pids]},
+    Session2 = Session#obj_session{data=Data2},
+    object_sync_op({?MODULE, get_conversations}, From, Session2);
+
+
 object_sync_op({?MODULE, get_conversations}, _From, #obj_session{obj_id=ObjId}=Session) ->
     Monitor = get_monitor(Session),
     Convs = lists:map(
@@ -284,7 +293,9 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, Session) ->
         last_read_message_time => 0
     },
     case nkdomain_monitor:add_obj(ConvId, Conv, Monitor) of
-        {ok, _, Monitor2} ->
+        {ok, _ObjId, Pid, Monitor2} ->
+            #obj_session{parent_id=UserId} = Session,
+            nkchat_conversation_obj:register_session(Pid, UserId, {?MODULE, self()}),
             Session2 = update_monitor(Monitor2, Session),
             ?DEBUG("added conversation ~s", [ConvId], Session),
             {reply_and_save, {ok, ConvId}, Session2};
@@ -327,6 +338,24 @@ object_async_op({?MODULE, set_last_msg, ConvId, MsgId, Time}, Session) ->
         not_found ->
             {noreply, Session}
     end;
+
+object_async_op({?MODULE, conversation_msg, ConvId, {message, MsgId, Op}}, Session) ->
+    {Type, Event} = case Op of
+        {created, Body} ->
+            {new, #{message=>Body}};
+        deleted ->
+            {deleted, #{}};
+        {updated, Body} ->
+            {updated, #{message=>Body}}
+    end,
+    Event2 = Event#{conversation_id=>ConvId, message_id=>MsgId},
+    send_api_event(message, Type, Event2, Session),
+    {noreply, Session};
+
+object_async_op({?MODULE, conversation_msg, ConvId, Msg}, Session) ->
+    lager:error("SESS CONV MSG: ~p, ~p", [ConvId, Msg]),
+    {noreply, Session};
+
 
 object_async_op(_Op, _Session) ->
     continue.
@@ -391,6 +420,7 @@ update_monitor(Monitor, #obj_session{data=SessData}=Session) ->
     Session#obj_session{data=SessData2, is_dirty=tue}.
 
 
+%% @private
 find_unread(Conv, #{srv_id:=SrvId}) ->
     #{obj_id:=ConvId, last_read_message_id:=_MsgId, last_read_message_time:=Time} = Conv,
     Search = #{
@@ -402,6 +432,19 @@ find_unread(Conv, #{srv_id:=SrvId}) ->
         size => 0
     },
     nkdomain_store:find(SrvId, Search).
+
+
+%% @private
+send_api_event(Sub, Type, Body, #obj_session{obj_id=ObjId, data=Data}) ->
+    #?MODULE{api_pids=Pids} = Data,
+    Event = #{
+        class => 'chat.session',
+        subclass => Sub,
+        type => Type,
+        obj_id => ObjId,
+        body => Body
+    },
+    lists:foreach(fun(Pid) -> nkapi_server:event(Pid, Event) end, Pids).
 
 
 

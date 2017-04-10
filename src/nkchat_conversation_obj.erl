@@ -105,8 +105,8 @@ get_messages(Srv, Id, Spec) ->
 
 
 %% @private
-register_session(Srv, Id, Link) ->
-    sync_op(Srv, Id, {?MODULE, register_session, Link}).
+register_session(ConvPid, UserId, Link) ->
+    nkdomain_obj:sync_op(ConvPid, {?MODULE, register_session, UserId, Link}).
 
 
 %% @private
@@ -197,12 +197,8 @@ object_sync_op({?MODULE, remove_member, Id}, _From, Session) ->
     end;
 
 object_sync_op({?MODULE, register_session, UserId, Link}, _From, Session) ->
-    case register_member(UserId, Link, Session) of
-        {ok, Session2} ->
-            {reply, ok, Session2};
-        {error, Error} ->
-            {reply, {error, Error}, Session}
-    end;
+    Session2 = register_member(UserId, Link, Session),
+    {reply, ok, Session2};
 
 object_sync_op(_Op, _From, _Session) ->
     continue.
@@ -211,17 +207,17 @@ object_sync_op(_Op, _From, _Session) ->
 %% @private
 object_async_op({?MODULE, message_created, MsgId, Msg}, Session) ->
     ?LLOG(notice, "message ~s created", [MsgId], Session),
-    send_msg({created, MsgId, Msg}, with_push, Session),
+    send_msg({message, MsgId, {created, Msg}}, with_push, Session),
     {noreply, Session};
 
 object_async_op({?MODULE, message_deleted, MsgId}, Session) ->
     ?LLOG(notice, "message ~s deleted", [MsgId], Session),
-    send_msg({deleted, MsgId}, without_push, Session),
+    send_msg({message, MsgId, deleted}, without_push, Session),
     {noreply, Session};
 
 object_async_op({?MODULE, message_updated, MsgId, Msg}, Session) ->
     ?LLOG(notice, "message ~s updated", [MsgId], Session),
-    send_msg({updated, MsgId, Msg}, without_push, Session),
+    send_msg({message, MsgId, {updated, Msg}}, without_push, Session),
     {noreply, Session};
 
 object_async_op(_Op, _Session) ->
@@ -359,11 +355,11 @@ send_msg([], _Msg, _Sessions, _Push, _Session) ->
 send_msg([MemberId|Rest], Msg, Sessions, Push, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
     case maps:find(MemberId, Sessions) of
         {ok, Link} ->
-            case SrvId:object_send_session_msg(Link, ?CHAT_CONVERSATION, ConvId, Msg) of
+            case SrvId:object_session_msg(Link, ?CHAT_CONVERSATION, ConvId, Msg) of
                 ok ->
                     ok;
                 {error, Error} ->
-                    ?LLOG(info, "error sending message to ~s: ~p", [MemberId], Error),
+                    ?LLOG(error, "error sending message to ~s: ~p", [MemberId, Error], Session),
                     send_push(MemberId, Msg, Push, Session)
             end;
         error ->
