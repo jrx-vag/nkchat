@@ -25,7 +25,7 @@
 
 -export([create/2, find/2, start/3, stop/2, get_info/2]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
--export([conversation_msg/3]).
+-export([conversation_event/2]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 -export([object_start/1, object_save/1, object_sync_op/3, object_async_op/2, object_handle_info/2]).
@@ -34,6 +34,7 @@
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
+-include_lib("nkservice/include/nkservice.hrl").
 
 
 %% Period to find for inactive conversations
@@ -133,8 +134,8 @@ set_active_conversation(Srv, Id, ConvId) ->
 
 
 %% @doc
-conversation_msg(Pid, ConvId, Msg) ->
-    nkdomain_obj:async_op(Pid, {?MODULE, conversation_msg, ConvId, Msg}).
+conversation_event(Pid, #event{class = ?CHAT_CONVERSATION, subclass = <<"message">>}=Event) ->
+    nkdomain_obj:async_op(Pid, {?MODULE, conversation_event, Event}).
 
 
 
@@ -343,13 +344,13 @@ object_sync_op(_Op, _From, _Session) ->
 %%            {noreply, Session}
 %%    end;
 
-object_async_op({?MODULE, conversation_msg, ConvId, {message, MsgId, {created, Time, Body}}}, Session) ->
+object_async_op({?MODULE, conversation_event, #event{type = <<"created">>}=Event}, Session) ->
     #obj_session{data=Data} = Session,
     #?MODULE{active=Active, unread=Unread} = Data,
+    #event{obj_id=ConvId, body = #{message_id:=MsgId, created_time:=Time}} = Event,
+    send_api_event(Event, Session),
     case Active of
         ConvId ->
-            Event = #{conversation_id=>ConvId, message_id=>MsgId, created_time=>Time, message=>Body},
-            send_api_event(message, new, Event, Session),
             Monitor = get_monitor(Session),
             case nkdomain_monitor:get_obj(ConvId, Monitor) of
                 {enabled, Conv, _Pid} ->
@@ -369,24 +370,11 @@ object_async_op({?MODULE, conversation_msg, ConvId, {message, MsgId, {created, T
             Count = maps:get(ConvId, Unread, 0),
             Unread2 = Unread#{ConvId => Count+1},
             Session2 = Session#obj_session{data=Data#?MODULE{unread=Unread2}},
-            Event = #{conversation_id=>ConvId, unread=>Count+1},
-            send_api_event(conversation, unread_count, Event, Session2),
             {noreply, Session2}
     end;
 
-object_async_op({?MODULE, conversation_msg, ConvId, {message, MsgId, Op}}, Session) ->
-    {Type, Event} = case Op of
-        deleted ->
-            {deleted, #{}};
-        {updated, Body} ->
-            {updated, #{message=>Body}}
-    end,
-    Event2 = Event#{conversation_id=>ConvId, message_id=>MsgId},
-    send_api_event(message, Type, Event2, Session),
-    {noreply, Session};
-
-object_async_op({?MODULE, conversation_msg, ConvId, Msg}, Session) ->
-    lager:error("SESS CONV MSG: ~p, ~p", [ConvId, Msg]),
+object_async_op({?MODULE, conversation_event, Event}, Session) ->
+    send_api_event(Event, Session),
     {noreply, Session};
 
 object_async_op(_Op, _Session) ->
@@ -492,15 +480,8 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
 
 
 %% @private
-send_api_event(Sub, Type, Body, #obj_session{obj_id=ObjId, data=Data}) ->
+send_api_event(Event, #obj_session{data=Data}) ->
     #?MODULE{api_pids=Pids} = Data,
-    Event = #{
-        class => ?CHAT_SESSION,
-        subclass => Sub,
-        type => Type,
-        obj_id => ObjId,
-        body => Body
-    },
     lists:foreach(fun(Pid) -> nkapi_server:event(Pid, Event) end, Pids).
 
 

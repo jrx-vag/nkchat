@@ -32,8 +32,7 @@
 
 %% @doc
 cmd('', create, #{conversation_id:=ConvId, ?CHAT_MESSAGE_ATOM:=Msg}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
-    #{message:=Bin} = Msg,
-    case nkchat_message_obj:create(SrvId, ConvId, UserId, Bin) of
+    case nkchat_message_obj:create(SrvId, ConvId, UserId, Msg) of
         {ok, ObjId, Path, _Pid} ->
             {ok, #{obj_id=>ObjId, path=>Path}, State};
         {error, Error} ->

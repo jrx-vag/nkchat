@@ -36,19 +36,25 @@ api('', create, Syntax) ->
     Syntax2 = Syntax#{
         conversation_id => binary,
         ?CHAT_MESSAGE_ATOM => #{
-            message => binary
+            text => binary
         }
     },
-    nklib_syntax:add_mandatory([conversation_id, 'chat.message.message'], Syntax2);
+    nklib_syntax:add_mandatory([
+        conversation_id,
+        << ?CHAT_MESSAGE/binary, ".text" >>
+    ], Syntax2);
 
 api('', update, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
         ?CHAT_MESSAGE_ATOM => #{
-            message => binary
+            text => binary
         }
     },
-    nklib_syntax:add_mandatory([id, 'chat.message.message'], Syntax2);
+    nklib_syntax:add_mandatory([
+        id,
+        << ?CHAT_MESSAGE/binary, ".text" >>
+    ], Syntax2);
 
 api(Sub, Cmd, Syntax) ->
     nkdomain_api_util:syntax_common(Sub, Cmd, Syntax).

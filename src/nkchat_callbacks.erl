@@ -21,7 +21,7 @@
 -module(nkchat_callbacks).
 
 -export([plugin_deps/0, api_error/1]).
--export([object_session_msg/4]).
+-export([object_session_event/2]).
 -export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
@@ -29,6 +29,7 @@
 
 -include_lib("nkchat.hrl").
 -include_lib("nkapi/include/nkapi.hrl").
+-include_lib("nkservice/include/nkservice.hrl").
 
 
 
@@ -97,10 +98,10 @@ api_error(_)   		                        -> continue.
 %% ===================================================================
 
 
-object_session_msg({nkchat_session_obj, Pid}, ?CHAT_CONVERSATION, ConvId, Msg) ->
-    nkchat_session_obj:conversation_msg(Pid, ConvId, Msg);
+object_session_event({nkchat_session_obj, Pid}, #event{class = ?CHAT_CONVERSATION}=Event) ->
+    nkchat_session_obj:conversation_event(Pid, Event);
 
-object_session_msg(_Link, _Type, _Id, _Msg) ->
+object_session_event(_Link, _Event) ->
     continue.
 
 

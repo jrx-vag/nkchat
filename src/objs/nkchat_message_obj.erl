@@ -75,22 +75,19 @@ object_get_info() ->
 %% @private
 object_mapping() ->
     #{
-        message => #{
+        text => #{
             type => text,
             fields => #{keyword => #{type=>keyword}}
-        }
+        },
+        file_id => #{type => keyword}
     }.
 
 
 %% @private
-object_syntax(load) ->
+object_syntax(_) ->
     #{
-        message => binary
-    };
-
-object_syntax(update) ->
-    #{
-        message => binary
+        text => binary,
+        file_id => binary
     }.
 
 
@@ -110,14 +107,13 @@ object_api_cmd(Sub, Cmd, Data, State) ->
 
 
 %% @private
-object_start(#obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj, is_dirty=true}=Session) ->
+object_start(#obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj, is_created=true}=Session) ->
     #{created_time:=Time, ?CHAT_MESSAGE:=Msg} = Obj,
-    ok = nkchat_conversation_obj:message_created(Pid, ObjId, Time, Msg),
+    ok = nkchat_conversation_obj:message_created(Pid, ObjId, Msg#{created_time=>Time}),
     {ok, Session};
 
 object_start(Session) ->
     {ok, Session}.
-
 
 
 %% @private
@@ -128,8 +124,8 @@ object_deleted(#obj_session{parent_pid=Pid, obj_id=ObjId}=Session) ->
 
 %% @private
 object_updated(_Update, #obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj}=Session) ->
-    #{?CHAT_MESSAGE:=Msg} = Obj,
-    ok = nkchat_conversation_obj:message_updated(Pid, ObjId, Msg),
+    #{updated_time:=Time, ?CHAT_MESSAGE:=Msg} = Obj,
+    ok = nkchat_conversation_obj:message_updated(Pid, ObjId, Msg#{updated_time=>Time}),
     {ok, Session}.
 
 

@@ -45,7 +45,7 @@ api('', update, Syntax) ->
         id => binary,
         description => binary
     },
-    nklib_syntax:add_mandatory([description], Syntax2);
+    nklib_syntax:add_mandatory([id, description], Syntax2);
 
 api('', add_member, Syntax) ->
     Syntax2 = Syntax#{

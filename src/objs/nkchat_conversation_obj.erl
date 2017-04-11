@@ -25,7 +25,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/4, add_member/3, remove_member/3, get_messages/3]).
--export([message_created/4, message_deleted/2, message_updated/3]).
+-export([message_created/3, message_deleted/2, message_updated/3]).
 -export([register_session/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4,
@@ -34,9 +34,32 @@
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
+-include_lib("nkservice/include/nkservice.hrl").
+
 
 %% Period to find for inactive users
 -define(CHECK_TIME, 5*60*1000).
+
+%% Conversation creates the following message events:
+%% #{
+%%      class => ?CHAT_SESSION,
+%%      subclass => <<"message">>,
+%%      type => <<"created">> | <<"updated">> | <<"deleted">>
+%%      obj_id => ConvId
+%%      body => #{
+%%          message_id => MsgId
+%%          created_time => nklib_util:m_timestamp()
+%%          updated_time => nklib_util:m_timestamp()
+%%          text => binary
+%%      }
+%% }
+
+
+
+
+
+
+
 
 %% ===================================================================
 %% Types
@@ -111,8 +134,8 @@ register_session(ConvPid, UserId, Link) ->
 
 
 %% @private Called from nkchat_message_obj
-message_created(ConvPid, MsgId, Time, Msg) ->
-    nkdomain_obj:async_op(ConvPid, {?MODULE, message_created, MsgId, Time, Msg}).
+message_created(ConvPid, MsgId, Msg) ->
+    nkdomain_obj:async_op(ConvPid, {?MODULE, message_created, MsgId, Msg}).
 
 
 %% @private
@@ -206,19 +229,22 @@ object_sync_op(_Op, _From, _Session) ->
 
 
 %% @private
-object_async_op({?MODULE, message_created, MsgId, Time, Msg}, Session) ->
-    ?LLOG(notice, "message ~s created", [MsgId], Session),
-    send_msg({message, MsgId, {created, Time, Msg}}, with_push, Session),
+object_async_op({?MODULE, message_created, MsgId, Msg}, Session) ->
+    ?DEBUG("message ~s created", [MsgId], Session),
+    Event = make_event(message, created, Msg#{message_id=>MsgId}, Session),
+    send_event(Event, with_push, Session),
     {noreply, Session};
 
 object_async_op({?MODULE, message_deleted, MsgId}, Session) ->
-    ?LLOG(notice, "message ~s deleted", [MsgId], Session),
-    send_msg({message, MsgId, deleted}, without_push, Session),
+    ?DEBUG("message ~s deleted", [MsgId], Session),
+    Event = make_event(message, deleted, #{message_id=>MsgId}, Session),
+    send_event(Event, without_push, Session),
     {noreply, Session};
 
 object_async_op({?MODULE, message_updated, MsgId, Msg}, Session) ->
-    ?LLOG(notice, "message ~s updated", [MsgId], Session),
-    send_msg({message, MsgId, {updated, Msg}}, without_push, Session),
+    ?DEBUG("message ~s updated", [MsgId], Session),
+    Event = make_event(message, deleted, #{message_id=>MsgId}, Session),
+    send_event(Event, without_push, Session),
     {noreply, Session};
 
 object_async_op(_Op, _Session) ->
@@ -286,7 +312,7 @@ add_member(Id, Session) ->
         {false, MemberId} ->
             MemberIds = get_members(Session),
             Session2 = set_members([MemberId|MemberIds], Session),
-            send_msg({started_member, MemberId}, without_push, Session),
+            send_event({started_member, MemberId}, without_push, Session),
             {ok, MemberId, Session2};
         {true, _} ->
             {error, member_already_present};
@@ -301,7 +327,7 @@ rm_member(Id, Session) ->
         {true, MemberId} ->
             MemberIds = get_members(Session),
             Session2 = set_members(MemberIds -- [MemberId], Session),
-            send_msg({removed_member, MemberId}, without_push, Session),
+            send_event({removed_member, MemberId}, without_push, Session),
             {ok, Session2};
         {false, _} ->
             {error, member_not_found};
@@ -343,54 +369,56 @@ set_members(MemberIds, #obj_session{obj=Obj}=Session) ->
 
 
 %% @private
-send_msg(Msg, Push, #obj_session{data=Data}=Session) ->
+send_event(Event, Push, #obj_session{data=Data}=Session) ->
     MemberIds = get_members(Session),
     #?MODULE{sessions=Sessions} = Data,
-    send_msg_sessions(maps:to_list(Sessions), Push, Msg, Session),
+    send_event_sessions(maps:to_list(Sessions), Push, Event, Session),
     case Push of
         with_push ->
-            send_msg_members(MemberIds, Msg, Sessions, Session);
+            send_event_members(MemberIds, Event, Sessions, Session);
         without_push ->
             ok
     end.
 
 
 %% @private
-send_msg_sessions([], _Msg, _Push, _Session) ->
+send_event_sessions([], _Event, _Push, _Session) ->
     ok;
 
-send_msg_sessions([{MemberId, Link}|Rest], Msg, Push, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
-    case SrvId:object_session_msg(Link, ?CHAT_CONVERSATION, ConvId, Msg) of
+send_event_sessions([{MemberId, Link}|Rest], Event, Push, #obj_session{srv_id=SrvId}=Session) ->
+    case SrvId:object_session_event(Link, Event) of
         ok ->
             ok;
         {error, Error} ->
             ?LLOG(notice, "error sending message to session ~s: ~p", [MemberId, Error], Session),
             case Push of
-                with_push -> send_push(MemberId, Msg, Session);
-                without_push -> ok
+                with_push ->
+                    send_push(MemberId, Event, Session);
+                without_push ->
+                    ok
             end
     end,
-    send_msg_sessions(Rest, Msg, Push, Session).
+    send_event_sessions(Rest, Event, Push, Session).
 
 
 
 %% @private
-send_msg_members([], _Msg, _Sessions, _Session) ->
+send_event_members([], _Event, _Sessions, _Session) ->
     ok;
 
-send_msg_members([MemberId|Rest], Msg, Sessions, Session) ->
+send_event_members([MemberId|Rest], Event, Sessions, Session) ->
     case maps:is_key(MemberId, Sessions) of
         true ->
             ok;
         false ->
-        send_push(MemberId, Msg, Session)
+            send_push(MemberId, Event, Session)
     end,
-    send_msg_members(Rest, Msg, Sessions, Session).
+    send_event_members(Rest, Event, Sessions, Session).
 
 
 %% @private
-send_push(MemberId, Msg, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
-    case SrvId:object_send_push(SrvId, MemberId, ?CHAT_CONVERSATION, ConvId, Msg) of
+send_push(MemberId, Event, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
+    case SrvId:object_member_event(SrvId, MemberId, Event) of
         ok ->
             ok;
         {error, Error} ->
@@ -398,5 +426,14 @@ send_push(MemberId, Msg, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
     end.
 
 
-
+%% @private
+make_event(Sub, Type, Body, #obj_session{srv_id=SrvId, obj_id=ObjId}) ->
+    #event{
+        srv_id = SrvId,
+        class = ?CHAT_SESSION,
+        subclass = nklib_util:to_binary(Sub),
+        type = nklib_util:to_binary(Type),
+        obj_id = ObjId,
+        body = Body
+    }.
 
