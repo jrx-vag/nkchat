@@ -31,7 +31,7 @@
 %% ===================================================================
 
 %% @doc
-cmd('', create, #{conversation_id:=ConvId, 'chat.message':=Msg}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
+cmd('', create, #{conversation_id:=ConvId, ?CHAT_MESSAGE_ATOM:=Msg}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
     #{message:=Bin} = Msg,
     case nkchat_message_obj:create(SrvId, ConvId, UserId, Bin) of
         {ok, ObjId, Path, _Pid} ->
@@ -40,8 +40,6 @@ cmd('', create, #{conversation_id:=ConvId, 'chat.message':=Msg}, #{srv_id:=SrvId
             {error, Error, State}
     end;
 
-cmd('', Cmd, Data, State) ->
-    nkdomain_api_util:cmd_common(?CHAT_MESSAGE, Cmd, Data, State);
+cmd(Sub, Cmd, Data, State) ->
+    nkdomain_api_util:cmd_common(Sub, Cmd, Data, ?CHAT_MESSAGE, State).
 
-cmd(_Sub, _Cmd, _Data, State) ->
-    {error, not_implemented, State}.

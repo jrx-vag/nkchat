@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Carlos Gonzalez Florido.  All Rights Reserved.
+%% Copyright (c) 2017 Carlos Gonzalez Florido.  All Rights Reserved.
 %%
 %% -------------------------------------------------------------------
 

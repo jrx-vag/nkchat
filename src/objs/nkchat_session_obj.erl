@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Carlos Gonzalez Florido.  All Rights Reserved.
+%% Copyright (c) 2017 Carlos Gonzalez Florido.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -478,7 +478,7 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
         filters => #{
             type => ?CHAT_MESSAGE,
             parent_id => ConvId,
-            created_time => {Time, none}
+            created_time => {Time+1, none}
         },
         size => 0
     },
@@ -495,7 +495,7 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
 send_api_event(Sub, Type, Body, #obj_session{obj_id=ObjId, data=Data}) ->
     #?MODULE{api_pids=Pids} = Data,
     Event = #{
-        class => 'chat.session',
+        class => ?CHAT_SESSION,
         subclass => Sub,
         type => Type,
         obj_id => ObjId,

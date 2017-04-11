@@ -81,8 +81,6 @@ cmd('', get_messages, Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', Cmd, Data, State) ->
-    nkdomain_api_util:cmd_common(?CHAT_CONVERSATION, Cmd, Data, State);
+cmd(Sub, Cmd, Data, State) ->
+    nkdomain_api_util:cmd_common(Sub, Cmd, Data, ?CHAT_CONVERSATION, State).
 
-cmd(_Sub, _Cmd, _Data, State) ->
-    {error, not_implemented, State}.

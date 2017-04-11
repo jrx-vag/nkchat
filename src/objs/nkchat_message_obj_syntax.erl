@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Carlos Gonzalez Florido.  All Rights Reserved.
+%% Copyright (c) 2017 Carlos Gonzalez Florido.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,12 +18,37 @@
 %%
 %% -------------------------------------------------------------------
 
--module(nkchat_util).
+%% @doc Message Syntax
+-module(nkchat_message_obj_syntax).
+-author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([]).
+-export([api/3]).
 
-
+-include("nkchat.hrl").
 
 %% ===================================================================
-%% Public
+%% Syntax
 %% ===================================================================
+
+
+%% @doc
+api('', create, Syntax) ->
+    Syntax2 = Syntax#{
+        conversation_id => binary,
+        ?CHAT_MESSAGE_ATOM => #{
+            message => binary
+        }
+    },
+    nklib_syntax:add_mandatory([conversation_id, 'chat.message.message'], Syntax2);
+
+api('', update, Syntax) ->
+    Syntax2 = Syntax#{
+        id => binary,
+        ?CHAT_MESSAGE_ATOM => #{
+            message => binary
+        }
+    },
+    nklib_syntax:add_mandatory([id, 'chat.message.message'], Syntax2);
+
+api(Sub, Cmd, Syntax) ->
+    nkdomain_api_util:syntax_common(Sub, Cmd, Syntax).

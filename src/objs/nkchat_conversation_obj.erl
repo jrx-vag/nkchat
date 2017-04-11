@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Carlos Gonzalez Florido.  All Rights Reserved.
+%% Copyright (c) 2017 Carlos Gonzalez Florido.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -104,12 +104,13 @@ get_messages(Srv, Id, Spec) ->
     end.
 
 
-%% @private
+%% @private Called from nkchat_session_obj
+%% Adds the user and register the session
 register_session(ConvPid, UserId, Link) ->
     nkdomain_obj:sync_op(ConvPid, {?MODULE, register_session, UserId, Link}).
 
 
-%% @private
+%% @private Called from nkchat_message_obj
 message_created(ConvPid, MsgId, Time, Msg) ->
     nkdomain_obj:async_op(ConvPid, {?MODULE, message_created, MsgId, Time, Msg}).
 
@@ -197,7 +198,7 @@ object_sync_op({?MODULE, remove_member, Id}, _From, Session) ->
     end;
 
 object_sync_op({?MODULE, register_session, UserId, Link}, _From, Session) ->
-    Session2 = register_member(UserId, Link, Session),
+    Session2 = do_register_session(UserId, Link, Session),
     {reply, ok, Session2};
 
 object_sync_op(_Op, _From, _Session) ->
@@ -310,7 +311,7 @@ rm_member(Id, Session) ->
 
 
 %% @private
-register_member(MemberId, Link, #obj_session{data=Data}=Session) ->
+do_register_session(MemberId, Link, #obj_session{data=Data}=Session) ->
     #?MODULE{sessions=Sessions} = Data,
     Pid = nklib_links:get_pid(Link),
     case maps:is_key(Pid, Sessions) of
@@ -345,41 +346,56 @@ set_members(MemberIds, #obj_session{obj=Obj}=Session) ->
 send_msg(Msg, Push, #obj_session{data=Data}=Session) ->
     MemberIds = get_members(Session),
     #?MODULE{sessions=Sessions} = Data,
-    send_msg(MemberIds, Msg, Sessions, Push, Session).
+    send_msg_sessions(maps:to_list(Sessions), Push, Msg, Session),
+    case Push of
+        with_push ->
+            send_msg_members(MemberIds, Msg, Sessions, Session);
+        without_push ->
+            ok
+    end.
 
 
 %% @private
-send_msg([], _Msg, _Sessions, _Push, _Session) ->
+send_msg_sessions([], _Msg, _Push, _Session) ->
     ok;
 
-send_msg([MemberId|Rest], Msg, Sessions, Push, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
-    case maps:find(MemberId, Sessions) of
-        {ok, Link} ->
-            case SrvId:object_session_msg(Link, ?CHAT_CONVERSATION, ConvId, Msg) of
-                ok ->
-                    ok;
-                {error, Error} ->
-                    ?LLOG(error, "error sending message to ~s: ~p", [MemberId, Error], Session),
-                    send_push(MemberId, Msg, Push, Session)
-            end;
-        error ->
-            send_push(MemberId, Msg, Push, Session)
+send_msg_sessions([{MemberId, Link}|Rest], Msg, Push, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
+    case SrvId:object_session_msg(Link, ?CHAT_CONVERSATION, ConvId, Msg) of
+        ok ->
+            ok;
+        {error, Error} ->
+            ?LLOG(notice, "error sending message to session ~s: ~p", [MemberId, Error], Session),
+            case Push of
+                with_push -> send_push(MemberId, Msg, Session);
+                without_push -> ok
+            end
     end,
-    send_msg(Rest, Msg, Sessions, Push, Session).
+    send_msg_sessions(Rest, Msg, Push, Session).
+
 
 
 %% @private
-send_push(MemberId, Msg, with_push, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
+send_msg_members([], _Msg, _Sessions, _Session) ->
+    ok;
+
+send_msg_members([MemberId|Rest], Msg, Sessions, Session) ->
+    case maps:is_key(MemberId, Sessions) of
+        true ->
+            ok;
+        false ->
+        send_push(MemberId, Msg, Session)
+    end,
+    send_msg_members(Rest, Msg, Sessions, Session).
+
+
+%% @private
+send_push(MemberId, Msg, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
     case SrvId:object_send_push(SrvId, MemberId, ?CHAT_CONVERSATION, ConvId, Msg) of
         ok ->
-            lager:warning("Send push: ~p", [{SrvId, MemberId, ?CHAT_CONVERSATION, ConvId, Msg}]),
             ok;
         {error, Error} ->
-            ?LLOG(info, "error sending push to ~s: ~p", [MemberId], Error)
-    end;
-
-send_push(_MemberId, _Msg, without_push, _Session) ->
-    ok.
+            ?LLOG(notice, "error sending push to ~s: ~p", [MemberId], Error)
+    end.
 
 
 

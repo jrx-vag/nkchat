@@ -18,11 +18,12 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc Message Syntax
--module(nkchat_message_obj_syntax).
+%% @doc Session Object Syntax
+-module(nkchat_session_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([api/3]).
+
 
 
 %% ===================================================================
@@ -31,36 +32,53 @@
 
 
 %% @doc
+api('', find, Syntax) ->
+    Syntax#{
+        user_id => binary
+    };
+
 api('', create, Syntax) ->
-    Syntax2 = Syntax#{
-        conversation_id => binary,
-        'chat.message' => #{
-            message => binary
-        }
-    },
-    nklib_syntax:add_mandatory([conversation_id, 'chat.message.message'], Syntax2);
+    Syntax#{
+        user_id => binary
+    };
 
-api('', get, Syntax) ->
+api('', start, Syntax) ->
     Syntax2 = Syntax#{
         id => binary
     },
     nklib_syntax:add_mandatory([id], Syntax2);
 
-api('', delete, Syntax) ->
-    Syntax2 = Syntax#{
-        id => binary
-    },
-    nklib_syntax:add_mandatory([id], Syntax2);
+api('', stop, Syntax) ->
+    Syntax#{
+        id => binary,
+        reason => binary
+    };
 
-api('', update, Syntax) ->
+api('', get_info, Syntax) ->
+    Syntax#{
+        id => binary
+    };
+
+api('', set_active_conversation, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
-        'chat.message' => #{
-            message => binary
-        }
+        conversation_id => binary
     },
-    nklib_syntax:add_mandatory([id, 'chat.message.message'], Syntax2);
+    nklib_syntax:add_mandatory([conversation_id], Syntax2);
 
-api(_Sub, _Cmd, Syntax) ->
-    lager:error("unknown syntax: ~p, ~p", [_Sub, _Cmd]),
-    Syntax.
+api('', add_conversation, Syntax) ->
+    Syntax2 = Syntax#{
+        id => binary,
+        conversation_id => binary
+    },
+    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+
+api('', remove_conversation, Syntax) ->
+    Syntax2 = Syntax#{
+        id => binary,
+        conversation_id => binary
+    },
+    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+
+api(Sub, Cmd, Syntax) ->
+    nkdomain_api_util:syntax_common(Sub, Cmd, Syntax).

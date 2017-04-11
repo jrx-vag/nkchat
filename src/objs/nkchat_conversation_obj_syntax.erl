@@ -18,8 +18,8 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc Session Object Syntax
--module(nkchat_session_obj_syntax).
+%% @doc Conversation Object Syntax
+-module(nkchat_conversation_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([api/3]).
@@ -32,60 +32,42 @@
 
 
 %% @doc
-api('', find, Syntax) ->
-    Syntax#{
-        user_id => binary
-    };
-
 api('', create, Syntax) ->
-    Syntax#{
-        user_id => binary
-    };
-
-api('', start, Syntax) ->
     Syntax2 = Syntax#{
-        id => binary
+        obj_name => binary,
+        description => binary,
+        domain => binary
     },
-    nklib_syntax:add_mandatory([id], Syntax2);
+    nklib_syntax:add_mandatory([obj_name, description], Syntax2);
 
-api('', stop, Syntax) ->
-    Syntax#{
-        id => binary,
-        reason => binary
-    };
-
-api('', get_info, Syntax) ->
-    Syntax#{
-        id => binary
-    };
-
-api('', delete, Syntax) ->
-    Syntax#{
-        id => binary,
-        reason => binary
-    };
-
-api('', set_active_conversation, Syntax) ->
+api('', update, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
-        conversation_id => binary
+        description => binary
     },
-    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+    nklib_syntax:add_mandatory([description], Syntax2);
 
-api('', add_conversation, Syntax) ->
+api('', add_member, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
-        conversation_id => binary
+        member_id => binary
     },
-    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+    nklib_syntax:add_mandatory([member_id], Syntax2);
 
-api('', remove_conversation, Syntax) ->
+api('', remove_member, Syntax) ->
     Syntax2 = Syntax#{
         id => binary,
-        conversation_id => binary
+        member_id => binary
     },
-    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+    nklib_syntax:add_mandatory([member_id], Syntax2);
 
-api(_Sub, _Cmd, Syntax) ->
-    lager:error("unknown syntax: ~p, ~p", [_Sub, _Cmd]),
-    Syntax.
+api('', get_messages, Syntax) ->
+    Syntax#{
+        id => binary,
+        size => integer,
+        from => integer,
+        start_date => integer
+    };
+
+api(Sub, Cmd, Syntax) ->
+    nkdomain_api_util:syntax_common(Sub, Cmd, Syntax).
