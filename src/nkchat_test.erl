@@ -214,29 +214,33 @@ session1(Pid, Ref) ->
     {A2, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
     true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
 
-    {ok, #{<<"conversations">>:=[CL1, CL2]}} = cmd_session(Pid, get_all_conversations, #{}),
     {ok, Conv1} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
     #{
         <<"obj_id">> := C1,
+        <<"name">> := <<"conv1">>,
+        <<"description">> := <<"Conv 1">>,
         <<"last_active_time">> := 0,
-        <<"last_read_message_id">> := <<>>,
-        <<"last_read_message_time">> := _,
+        <<"last_delivered_message_id">> := <<>>,
+        <<"last_delivered_message_time">> := _,
         <<"_unread_count">> := 2,
         <<"_enabled">> := true
     } = Conv1,
 
     {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, get_conversation, #{conversation_id=>C2}),
 
-    {ok, Conv3} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
+    {ok, Conv2} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
     #{
         <<"obj_id">> := C3,
+        <<"name">> := <<"conv3">>,
+        <<"description">> := <<"Conv 3">>,
         <<"last_active_time">> := 0,
-        <<"last_read_message_id">> := <<>>,
-        <<"last_read_message_time">> := _,
+        <<"last_delivered_message_id">> := <<>>,
+        <<"last_delivered_message_time">> := _,
         <<"_enabled">> := true
-    } = Conv3,
-    false = maps:is_key(<<"_unread_count">>, Conv3),
-    true = lists:sort([Conv1, Conv3]) == lists:sort([CL1, CL2]),
+    } = Conv2,
+    false = maps:is_key(<<"_unread_count">>, Conv2),
+    {ok, #{<<"conversations">>:=[CL1, CL2]}} = cmd_session(Pid, get_all_conversations, #{}),
+    true = lists:sort([Conv1, Conv2]) == lists:sort([CL1, CL2]),
 
     % Send msg to C2, U1 and U2 receive push
     {ok, #{<<"obj_id">>:=M3}} = cmd_message(Pid, create, BC2#{?CHAT_MESSAGE => #{text=>msgC2_2}}),
@@ -250,19 +254,92 @@ session1(Pid, Ref) ->
     {A5, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
     {A6, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
     true = lists:sort([U2, U3]) == lists:sort([A5, A6]),
+
+    % If we stop the session, we receive pushes again. We we start it back, counters are regenerated
+    {ok, #{}} = cmd_session(Pid, stop, #{}),
+    timer:sleep(100),
+    false = is_process_alive(SPid),
+    % Send msg to C3
+    {ok, #{<<"obj_id">>:=M5}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_4}}),
+    {A7, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
+    {A8, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
+    {A9, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
+    true = lists:sort([U1, U2, U3]) == lists:sort([A7, A8, A9]),
+    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M5}),
+    {ok, #{<<"conversations">>:=[CL3, CL4]}} = cmd_session(Pid, start, #{id=>S}),
+
+    {ok, Conv3} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
+    #{
+        <<"obj_id">> := C1,
+        <<"last_active_time">> := 0,
+        <<"last_delivered_message_id">> := <<>>,
+        <<"last_delivered_message_time">> := _,
+        <<"_unread_count">> := 3,
+        <<"_enabled">> := true
+    } = Conv3,
+
+    {ok, Conv4} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
+    #{
+        <<"obj_id">> := C3,
+        <<"last_active_time">> := 0,
+        <<"last_delivered_message_id">> := <<>>,
+        <<"last_delivered_message_time">> := _,
+        <<"_unread_count">> := 1,
+        <<"_enabled">> := true
+    } = Conv4,
+    {ok, #{<<"conversations">>:=[CL3, CL4]}} = cmd_session(Pid, get_all_conversations, #{}),
+    true = lists:sort([Conv3, Conv4]) == lists:sort([CL3, CL4]),
+
+    % Now we activate C1, and send a message, that must be received. Counters should be reset.
+    {ok, Conv5} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C1}),
+    #{
+        <<"obj_id">> := C1,
+        <<"last_active_time">> := 0,
+        <<"last_delivered_message_id">> := <<>>,
+        <<"last_delivered_message_time">> := _,
+        <<"_unread_count">> := 3
+    } = Conv5,
+    {ok, #{<<"obj_id">>:=M6}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_5}}),
+    {created, S, C1, M6, _, <<"msgC1_5">>} = wait_session(Ref),
+    {A10, C1, M6, T1, <<"msgC1_5">>} = wait_push(Ref),
+    {A11, C1, M6, _, <<"msgC1_5">>} = wait_push(Ref),
+    true = lists:sort([U2, U3]) == lists:sort([A10, A11]),
+
+    {ok, Conv6} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
+    #{
+        <<"obj_id">> := C1,
+        <<"last_active_time">> := T2,
+        <<"last_delivered_message_id">> := M6,
+        <<"last_delivered_message_time">> := T1,
+        <<"_unread_count">> := 0,
+        <<"_enabled">> := true
+    } = Conv6,
+    {ok, Conv4} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
+
+    % Lets update a message in C1, we should receive only session update
+    {ok, #{}} = cmd_message(Pid, update, #{id=>M5, ?CHAT_MESSAGE => #{text=>msgC1_5B}}),
+    {updated, S, C1, M5, _, <<"msgC1_5B">>} = wait_session(Ref),
+
+    % Lets delete a message in C1, we should receive only session update
+    {ok, #{}} = cmd_message(Pid, delete, #{id=>M5}),
+    {deleted, S, C1, M5} = wait_session(Ref),
+
+    % Lets add and remove an user to C3, since it is not active nothing happens
+    {ok, #{<<"member_obj_id">>:=<<"admin">>}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>admin}),
+    {ok, #{}} = cmd_conversation(Pid, remove_member, #{id=>C3, member_id=>admin}),
+
+    % Lets activate C3 and repeat
+    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C2}),
+    {ok, _} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C3}),
+    {ok, #{<<"member_obj_id">>:=<<"admin">>}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>admin}),
+    {member_added, S, C3, <<"admin">>} = wait_session(Ref),
+    {ok, #{}} = cmd_conversation(Pid, remove_member, #{id=>C3, member_id=><<"admin">>}),
+    {member_removed, S, C3, <<"admin">>} = wait_session(Ref),
+
+    {ok, #{}} = cmd_session(Pid, stop, #{}),
+    flush(),
+    false = is_process_alive(SPid),
     ok.
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 %% ===================================================================
@@ -371,16 +448,54 @@ wait_session(Ref) ->
                     conversation_id := ConvId,
                     message_id := MsgId,
                     text := Text,
-                    created_time := Time
+                    created_time := Time,
+                    user := _
                 } = Body,
                 {created, SessId, ConvId, MsgId, Time, Text};
+            <<"message_updated">> ->
+                #{
+                    conversation_id := ConvId,
+                    message_id := MsgId,
+                    text := Text,
+                    updated_time := Time,
+                    user := _
+                } = Body,
+                {updated, SessId, ConvId, MsgId, Time, Text};
+            <<"message_deleted">> ->
+                #{
+                    conversation_id := ConvId,
+                    message_id := MsgId
+                } = Body,
+                {deleted, SessId, ConvId, MsgId};
             <<"unread_counter">> ->
                 #{
                     conversation_id := ConvId,
                     counter := Counter
                 } = Body,
-                {counter, SessId, ConvId, Counter}
+                {counter, SessId, ConvId, Counter};
+            <<"member_added">> ->
+                #{
+                    conversation_id := ConvId,
+                    member_id := MId,
+                    user := _
+                } = Body,
+                {member_added, SessId, ConvId, MId};
+            <<"member_removed">> ->
+                #{
+                    conversation_id := ConvId,
+                    member_id := MId
+                } = Body,
+                {member_removed, SessId, ConvId, MId}
         end
     after 1000 ->
         error(?LINE)
+    end.
+
+
+
+flush() ->
+    receive Msg ->
+        error({received, Msg})
+    after 1000 ->
+        ok
     end.

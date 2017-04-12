@@ -111,8 +111,8 @@ cmd('', set_active_conversation, #{conversation_id:=ConvId}=Data, #{srv_id:=SrvI
     case nkdomain_api_util:getid(?CHAT_SESSION, Data, State) of
         {ok, Id} ->
             case nkchat_session_obj:set_active_conversation(SrvId, Id, ConvId) of
-                ok ->
-                    {ok, #{}, State};
+                {ok, Reply} ->
+                    {ok, Reply, State};
                 {error, Error} ->
                     {error, Error, State}
             end;
@@ -146,8 +146,8 @@ cmd('', remove_conversation, #{conversation_id:=ConvId}=Data, #{srv_id:=SrvId}=S
             Error
     end;
 
-cmd('', Cmd, Data, State) ->
-    nkdomain_api_util:cmd_common(?CHAT_CONVERSATION, Cmd, Data, State).
+cmd(Sub, Cmd, Data, State) ->
+    nkdomain_api_util:cmd_common(Sub, Cmd, Data, ?CHAT_CONVERSATION, State).
 
 
 

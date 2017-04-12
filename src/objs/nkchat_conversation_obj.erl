@@ -45,14 +45,22 @@
 %% - Subclass: <<"message">>
 %%
 %%   - Type: <<"created">>
-%%     Body: message_id, created_time, text
+%%     Body: message_id, created_time, text, user
 %%
 %%   - Type: <<"deleted">>
 %%     Body: message_id
 %%
 %%   - Type: <<"updated">>
-%%     Body: message_id, updated_time, text
-
+%%     Body: message_id, updated_time, text, user
+%%
+%% - Subclass: <<"member">>
+%%
+%%   - Type: <<"added">>
+%%     Body: member_id, user
+%%
+%%   - Type: <<"removed">>
+%%     Body: member_id
+%%
 
 %% ===================================================================
 %% Types
@@ -92,9 +100,12 @@ remove_member(Srv, Id, MemberId) ->
 %% @doc
 get_messages(Srv, Id, Spec) ->
     case nkdomain_obj_lib:load(Srv, Id, #{}) of
-        #obj_id_ext{obj_id=ConvId} ->
+        #obj_id_ext{srv_id=SrvId, obj_id=ConvId} ->
             Search1 = maps:with([from, size], Spec),
-            Filters1 = #{parent_id => ConvId},
+            Filters1 = #{
+                type => ?CHAT_MESSAGE,
+                parent_id => ConvId
+            },
             Filters2 = case Spec of
                 #{start_date:=Date} ->
                     Filters1#{created_time => {Date, none}};
@@ -103,13 +114,15 @@ get_messages(Srv, Id, Spec) ->
             end,
             Search2 = Search1#{
                 sort => [#{created_time => #{order => desc}}],
-                fields => [created_time, ?CHAT_MESSAGE],
+                fields => [created_time, ?CHAT_MESSAGE, referred_id],
                 filters => Filters2
             },
-
-            case nkdomain_store:find(Srv, Search2) of
+            case nkdomain_store:find(SrvId, Search2) of
                 {ok, N, List, _Meta} ->
-                    {ok, #{total=>N, data=>List}};
+                    List2 = lists:map(
+                        fun(#{<<"referred_id">>:=UserId}=D) -> add_user(SrvId, UserId, D) end,
+                        List),
+                    {ok, #{total=>N, data=>List2}};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -200,9 +213,11 @@ object_start(Session) ->
 
 
 %% @private
-object_sync_op({?MODULE, add_member, Id}, _From, Session) ->
+object_sync_op({?MODULE, add_member, Id}, _From, #obj_session{srv_id=SrvId}=Session) ->
     case add_member(Id, Session) of
         {ok, UserId, Session2} ->
+            Event = make_event(member, added, add_user(SrvId, UserId, #{member_id=>UserId}), Session),
+            send_event(Event, without_push, Session),
             {reply_and_save, {ok, UserId}, Session2};
         {error, Error} ->
             {reply, {error, Error}, Session}
@@ -211,6 +226,8 @@ object_sync_op({?MODULE, add_member, Id}, _From, Session) ->
 object_sync_op({?MODULE, remove_member, Id}, _From, Session) ->
     case rm_member(Id, Session) of
         {ok, Session2} ->
+            Event = make_event(member, removed, #{member_id=>Id}, Session),
+            send_event(Event, without_push, Session),
             {reply_and_save, ok, Session2};
         {error, Error} ->
             {reply, {error, Error}, Session}
@@ -239,7 +256,7 @@ object_async_op({?MODULE, message_deleted, MsgId}, Session) ->
 
 object_async_op({?MODULE, message_updated, MsgId, Msg}, Session) ->
     ?DEBUG("message ~s updated", [MsgId], Session),
-    Event = make_event(message, deleted, Msg#{message_id=>MsgId}, Session),
+    Event = make_event(message, updated, Msg#{message_id=>MsgId}, Session),
     send_event(Event, without_push, Session),
     {noreply, Session};
 
@@ -308,7 +325,6 @@ add_member(Id, Session) ->
         {false, MemberId} ->
             MemberIds = get_members(Session),
             Session2 = set_members([MemberId|MemberIds], Session),
-            send_event({started_member, MemberId}, without_push, Session),
             {ok, MemberId, Session2};
         {true, _} ->
             {error, member_already_present};
@@ -325,7 +341,6 @@ rm_member(Id, Session) ->
         {true, MemberId} ->
             MemberIds = get_members(Session),
             Session2 = set_members(MemberIds -- [MemberId], Session),
-            send_event({removed_member, MemberId}, without_push, Session),
             {ok, Session2};
         {false, _} ->
             {error, member_not_found};
@@ -432,3 +447,10 @@ make_event(Sub, Type, Body, #obj_session{srv_id=SrvId, obj_id=ObjId}) ->
         body = Body
     }.
 
+
+%% @private
+add_user(SrvId, UserId, Data) ->
+    case nkdomain_user_obj:get_name(SrvId, UserId) of
+        {ok, User} -> Data#{user=>User};
+        {error, _} -> Data#{user=>#{}}
+    end.
