@@ -23,13 +23,14 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/2, find/2, start/3, stop/2, get_info/2]).
+-export([create/2, find/2, start/3, stop/2, get_all_conversations/2, get_conversation/3]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_event/2]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 -export([object_start/1, object_save/1, object_sync_op/3, object_async_op/2, object_handle_info/2]).
 -export([find_unread/2]).
+-export([send_api_event/2]).        % Exported for mocking in tests
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -102,11 +103,9 @@ stop(Srv, Id) ->
 
 %% @doc
 add_conversation(Srv, Id, ConvId) ->
-    case nkdomain_obj_lib:find(Srv, ConvId) of
+    case nkdomain_obj_lib:load(Srv, ConvId, #{}) of
         #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvId2} ->
             sync_op(Srv, Id, {?MODULE, add_conv, ConvId2});
-        #obj_id_ext{} ->
-            {error, conversation_not_found};
         {error, object_not_found} ->
             {error, conversation_not_found};
         {error, Error} ->
@@ -119,8 +118,13 @@ remove_conversation(Srv, Id, ConvId) ->
 
 
 %% @doc
-get_info(Srv, Id) ->
-    sync_op(Srv, Id, {?MODULE, get_conversations}).
+get_all_conversations(Srv, Id) ->
+    sync_op(Srv, Id, {?MODULE, get_all_conversations}).
+
+
+%% @doc
+get_conversation(Srv, Id, ConvId) ->
+    sync_op(Srv, Id, {?MODULE, get_conversation, ConvId}).
 
 
 %% @doc
@@ -135,7 +139,7 @@ set_active_conversation(Srv, Id, ConvId) ->
 
 %% @doc
 conversation_event(Pid, #event{class = ?CHAT_CONVERSATION, subclass = <<"message">>}=Event) ->
-    nkdomain_obj:async_op(Pid, {?MODULE, conversation_event, Event}).
+    ok = nkdomain_obj:async_op(Pid, {?MODULE, conversation_event, Event}).
 
 
 
@@ -233,6 +237,7 @@ object_start(#obj_session{srv_id=SrvId, obj=Obj, parent_id=UserId}=Session) ->
         nkdomain_monitor:new(SrvId, {?MODULE, UserId}),
         Convs),
     ConvIds = nkdomain_monitor:get_obj_ids(Monitor),
+    %% Adds initial count of unreads
     Unread = add_unread(ConvIds, #{}, Monitor, Session),
     Data = #?MODULE{
         monitor = Monitor,
@@ -259,18 +264,23 @@ object_sync_op({?MODULE, start, Pid}, From, #obj_session{data=Data}=Session) ->
     #?MODULE{api_pids=Pids} = Data,
     Data2 = Data#?MODULE{api_pids=[Pid|Pids]},
     Session2 = Session#obj_session{data=Data2},
-    object_sync_op({?MODULE, get_conversations}, From, Session2);
+    object_sync_op({?MODULE, get_all_conversations}, From, Session2);
 
 
-object_sync_op({?MODULE, get_conversations}, _From, #obj_session{obj_id=ObjId}=Session) ->
+object_sync_op({?MODULE, get_all_conversations}, _From, #obj_session{obj_id=ObjId}=Session) ->
     Monitor = get_monitor(Session),
     Convs = lists:map(
-        fun
-            ({enabled, Obj}) -> add_unread(Obj#{'_enabled'=>true}, Session);
-            ({disabled, Obj}) -> add_unread(Obj#{'_enabled'=>false}, Session)
-        end,
-        nkdomain_monitor:get_obj_values(Monitor)),
+        fun(ConvId) -> {ok, Conv} = get_conv(ConvId, Session), Conv end,
+        nkdomain_monitor:get_obj_ids(Monitor)),
     {reply, {ok, ObjId, #{conversations=>Convs}}, Session};
+
+object_sync_op({?MODULE, get_conversation, ConvId}, _From, Session) ->
+    case get_conv(ConvId, Session) of
+        {ok, Conv} ->
+            {reply, {ok, Conv}, Session};
+        {error, Error} ->
+            {reply, {error, Error}, Session}
+    end;
 
 object_sync_op({?MODULE, set_active_conv, ConvId}, _From, Session) ->
     Monitor = get_monitor(Session),
@@ -295,7 +305,7 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, Session) ->
         obj_id => ConvId,
         last_active_time => 0,
         last_read_message_id => <<>>,
-        last_read_message_time => 0
+        last_read_message_time => nklib_util:m_timestamp()
     },
     case nkdomain_monitor:add_obj(ConvId, Conv, Monitor) of
         {ok, _ObjId, Pid, Monitor2} ->
@@ -347,10 +357,12 @@ object_sync_op(_Op, _From, _Session) ->
 object_async_op({?MODULE, conversation_event, #event{type = <<"created">>}=Event}, Session) ->
     #obj_session{data=Data} = Session,
     #?MODULE{active=Active, unread=Unread} = Data,
-    #event{obj_id=ConvId, body = #{message_id:=MsgId, created_time:=Time}} = Event,
-    send_api_event(Event, Session),
+    #event{obj_id=ConvId, body = #{message_id:=MsgId, created_time:=Time}=Body} = Event,
     case Active of
         ConvId ->
+            Body2 = Body#{conversation_id=>ConvId},
+            Event2 = session_event(?CHAT_CONVERSATION, <<"message_created">>, Body2, Session),
+            ?MODULE:send_api_event(Event2, Session),
             Monitor = get_monitor(Session),
             case nkdomain_monitor:get_obj(ConvId, Monitor) of
                 {enabled, Conv, _Pid} ->
@@ -370,11 +382,14 @@ object_async_op({?MODULE, conversation_event, #event{type = <<"created">>}=Event
             Count = maps:get(ConvId, Unread, 0),
             Unread2 = Unread#{ConvId => Count+1},
             Session2 = Session#obj_session{data=Data#?MODULE{unread=Unread2}},
+            Body2 = #{conversation_id=>ConvId, counter=>Count+1},
+            Event2 = session_event(?CHAT_CONVERSATION, <<"unread_counter">>, Body2, Session),
+            ?MODULE:send_api_event(Event2, Session2),
             {noreply, Session2}
     end;
 
 object_async_op({?MODULE, conversation_event, Event}, Session) ->
-    send_api_event(Event, Session),
+    ?MODULE:send_api_event(Event, Session),
     {noreply, Session};
 
 object_async_op(_Op, _Session) ->
@@ -454,9 +469,29 @@ add_unread([ConvId|Rest], Unread, Monitor, Session) ->
 
 
 %% @private
-add_unread(Conv, Session) ->
-    {Num, _Time} = find_unread(Conv, Session),
-    Conv#{'_unread_count'=>Num}.
+get_conv(ConvId, Session) ->
+    Monitor = get_monitor(Session),
+    case nkdomain_monitor:get_obj(ConvId, Monitor) of
+        {enabled, Conv, _Pid} ->
+            Conv2 = add_unread_info(Conv#{'_enabled'=>true}, Session),
+            {ok, Conv2};
+        {disabled, Conv, Time} ->
+            Conv2 = add_unread_info(Conv#{'_enabled'=>false, '_disabled_since'=>Time}, Session),
+            {ok, Conv2};
+        not_found ->
+            {error, conversation_not_found}
+    end.
+
+
+%% @private
+add_unread_info(Conv, #obj_session{data=#?MODULE{unread=Unread}}) ->
+    #{obj_id:=ConvId} = Conv,
+    case maps:find(ConvId, Unread) of
+        {ok, Counter} ->
+            Conv#{'_unread_count' => Counter};
+        error ->
+            Conv
+    end.
 
 
 %% @private
@@ -485,4 +520,13 @@ send_api_event(Event, #obj_session{data=Data}) ->
     lists:foreach(fun(Pid) -> nkapi_server:event(Pid, Event) end, Pids).
 
 
-
+%% @private
+session_event(Sub, Type, Body, #obj_session{srv_id=SrvId, obj_id=ObjId}) ->
+    #event{
+        srv_id = SrvId,
+        class = ?CHAT_SESSION,
+        subclass = Sub,
+        type = Type,
+        obj_id = ObjId,
+        body = Body
+    }.

@@ -54,10 +54,17 @@ api('', stop, Syntax) ->
         reason => binary
     };
 
-api('', get_info, Syntax) ->
+api('', get_all_conversations, Syntax) ->
     Syntax#{
         id => binary
     };
+
+api('', get_conversation, Syntax) ->
+    Syntax2 = Syntax#{
+        id => binary,
+        conversation_id => binary
+    },
+    nklib_syntax:add_mandatory([conversation_id], Syntax2);
 
 api('', set_active_conversation, Syntax) ->
     Syntax2 = Syntax#{

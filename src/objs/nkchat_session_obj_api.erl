@@ -74,16 +74,17 @@ cmd('', stop, Data, #{srv_id:=SrvId}=State) ->
                 ok ->
                     {ok, #{}, State};
                 {error, Error} ->
+
                     {error, Error, State}
             end;
         Error ->
             Error
     end;
 
-cmd('', get_info, Data, #{srv_id:=SrvId}=State) ->
+cmd('', get_all_conversations, Data, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:getid(?CHAT_SESSION, Data, State) of
         {ok, Id} ->
-            case nkchat_session_obj:get_info(SrvId, Id) of
+            case nkchat_session_obj:get_all_conversations(SrvId, Id) of
                 {ok, ObjId, Data2} ->
                     {ok, Data2#{obj_id=>ObjId}, State};
                 {error, Error} ->
@@ -93,6 +94,18 @@ cmd('', get_info, Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
+cmd('', get_conversation, #{conversation_id:=ConvId}=Data, #{srv_id:=SrvId}=State) ->
+    case nkdomain_api_util:getid(?CHAT_SESSION, Data, State) of
+        {ok, Id} ->
+            case nkchat_session_obj:get_conversation(SrvId, Id, ConvId) of
+                {ok, Reply} ->
+                    {ok, Reply, State};
+                {error, Error} ->
+                    {error, Error, State}
+            end;
+        Error ->
+            Error
+    end;
 
 cmd('', set_active_conversation, #{conversation_id:=ConvId}=Data, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:getid(?CHAT_SESSION, Data, State) of

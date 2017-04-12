@@ -25,10 +25,10 @@
 %% Defines
 %% ===================================================================
 
--define(CHAT_CONVERSATION, <<"chat.conversation">>).
--define(CHAT_CONVERSATION_ATOM, 'chat.conversation').
--define(CHAT_MESSAGE, <<"chat.message">>).
--define(CHAT_MESSAGE_ATOM, 'chat.message').
+-define(CHAT_CONVERSATION, <<"conversation">>).
+-define(CHAT_CONVERSATION_ATOM, 'conversation').
+-define(CHAT_MESSAGE, <<"message">>).
+-define(CHAT_MESSAGE_ATOM, 'message').
 -define(CHAT_SESSION, <<"chat.session">>).
 -define(CHAT_SESSION_ATOM, 'chat.session').
 

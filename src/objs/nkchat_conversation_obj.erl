@@ -40,25 +40,18 @@
 %% Period to find for inactive users
 -define(CHECK_TIME, 5*60*1000).
 
-%% Conversation creates the following message events:
-%% #{
-%%      class => ?CHAT_SESSION,
-%%      subclass => <<"message">>,
-%%      type => <<"created">> | <<"updated">> | <<"deleted">>
-%%      obj_id => ConvId
-%%      body => #{
-%%          message_id => MsgId
-%%          created_time => nklib_util:m_timestamp()
-%%          updated_time => nklib_util:m_timestamp()
-%%          text => binary
-%%      }
-%% }
-
-
-
-
-
-
+%% Conversation creates events with class = ?CHAT_CONVERSATION, obj_id = ConvId
+%%
+%% - Subclass: <<"message">>
+%%
+%%   - Type: <<"created">>
+%%     Body: message_id, created_time, text
+%%
+%%   - Type: <<"deleted">>
+%%     Body: message_id
+%%
+%%   - Type: <<"updated">>
+%%     Body: message_id, updated_time, text
 
 
 %% ===================================================================
@@ -110,7 +103,7 @@ get_messages(Srv, Id, Spec) ->
             end,
             Search2 = Search1#{
                 sort => [#{created_time => #{order => desc}}],
-                fields => [created_time, 'chat.message.message'],
+                fields => [created_time, ?CHAT_MESSAGE],
                 filters => Filters2
             },
 
@@ -155,7 +148,8 @@ message_updated(ConvPid, MsgId, Msg) ->
 %% ===================================================================
 
 -record(?MODULE, {
-    sessions = #{} :: #{pid() => nkdomain:obj_id(), nkdomain:obj_id() => pid()},
+    sessions = #{} :: #{nkdomain:obj_id() => nklib:link()},
+    session_pids = #{} :: #{pid() => nkdomain:obj_id()},
     meta = #{} :: map()
 }).
 
@@ -164,7 +158,9 @@ message_updated(ConvPid, MsgId, Msg) ->
 object_get_info() ->
     #{
         type => ?CHAT_CONVERSATION,
-        min_first_time => 5*60*1000
+        min_first_time => 5*60*1000,
+        dont_create_childs_on_disabled => true,
+        dont_update_on_disabled => true
     }.
 
 
@@ -243,7 +239,7 @@ object_async_op({?MODULE, message_deleted, MsgId}, Session) ->
 
 object_async_op({?MODULE, message_updated, MsgId, Msg}, Session) ->
     ?DEBUG("message ~s updated", [MsgId], Session),
-    Event = make_event(message, deleted, #{message_id=>MsgId}, Session),
+    Event = make_event(message, deleted, Msg#{message_id=>MsgId}, Session),
     send_event(Event, without_push, Session),
     {noreply, Session};
 
@@ -253,12 +249,12 @@ object_async_op(_Op, _Session) ->
 
 %% @private
 object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, Session) ->
-    #obj_session{data=#?MODULE{sessions=Sessions}=Data} = Session,
-    case maps:find(Pid, Sessions) of
+    #obj_session{data=#?MODULE{session_pids=Pids, sessions=Sessions}=Data} = Session,
+    case maps:find(Pid, Pids) of
         {ok, UserId} ->
             Sessions2 = maps:remove(UserId, Sessions),
-            Sessions3 = maps:remove(Pid, Sessions2),
-            Data2 = Data#?MODULE{sessions=Sessions3},
+            Pids2 = maps:remove(Pid, Pids),
+            Data2 = Data#?MODULE{sessions=Sessions2, session_pids=Pids2},
             Session2 = Session#obj_session{data=Data2},
             {noreply, Session2};
         error ->
@@ -316,6 +312,8 @@ add_member(Id, Session) ->
             {ok, MemberId, Session2};
         {true, _} ->
             {error, member_already_present};
+        {error, object_not_found} ->
+            {error, member_not_found};
         {error, Error} ->
             {error, Error}
     end.
@@ -338,18 +336,16 @@ rm_member(Id, Session) ->
 
 %% @private
 do_register_session(MemberId, Link, #obj_session{data=Data}=Session) ->
-    #?MODULE{sessions=Sessions} = Data,
+    #?MODULE{sessions=Sessions, session_pids=Pids} = Data,
     Pid = nklib_links:get_pid(Link),
-    case maps:is_key(Pid, Sessions) of
+    case maps:is_key(Pid, Pids) of
         true ->
             Session;
         false ->
             monitor(process, Pid),
-            Sessions2 = Sessions#{
-                MemberId => Link,
-                Pid => MemberId
-            },
-            Data2 = Data#?MODULE{sessions=Sessions2},
+            Sessions2 = Sessions#{MemberId => Link},
+            Pids2 = Pids#{Pid => MemberId},
+            Data2 = Data#?MODULE{sessions=Sessions2, session_pids=Pids2},
             Session#obj_session{data=Data2}
     end.
 
@@ -372,7 +368,7 @@ set_members(MemberIds, #obj_session{obj=Obj}=Session) ->
 send_event(Event, Push, #obj_session{data=Data}=Session) ->
     MemberIds = get_members(Session),
     #?MODULE{sessions=Sessions} = Data,
-    send_event_sessions(maps:to_list(Sessions), Push, Event, Session),
+    send_event_sessions(maps:to_list(Sessions), Event, Push, Session),
     case Push of
         with_push ->
             send_event_members(MemberIds, Event, Sessions, Session);
@@ -401,7 +397,6 @@ send_event_sessions([{MemberId, Link}|Rest], Event, Push, #obj_session{srv_id=Sr
     send_event_sessions(Rest, Event, Push, Session).
 
 
-
 %% @private
 send_event_members([], _Event, _Sessions, _Session) ->
     ok;
@@ -417,7 +412,7 @@ send_event_members([MemberId|Rest], Event, Sessions, Session) ->
 
 
 %% @private
-send_push(MemberId, Event, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
+send_push(MemberId, Event, #obj_session{srv_id=SrvId}) ->
     case SrvId:object_member_event(SrvId, MemberId, Event) of
         ok ->
             ok;
@@ -430,7 +425,7 @@ send_push(MemberId, Event, #obj_session{srv_id=SrvId, obj_id=ConvId}) ->
 make_event(Sub, Type, Body, #obj_session{srv_id=SrvId, obj_id=ObjId}) ->
     #event{
         srv_id = SrvId,
-        class = ?CHAT_SESSION,
+        class = ?CHAT_CONVERSATION,
         subclass = nklib_util:to_binary(Sub),
         type = nklib_util:to_binary(Type),
         obj_id = ObjId,

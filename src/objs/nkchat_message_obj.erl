@@ -50,7 +50,7 @@ create(Srv, ConvId, AuthorId, Message) ->
             Opts = #{
                 referred_id => AuthorId,
                 parent => ConvObjId,
-                type_obj => #{message => nklib_util:to_binary(Message)}
+                type_obj => Message
             },
             nkdomain_obj_lib:make_and_create(Srv, ConvId, ?CHAT_MESSAGE, Opts);
         {error, object_not_found} ->
@@ -68,7 +68,9 @@ create(Srv, ConvId, AuthorId, Message) ->
 %% @private
 object_get_info() ->
     #{
-        type => ?CHAT_MESSAGE
+        type => ?CHAT_MESSAGE,
+        dont_update_on_disabled => true,
+        dont_delete_on_disabled => true
     }.
 
 

@@ -13,7 +13,7 @@
 
 
 login() ->
-    nkdomain_sample:login("/chattest/users/u2", "1234").
+    nkdomain_sample:login("/chattest/users/u1", "p1").
 
 domain_find_convs() ->
     cmd(domain, find_all_childs, #{type=>?CHAT_CONVERSATION, sort=>[type, path]}).
@@ -49,13 +49,13 @@ conv_get_messages(Id, Spec) ->
 
 
 message_create(ConvId, Msg) ->
-    cmd(?CHAT_MESSAGE, create, #{conversation_id=>ConvId, ?CHAT_MESSAGE=>#{message=>Msg}}).
+    cmd(?CHAT_MESSAGE, create, #{conversation_id=>ConvId, ?CHAT_MESSAGE=>#{text=>Msg}}).
 
 message_get(MsgId) ->
      cmd(?CHAT_MESSAGE, get, #{id=>MsgId}).
 
 message_update(MsgId, Msg) ->
-    cmd(?CHAT_MESSAGE, update, #{id=>MsgId, ?CHAT_MESSAGE=>#{message=>Msg}}).
+    cmd(?CHAT_MESSAGE, update, #{id=>MsgId, ?CHAT_MESSAGE=>#{text=>Msg}}).
 
 message_delete(MsgId) ->
     cmd(?CHAT_MESSAGE, delete, #{id=>MsgId}).

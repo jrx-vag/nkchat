@@ -7,6 +7,8 @@
 -include("nkchat.hrl").
 -include_lib("nkapi/include/nkapi.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
+-include_lib("nkservice/include/nkservice.hrl").
+
 
 -define(WS, "ws://127.0.0.1:9202/api/ws").
 -define(ADMIN_PASS, "1234").
@@ -18,10 +20,10 @@
 %%
 %% - Domain /chattest
 %% - Users /chattest/users/u1, u2, u3
-%% - Conversations /chattest/chat.conversations:
-%%      - conv1:
-%%      - conv2:
-%%      - conv3
+%% - Conversations /chattest/conversations:
+%%      - conv1: u1, u2, u3
+%%      - conv2: u1, u2
+%%      - conv3  u2, u3
 %%
 
 
@@ -30,13 +32,20 @@
 
 
 test1() ->
-    code:purge(nkdomain_user_obj),
-    {module,nkdomain_user_obj} = code:load_file(nkdomain_user_obj),
 
-%%    clear(),
+    clear(),
     Pid = login("admin", ?ADMIN_PASS),
-%%    ok = create(Pid),
-    base_msgs(Pid).
+    ok = create(Pid),
+    Ref = make_ref(),
+    ok = base_msgs(Pid, Ref),
+    nkapi_client:stop(Pid),
+
+    Pid2 = login("/chattest/users/u1", "p1"),
+    session1(Pid2, Ref),
+
+
+    unmock_push(),
+    unmock_session().
 
 
 
@@ -48,6 +57,7 @@ clear() ->
     ok.
 
 
+%% Creates the structure detailed above
 create(Pid) ->
     U1_Data = #{obj_name=>u1, domain=> ?DOM,
                 user=>#{name=>u1, surname=>s1, password=>p1, email=><<"u1@chattest">>}},
@@ -60,202 +70,187 @@ create(Pid) ->
     {ok, #{<<"obj_id">>:=U3}} = cmd(Pid, user, create, U3_Data),
 
     C1_Data = #{obj_name=>conv1, description=><<"Conv 1">>, domain=>?DOM},
-    {ok, #{<<"obj_id">>:=C1}} = cmd(Pid, ?CHAT_CONVERSATION, create, C1_Data),
+    {ok, #{<<"obj_id">>:=C1}} = cmd_conversation(Pid, create, C1_Data),
     C2_Data = #{obj_name=>conv2, description=><<"Conv 2">>, domain=>?DOM},
-    {ok, #{<<"obj_id">>:=C2}} = cmd(Pid, ?CHAT_CONVERSATION, create, C2_Data),
+    {ok, #{<<"obj_id">>:=C2}} = cmd_conversation(Pid, create, C2_Data),
     C3_Data = #{obj_name=>conv3, description=><<"Conv 3">>, domain=>?DOM},
-    {ok, #{<<"obj_id">>:=C3}} = cmd(Pid, ?CHAT_CONVERSATION, create, C3_Data),
-
-    {ok, #{<<"member_obj_id">>:=U1}} =
-        cmd(Pid, ?CHAT_CONVERSATION, add_member, #{id=>C1, member_id=><<"/chattest/users/u1">>}),
-    {ok, #{<<"member_obj_id">>:=U2}} =
-        cmd(Pid, ?CHAT_CONVERSATION, add_member, #{id=><<"/chattest/chat.conversations/conv1">>, member_id=>U2}),
-    {ok, #{<<"member_obj_id">>:=U3}} =
-        cmd(Pid, ?CHAT_CONVERSATION, add_member, #{id=>C1, member_id=>U3}),
-    {ok, #{<<"member_obj_id">>:=U1}} = cmd(Pid, ?CHAT_CONVERSATION, add_member, #{id=>C2, member_id=>U1}),
-    {ok, #{<<"member_obj_id">>:=U2}} = cmd(Pid, ?CHAT_CONVERSATION, add_member, #{id=>C2, member_id=>U2}),
-    {ok, #{<<"member_obj_id">>:=U2}} = cmd(Pid, ?CHAT_CONVERSATION, add_member, #{id=>C3, member_id=>U2}),
-    {ok, #{<<"member_obj_id">>:=U3}} = cmd(Pid, ?CHAT_CONVERSATION, add_member, #{id=>C3, member_id=>U3}),
+    {ok, #{<<"obj_id">>:=C3}} = cmd_conversation(Pid, create, C3_Data),
 
     {error,{<<"missing_field">>, <<"Missing field: 'obj_name'">>}} =
-        cmd(Pid, ?CHAT_CONVERSATION, create, #{domain=><<"/none">>}),
+        cmd_conversation(Pid, create, #{domain=><<"/none">>}),
     {error,{<<"missing_field">>, <<"Missing field: 'description'">>}} =
-        cmd(Pid, ?CHAT_CONVERSATION, create, #{obj_name=>c4, domain=><<"/none">>}),
+        cmd_conversation(Pid, create, #{obj_name=>c4, domain=><<"/none">>}),
     {error,{<<"could_not_load_parent">>, <<"Object could not load parent '/none'">>}}  =
-        cmd(Pid, ?CHAT_CONVERSATION, create, #{obj_name=>c4, description=>desc, domain=><<"/none">>}),
+        cmd_conversation(Pid, create, #{obj_name=>c4, description=>desc, domain=><<"/none">>}),
     {error,{<<"object_already_exists">>, _}} =
-        cmd(Pid, ?CHAT_CONVERSATION, create, #{obj_name=>conv1, description=>desc, domain=>?DOM}),
+        cmd_conversation(Pid, create, #{obj_name=>conv1, description=>desc, domain=>?DOM}),
+
+    {ok, #{<<"member_obj_id">>:=U1}} =
+        cmd_conversation(Pid, add_member, #{id=>C1, member_id=><<"/chattest/users/u1">>}),
+    {ok, #{<<"member_obj_id">>:=U2}} =
+        cmd_conversation(Pid, add_member, #{id=><<"/chattest/conversations/conv1">>, member_id=>U2}),
+    {ok, #{<<"member_obj_id">>:=U3}} =
+        cmd_conversation(Pid, add_member, #{id=>C1, member_id=>U3}),
+    {ok, #{<<"member_obj_id">>:=U1}} = cmd_conversation(Pid, add_member, #{id=>C2, member_id=>U1}),
+    {ok, #{<<"member_obj_id">>:=U2}} = cmd_conversation(Pid, add_member, #{id=>C2, member_id=>U2}),
+    {ok, #{<<"member_obj_id">>:=U2}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>U2}),
+    {ok, #{<<"member_obj_id">>:=U3}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>U3}),
+
+    {error, {<<"member_not_found">>, _}} = cmd_conversation(Pid, add_member, #{id=>C2, member_id=><<"a">>}),
+    {error, {<<"conversation_not_found">>, _}} = cmd_conversation(Pid, add_member, #{id=><<"a">>, member_id=>U2}),
 
     {ok, <<"domain">>, D, ?DOM, _Pid} = nkdomain:find(root, ?DOM),
     {ok, #{
         <<"_is_enabled">> := true,
-        <<"chat.conversation">> := #{<<"member_ids">> := [C3U1, C3U2]},
+        ?CHAT_CONVERSATION := #{<<"member_ids">> := [C3U1, C3U2]},
         <<"description">> := <<"Conv 3">>,
         <<"obj_id">> := C3,
         <<"parent_id">> := D,
-        <<"path">> := <<"/chattest/chat.conversations/conv3">>,
-        <<"type">> := <<"chat.conversation">>
+        <<"path">> := <<"/chattest/conversations/conv3">>,
+        <<"type">> := ?CHAT_CONVERSATION
     }} =
-        cmd(Pid, ?CHAT_CONVERSATION, get, #{}),
+        cmd_conversation(Pid, get, #{}),
     true = lists:sort([U2, U3]) == lists:sort([C3U1, C3U2]),
 
     {ok, #{
         <<"_is_enabled">> := true,
-        <<"chat.conversation">> := #{<<"member_ids">> := [C1U1, C1U2, C1U3]},
+        ?CHAT_CONVERSATION := #{<<"member_ids">> := [C1U1, C1U2, C1U3]},
         <<"description">> := <<"Conv 1">>,
         <<"obj_id">> := C1,
         <<"parent_id">> := D,
-        <<"path">> := <<"/chattest/chat.conversations/conv1">>,
-        <<"type">> := <<"chat.conversation">>
+        <<"path">> := <<"/chattest/conversations/conv1">>,
+        <<"type">> := ?CHAT_CONVERSATION
     }} =
-        cmd(Pid, ?CHAT_CONVERSATION, get, #{id=>C1}),
+        cmd_conversation(Pid, get, #{id=>C1}),
     true = lists:sort([U1, U2, U3]) == lists:sort([C1U1, C1U2, C1U3]),
 
     {ok, #{
         <<"_is_enabled">> := true,
-        <<"chat.conversation">> := #{<<"member_ids">> := [C2U1, C2U2]},
+        ?CHAT_CONVERSATION := #{<<"member_ids">> := [C2U1, C2U2]},
         <<"description">> := <<"Conv 2">>,
         <<"obj_id">> := C2,
         <<"parent_id">> := D,
-        <<"path">> := <<"/chattest/chat.conversations/conv2">>,
-        <<"type">> := <<"chat.conversation">>
+        <<"path">> := <<"/chattest/conversations/conv2">>,
+        <<"type">> := ?CHAT_CONVERSATION
     }} =
-        cmd(Pid, ?CHAT_CONVERSATION, get, #{id=>C2}),
+        cmd_conversation(Pid, get, #{id=>C2}),
     true = lists:sort([U1, U2]) == lists:sort([C2U1, C2U2]),
     ok.
 
-base_msgs(Pid) ->
-    Ref = make_ref(),
-    Self = self(),
-    meck:new(nkdomain_user_obj, [passthrough]),
-    meck:expect(nkdomain_user_obj, send_push,
-        fun(Srv, Id, Type, ObjId, Msg) -> Self ! {Ref, {Srv, Id, Type, ObjId, Msg}}, ok end),
 
+%% Send messages to conversations without sessions, pushes will be sent
+base_msgs(Pid, Ref) ->
+    mock_push(Ref),
 
     {ok, _, U1, _, _} = nkdomain:find(root, "/chattest/users/u1"),
     {ok, _, U2, _, _} = nkdomain:find(root, "/chattest/users/u2"),
     {ok, _, U3, _, _} = nkdomain:find(root, "/chattest/users/u3"),
-    {ok, _, C1, _, _} = nkdomain:find(root, <<"/chattest/chat.conversations/conv1">>),
-    {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/chat.conversations/conv2">>),
-    {ok, _, C3, _, _} = nkdomain:find(root, <<"/chattest/chat.conversations/conv3">>),
-    BC1 = #{conversation_id=><<"/chattest/chat.conversations/conv1">>},
-    BC2 = #{conversation_id=><<"/chattest/chat.conversations/conv2">>},
-    BC3 = #{conversation_id=><<"/chattest/chat.conversations/conv3">>},
+    {ok, _, C1, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv1">>),
+    {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
+    {ok, _, C3, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv3">>),
+    BC1 = #{conversation_id=><<"/chattest/conversations/conv1">>},
+    BC2 = #{conversation_id=><<"/chattest/conversations/conv2">>},
+    BC3 = #{conversation_id=><<"/chattest/conversations/conv3">>},
 
-    {ok, #{<<"obj_id">>:=M1}} = cmd(Pid, ?CHAT_MESSAGE, create, BC1#{?CHAT_MESSAGE => #{message=>msgC1_1}}),
+    {ok, #{<<"obj_id">>:=M1}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_1}}),
     {A1, C1, M1, _, <<"msgC1_1">>} = wait_push(Ref),
     {A2, C1, M1, _, <<"msgC1_1">>} = wait_push(Ref),
     {A3, C1, M1, _, <<"msgC1_1">>} = wait_push(Ref),
     true = lists:sort([U1, U2, U3]) == lists:sort([A1, A2, A3]),
 
-    {ok, #{<<"obj_id">>:=M2}} = cmd(Pid, ?CHAT_MESSAGE, create, BC2#{?CHAT_MESSAGE => #{message=>msgC2_1}}),
+    {ok, #{<<"obj_id">>:=M2}} = cmd_message(Pid, create, BC2#{?CHAT_MESSAGE => #{text=>msgC2_1}}),
     {A4, C2, M2, _, <<"msgC2_1">>} = wait_push(Ref),
     {A5, C2, M2, _, <<"msgC2_1">>} = wait_push(Ref),
     true = lists:sort([U1, U2]) == lists:sort([A4, A5]),
 
-    {ok, #{<<"obj_id">>:=M3}} = cmd(Pid, ?CHAT_MESSAGE, create, BC3#{?CHAT_MESSAGE => #{message=>msgC3_1}}),
+    {ok, #{<<"obj_id">>:=M3}} = cmd_message(Pid, create, BC3#{?CHAT_MESSAGE => #{text=>msgC3_1}}),
     {A6, C3, M3, _, <<"msgC3_1">>} = wait_push(Ref),
     {A7, C3, M3, _, <<"msgC3_1">>} = wait_push(Ref),
     true = lists:sort([U2, U3]) == lists:sort([A6, A7]),
+    {ok, #{<<"obj_id">>:=M4}} = cmd_message(Pid, create, BC3#{?CHAT_MESSAGE => #{text=>msgC3_2}}),
+    {A6, C3, M4, _, <<"msgC3_2">>} = wait_push(Ref),
+    {A7, C3, M4, _, <<"msgC3_2">>} = wait_push(Ref),
+    ok.
 
 
 
+session1(Pid, Ref) ->
+    % Create the session
+    {error, {<<"session_not_found">>, _}} = cmd_session(Pid, find, #{}),
+    {ok, #{<<"obj_id">>:=S, <<"conversations">>:=[]}} = cmd_session(Pid, create, #{}),
+    {ok, #{<<"obj_id">>:=S}} = cmd_session(Pid, find, #{}),
+    {ok, #{}} = cmd_session(Pid, stop, #{}),
+    {error, {<<"object_not_started">>, _}} = cmd_session(Pid, stop, #{}),
+    {error, {<<"session_not_found">>, _}} = cmd_session(Pid, stop, #{id=><<"a">>}),
+    {ok, #{<<"obj_id">>:=S, <<"conversations">>:=[]}} = cmd_session(Pid, start, #{id=>S}),
+    {ok, _, _, _, SPid} = nkdomain:find(root, S),
 
-    meck:unload(nkdomain_user_obj).
+    % Start C1 and C3
+    {ok, #{<<"conversation_id">>:=C1}} =
+        cmd_session(Pid, add_conversation, #{conversation_id=>"/chattest/conversations/conv1"}),
+    {ok, #{<<"conversation_id">>:=C3}} =
+        cmd_session(Pid, add_conversation, #{conversation_id=>"/chattest/conversations/conv3"}),
+    {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
 
+    BC1 = #{conversation_id=><<"/chattest/conversations/conv1">>},
+    BC2 = #{conversation_id=><<"/chattest/conversations/conv2">>},
+    BC3 = #{conversation_id=>C3},
+    {ok, _, U1, _, _} = nkdomain:find(root, "/chattest/users/u1"),
+    {ok, _, U2, _, _} = nkdomain:find(root, "/chattest/users/u2"),
+    {ok, _, U3, _, _} = nkdomain:find(root, "/chattest/users/u3"),
 
+    mock_session(Ref),
 
+    % Send a message to C1, U1 receives an updated counter, U2 and U3 receive push
+    {ok, #{<<"obj_id">>:=M1}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_2}}),
+    {counter, S, C1, 1} = wait_session(Ref),
+    {A1, C1, M1, _, <<"msgC1_2">>} = wait_push(Ref),
+    {A2, C1, M1, _, <<"msgC1_2">>} = wait_push(Ref),
+    true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
 
+    {ok, #{<<"obj_id">>:=M2}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_3}}),
+    {counter, S, C1, 2} = wait_session(Ref),
+    {A1, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
+    {A2, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
+    true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
 
-wait_push(Ref) ->
-    receive
-        {Ref, {axft4mi, UId, ?CHAT_CONVERSATION, CId, {message, MId, {created, T, #{message:=Msg}}}}} ->
-            {UId, CId, MId, T, Msg}
-    after 1000 ->
-            error(?LINE)
-    end.
+    {ok, #{<<"conversations">>:=[CL1, CL2]}} = cmd_session(Pid, get_all_conversations, #{}),
+    {ok, Conv1} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
+    #{
+        <<"obj_id">> := C1,
+        <<"last_active_time">> := 0,
+        <<"last_read_message_id">> := <<>>,
+        <<"last_read_message_time">> := _,
+        <<"_unread_count">> := 2,
+        <<"_enabled">> := true
+    } = Conv1,
 
+    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, get_conversation, #{conversation_id=>C2}),
 
+    {ok, Conv3} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
+    #{
+        <<"obj_id">> := C3,
+        <<"last_active_time">> := 0,
+        <<"last_read_message_id">> := <<>>,
+        <<"last_read_message_time">> := _,
+        <<"_enabled">> := true
+    } = Conv3,
+    false = maps:is_key(<<"_unread_count">>, Conv3),
+    true = lists:sort([Conv1, Conv3]) == lists:sort([CL1, CL2]),
 
+    % Send msg to C2, U1 and U2 receive push
+    {ok, #{<<"obj_id">>:=M3}} = cmd_message(Pid, create, BC2#{?CHAT_MESSAGE => #{text=>msgC2_2}}),
+    {A3, C2, M3, _, <<"msgC2_2">>} = wait_push(Ref),
+    {A4, C2, M3, _, <<"msgC2_2">>} = wait_push(Ref),
+    true = lists:sort([U1, U2]) == lists:sort([A3, A4]),
 
-% f(C1), f(C2), [C1, C2] = nkchat_test2:get_cons().
-get_cons() ->
-    Search = #{filters => #{type => ?CHAT_CONVERSATION}, sort => [created_time]},
-    {ok, 2, List} = nkdomain_domain_obj:find_childs(root, ?DOM, Search),
-    [ObjId || {?CHAT_CONVERSATION, ObjId, _Path} <- List].
-
-
-
-conv_t1() ->
-
-    % Delete (if exists) and create test data
-    nkdomain:delete(root, "/chattest/users/u1"),
-    nkdomain:delete(root, "/chattest/users/u2"),
-    nkdomain:delete(root, "/chattest/chat.conversations/conv1"),
-
-    nkdomain_user_obj:create(root, "/chattest", u1, #{name=>u1, surname=>s1}),
-    nkdomain_user_obj:create(root, "/chattest", u2, #{name=>u2, surname=>s2}),
-    {ok, C, _, CP} = nkchat_conversation_obj:create(root, "/chattest", "conv1", "Conv 1"),
-
-    % Add user admin to conv1 and remove it
-    {ok, <<"admin">>} = nkchat_conversation_obj:add_member(root, C, admin),
-    {error, member_already_present} = nkchat_conversation_obj:add_member(root, C, admin),
-    ok = nkchat_conversation_obj:remove_member(root, C, admin),
-    {error, member_not_found} = nkchat_conversation_obj:remove_member(root, C, admin),
-
-    %% Ad users u1 and u2
-    {ok, U1} = nkchat_conversation_obj:add_member(root, C, "/chattest/users/u1"),
-    {ok, U2} = nkchat_conversation_obj:add_member(root, C, "/chattest/users/u2"),
-    timer:sleep(100),
-    {ok, #{<<"chat.conversation">>:=#{<<"member_ids">>:=Ids1}}} =
-        nkdomain_store_es:object_store_read_raw(axft4mi, C),
-    Ids1S = lists:sort([U1, U2]),
-    Ids1S = lists:sort(Ids1),
-
-    % Check the user monitors are working, disabling u1
-    {ok, #obj_session{data=Data1}} = nkdomain_obj:get_session(C),
-    Mon1 = element(2, Data1),
-    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon1)),
-    [] = nkdomain_monitor:get_disabled(Mon1),
-    nkdomain_obj:unload(U1, normal),
-    timer:sleep(500),
-    {ok, #obj_session{data=Data2}} = nkdomain_obj:get_session(C),
-    Mon2 = element(2, Data2),
-    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon2)),
-    [{U1, Time}] = nkdomain_monitor:get_disabled(Mon2),
-    true = (nklib_util:timestamp() - Time) < 2,
-    {ok, _, _, _, Pid} = nkdomain:find(C),
-
-    % Force check of disabled users
-    Pid ! {nkchat_conversation_obj, check_time},
-    timer:sleep(100),
-    {ok, #obj_session{data=Data3}} = nkdomain_obj:get_session(C),
-    Mon3 = element(2, Data3),
-    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon3)),
-    [] = nkdomain_monitor:get_disabled(Mon1),
-
-    % We delete U1, must be disabled again
-    ok = nkdomain:delete(root, U1),
-    timer:sleep(100),
-    {ok, #obj_session{data=Data4}} = nkdomain_obj:get_session(C),
-    Mon4 = element(2, Data4),
-    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon4)),
-    [{U1, _Time}] = nkdomain_monitor:get_disabled(Mon2),
-
-    % We unload conv1, when we reload it will remain disabled
-    nkdomain_obj:unload(C, normal),
-    timer:sleep(100),
-    false = is_process_alive(CP),
-    {ok, _, _, _, _} = nkdomain:load(C),
-    {ok, #obj_session{data=Data5}} = nkdomain_obj:get_session(C),
-    Mon5 = element(2, Data5),
-    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon5)),
-    Ids1A = lists:sort(nkdomain_monitor:get_objs(Mon4)),
-    [{U1, _Time}] = nkdomain_monitor:get_disabled(Mon2),
-
-    % Lets remove it from the conversation, or it will try to find it forever
-    ok = nkchat_conversation_obj:remove_member(root, C, U1),
-    ok3.
+    % Send msg to C3, U2 receive push, U1 has a session and receives counter event
+    {ok, #{<<"obj_id">>:=M4}} = cmd_message(Pid, create, BC3#{?CHAT_MESSAGE => #{text=>msgC3_3}}),
+    {counter, S, C3, 1} = wait_session(Ref),
+    {A5, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
+    {A6, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
+    true = lists:sort([U2, U3]) == lists:sort([A5, A6]),
+    ok.
 
 
 
@@ -266,16 +261,6 @@ conv_t1() ->
 
 
 
-
-
-
-
-
-add1(C) ->
-    nkchat_conversation_obj:add_member(root, C, admin).
-
-rem1(C) ->
-    nkchat_conversation_obj:remove_member(root, C, admin).
 
 
 
@@ -309,12 +294,93 @@ get_client() ->
     [{_, Pid}|_] = nkapi_client:get_all(),
     Pid.
 
+cmd_conversation(Pid, Cmd, Data) ->
+    nkapi_client:cmd(Pid, ?CHAT_CONVERSATION, <<>>, Cmd, Data).
 
-%% Test calling with class=test, cmd=op1, op2, data=#{nim=>1}
-cmd(Class, Cmd, Data) ->
-    Pid = get_client(),
-    cmd(Pid, Class, Cmd, Data).
+cmd_message(Pid, Cmd, Data) ->
+    nkapi_client:cmd(Pid, ?CHAT_MESSAGE, <<>>, Cmd, Data).
+
+cmd_session(Pid, Cmd, Data) ->
+    nkapi_client:cmd(Pid, ?CHAT_SESSION, <<>>, Cmd, Data).
+
 
 cmd(Pid, Class, Cmd, Data) ->
     nkapi_client:cmd(Pid, Class, <<>>, Cmd, Data).
 
+
+
+
+mock_push(Ref) ->
+    Self = self(),
+    meck:new(nkdomain_user_obj, [passthrough]),
+    meck:expect(nkdomain_user_obj, send_push,
+        fun(Srv, Id, Event) -> Self ! {Ref, {Srv, Id, Event}}, ok end),
+    Ref.
+
+unmock_push() ->
+    catch meck:unload(nkdomain_user_obj),
+    code:purge(nkdomain_user_obj),
+    {module,nkdomain_user_obj} = code:load_file(nkdomain_user_obj),
+    ok.
+
+wait_push(Ref) ->
+    receive {Ref, {root, UId, Event}} ->
+        #event{
+            class = ?CHAT_CONVERSATION,
+            subclass = <<"message">>,
+            type = <<"created">>,
+            obj_id = CId,
+            body = #{
+                message_id := MsgId,
+                text := Text,
+                created_time := Time
+            }
+        } = Event,
+        {UId, CId, MsgId, Time, Text}
+    after 1000 ->
+        error(?LINE)
+    end.
+
+
+mock_session(Ref) ->
+    Self = self(),
+    meck:new(nkchat_session_obj, [passthrough]),
+    meck:expect(nkchat_session_obj, send_api_event,
+        fun(Event, _Session) -> Self ! {Ref, Event}, ok end),
+    Ref.
+
+unmock_session() ->
+    catch meck:unload(nkchat_session_obj),
+    code:purge(nkchat_session_obj),
+    {module,nkchat_session_obj} = code:load_file(nkchat_session_obj),
+    ok.
+
+
+wait_session(Ref) ->
+    receive {Ref, #event{}=Event} ->
+        #event{
+            class = ?CHAT_SESSION,
+            subclass = ?CHAT_CONVERSATION,
+            type = Type,
+            obj_id = SessId,
+            body = Body
+        } = Event,
+        case Type of
+            <<"message_created">> ->
+                #{
+                    conversation_id := ConvId,
+                    message_id := MsgId,
+                    text := Text,
+                    created_time := Time
+                } = Body,
+                {created, SessId, ConvId, MsgId, Time, Text};
+            <<"unread_counter">> ->
+                #{
+                    conversation_id := ConvId,
+                    counter := Counter
+                } = Body,
+                {counter, SessId, ConvId, Counter}
+        end
+    after 1000 ->
+        error(?LINE)
+    end.
