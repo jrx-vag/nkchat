@@ -257,6 +257,7 @@ session1(Pid, Ref) ->
 
     % If we stop the session, we receive pushes again. We we start it back, counters are regenerated
     {ok, #{}} = cmd_session(Pid, stop, #{}),
+    session_stopped = wait_session(Ref),
     timer:sleep(100),
     false = is_process_alive(SPid),
     % Send msg to C3
@@ -308,7 +309,7 @@ session1(Pid, Ref) ->
     {ok, Conv6} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
     #{
         <<"obj_id">> := C1,
-        <<"last_active_time">> := T2,
+        <<"last_active_time">> := _T2,
         <<"last_delivered_message_id">> := M6,
         <<"last_delivered_message_time">> := T1,
         <<"_unread_count">> := 0,
@@ -336,7 +337,17 @@ session1(Pid, Ref) ->
     {ok, #{}} = cmd_conversation(Pid, remove_member, #{id=>C3, member_id=><<"admin">>}),
     {member_removed, S, C3, <<"admin">>} = wait_session(Ref),
 
+    % Lets add and remove conversations
+    % Start C1 and C3
+    {ok, #{<<"conversation_id">>:=C2}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
+    {error, {<<"conversation_is_already_member">>, _}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
+    {conversation_added, S, C2} = wait_session(Ref),
+    {ok, #{}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
+    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
+    {conversation_removed, S, C2} = wait_session(Ref),
+
     {ok, #{}} = cmd_session(Pid, stop, #{}),
+    session_stopped = wait_session(Ref),
     flush(),
     false = is_process_alive(SPid),
     ok.
@@ -437,13 +448,13 @@ wait_session(Ref) ->
     receive {Ref, #event{}=Event} ->
         #event{
             class = ?CHAT_SESSION,
-            subclass = ?CHAT_CONVERSATION,
+            subclass = Sub,
             type = Type,
             obj_id = SessId,
             body = Body
         } = Event,
-        case Type of
-            <<"message_created">> ->
+        case {Sub, Type} of
+            {?CHAT_CONVERSATION, <<"message_created">>} ->
                 #{
                     conversation_id := ConvId,
                     message_id := MsgId,
@@ -452,7 +463,7 @@ wait_session(Ref) ->
                     user := _
                 } = Body,
                 {created, SessId, ConvId, MsgId, Time, Text};
-            <<"message_updated">> ->
+            {?CHAT_CONVERSATION, <<"message_updated">>} ->
                 #{
                     conversation_id := ConvId,
                     message_id := MsgId,
@@ -461,31 +472,43 @@ wait_session(Ref) ->
                     user := _
                 } = Body,
                 {updated, SessId, ConvId, MsgId, Time, Text};
-            <<"message_deleted">> ->
+            {?CHAT_CONVERSATION, <<"message_deleted">>} ->
                 #{
                     conversation_id := ConvId,
                     message_id := MsgId
                 } = Body,
                 {deleted, SessId, ConvId, MsgId};
-            <<"unread_counter">> ->
+            {?CHAT_CONVERSATION, <<"unread_counter">>} ->
                 #{
                     conversation_id := ConvId,
                     counter := Counter
                 } = Body,
                 {counter, SessId, ConvId, Counter};
-            <<"member_added">> ->
+            {?CHAT_CONVERSATION, <<"member_added">>} ->
                 #{
                     conversation_id := ConvId,
                     member_id := MId,
                     user := _
                 } = Body,
                 {member_added, SessId, ConvId, MId};
-            <<"member_removed">> ->
+            {?CHAT_CONVERSATION, <<"member_removed">>} ->
                 #{
                     conversation_id := ConvId,
                     member_id := MId
                 } = Body,
-                {member_removed, SessId, ConvId, MId}
+                {member_removed, SessId, ConvId, MId};
+            {<<>>, <<"conversation_added">>} ->
+                #{
+                    conversation := #{obj_id:=ConvId}
+                } = Body,
+                {conversation_added, SessId, ConvId};
+            {<<>>, <<"conversation_removed">>} ->
+                #{
+                    conversation := #{obj_id:=ConvId}
+                } = Body,
+                {conversation_removed, SessId, ConvId};
+            {<<>>, <<"session_stopped">>} ->
+                session_stopped
         end
     after 1000 ->
         error(?LINE)

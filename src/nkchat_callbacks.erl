@@ -52,9 +52,9 @@ plugin_deps() ->
 %% ===================================================================
 
 %% @doc
-api_error(conversation_not_found)       -> "Conversation not found";
-api_error(conversation_already_exists)  -> "Conversation already exists";
-api_error(conversation_is_disabled)     -> "Conversation is currently disabled";
+api_error(conversation_not_found)           -> "Conversation not found";
+api_error(conversation_is_already_member)   -> "Conversation is already a member";
+api_error(conversation_is_disabled)         -> "Conversation is currently disabled";
 api_error(_)   		                        -> continue.
 
 

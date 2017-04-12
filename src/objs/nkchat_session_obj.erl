@@ -28,7 +28,8 @@
 -export([conversation_event/2]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
--export([object_start/1, object_save/1, object_sync_op/3, object_async_op/2, object_handle_info/2]).
+-export([object_start/1, object_stop/2, object_save/1,
+         object_sync_op/3, object_async_op/2, object_handle_info/2]).
 -export([find_unread/2]).
 -export([send_api_event/2]).        % Exported for mocking in tests
 
@@ -112,6 +113,7 @@ add_conversation(Srv, Id, ConvId) ->
             {error, Error}
     end.
 
+
 %% @doc
 remove_conversation(Srv, Id, ConvId) ->
     sync_op(Srv, Id, {?MODULE, rm_conv, ConvId}).
@@ -147,10 +149,16 @@ conversation_event(Pid, #event{class = ?CHAT_CONVERSATION}=Event) ->
 %% ===================================================================
 
 
+%% Monitor is used to track conversations
+%% - When starting, if a conv cannot be loaded, it is added as 'disabled'
+%% - If a conv process goes down, we send it to the monitor and is marked as 'disabled'
+%% -
+
+
+
 -record(?MODULE, {
     monitor :: nkdomain_monitor:monitor(),
     active :: undefined | nkdomain:obj_id(),
-    convs = #{} :: #{ConvId::nkdomain:obj_id() => integer()},
     unread = #{} :: #{ConvId::nkdomain:obj_id() => integer()},
     api_pids = [] :: [pid()],
     meta = #{} :: map()
@@ -315,9 +323,14 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, Session) ->
             nkchat_conversation_obj:register_session(Pid, UserId, {?MODULE, self()}),
             Session2 = update_monitor(Monitor2, Session),
             ?DEBUG("added conversation ~s", [ConvId], Session),
+            Body = #{conversation => Conv#{'_enabled'=>true}},
+            Event = session_event(<<>>, <<"conversation_added">>, Body, Session2),
+            ?MODULE:send_api_event(Event, Session2),
             {reply_and_save, {ok, ConvId}, Session2};
         {error, object_not_found} ->
             {reply, {error, conversation_not_found}, Session};
+        {error, object_already_exists} ->
+            {reply, {error, conversation_is_already_member}, Session};
         {error, Error} ->
             {reply, {error, Error}, Session}
     end;
@@ -328,6 +341,9 @@ object_sync_op({?MODULE, rm_conv, ConvId}, _From, Session) ->
         {ok, Monitor2} ->
             Session2 = update_monitor(Monitor2, Session),
             ?DEBUG("removed conversation ~s", [ConvId], Session),
+            Body = #{conversation => #{obj_id=>ConvId}},
+            Event = session_event(<<>>, <<"conversation_removed">>, Body, Session2),
+            ?MODULE:send_api_event(Event, Session2),
             {reply_and_save, ok, Session2};
         {error, object_not_found} ->
             {reply, {error, conversation_not_found}, Session};
@@ -339,6 +355,7 @@ object_sync_op(_Op, _From, _Session) ->
     continue.
 
 
+%% @private
 object_async_op({?MODULE, conversation_event,
                 #event{subclass = <<"message">>, type = <<"created">>}=Event}, Session) ->
     #obj_session{data=Data} = Session,
@@ -445,6 +462,16 @@ object_handle_info(_Info, _Session) ->
     continue.
 
 
+%% @private
+object_stop(_Reason, Session) ->
+    Event = session_event(<<>>, <<"session_stopped">>, #{}, Session),
+    ?MODULE:send_api_event(Event, Session),
+    {ok, Session}.
+
+
+
+
+
 %% ===================================================================
 %% Internal
 %% ===================================================================
@@ -524,8 +551,6 @@ add_name(ConvId, Conv) ->
         {error, _} ->
             Conv
     end.
-
-
 
 
 %% @private
