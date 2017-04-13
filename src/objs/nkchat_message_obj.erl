@@ -109,10 +109,10 @@ object_api_cmd(Sub, Cmd, Data, State) ->
 
 
 %% @private
-object_start(#obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj, is_created=true}=Session) ->
+object_start(#obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj, is_created=true}=Session) ->
     #{referred_id:=UserId, created_time:=Time, ?CHAT_MESSAGE:=Msg} = Obj,
     Msg2 = add_user(UserId, Msg, Session),
-    ok = nkchat_conversation_obj:message_created(Pid, ObjId, Msg2#{created_time=>Time}),
+    ok = nkchat_conversation_obj:message_created(ParentId, ObjId, Msg2#{created_time=>Time}),
     {ok, Session};
 
 object_start(Session) ->
@@ -120,16 +120,16 @@ object_start(Session) ->
 
 
 %% @private
-object_deleted(#obj_session{parent_pid=Pid, obj_id=ObjId}=Session) ->
-    ok = nkchat_conversation_obj:message_deleted(Pid, ObjId),
+object_deleted(#obj_session{parent_id=ParentId, obj_id=ObjId}=Session) ->
+    ok = nkchat_conversation_obj:message_deleted(ParentId, ObjId),
     {ok, Session}.
 
 
 %% @private
-object_updated(_Update, #obj_session{parent_pid=Pid, obj_id=ObjId, obj=Obj}=Session) ->
+object_updated(_Update, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
     #{referred_id:=UserId, updated_time:=Time, ?CHAT_MESSAGE:=Msg} = Obj,
     Msg2 = add_user(UserId, Msg, Session),
-    ok = nkchat_conversation_obj:message_updated(Pid, ObjId, Msg2#{updated_time=>Time}),
+    ok = nkchat_conversation_obj:message_updated(ParentId, ObjId, Msg2#{updated_time=>Time}),
     {ok, Session}.
 
 

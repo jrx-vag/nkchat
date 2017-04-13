@@ -31,7 +31,7 @@
 
 
 
-test1() ->
+test() ->
 
     clear(),
     Pid = login("admin", ?ADMIN_PASS),
@@ -39,13 +39,11 @@ test1() ->
     Ref = make_ref(),
     ok = base_msgs(Pid, Ref),
     nkapi_client:stop(Pid),
-
     Pid2 = login("/chattest/users/u1", "p1"),
     session1(Pid2, Ref),
-
-
     unmock_push(),
-    unmock_session().
+    unmock_session(),
+    lager:notice("Chat test ok!").
 
 
 

@@ -140,18 +140,18 @@ register_session(ConvPid, UserId, Link) ->
 
 
 %% @private Called from nkchat_message_obj
-message_created(ConvPid, MsgId, Msg) ->
-    nkdomain_obj:async_op(ConvPid, {?MODULE, message_created, MsgId, Msg}).
+message_created(ConvId, MsgId, Msg) ->
+    nkdomain_obj:async_op(ConvId, {?MODULE, message_created, MsgId, Msg}).
 
 
 %% @private
-message_deleted(ConvPid, MsgId) ->
-    nkdomain_obj:async_op(ConvPid, {?MODULE, message_deleted, MsgId}).
+message_deleted(ConvId, MsgId) ->
+    nkdomain_obj:async_op(ConvId, {?MODULE, message_deleted, MsgId}).
 
 
 %% @private
-message_updated(ConvPid, MsgId, Msg) ->
-    nkdomain_obj:async_op(ConvPid, {?MODULE, message_updated, MsgId, Msg}).
+message_updated(ConvId, MsgId, Msg) ->
+    nkdomain_obj:async_op(ConvId, {?MODULE, message_updated, MsgId, Msg}).
 
 
 
