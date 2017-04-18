@@ -61,6 +61,11 @@ api('', remove_member, Syntax) ->
     },
     nklib_syntax:add_mandatory([member_id], Syntax2);
 
+api('', list, Syntax) ->
+    Syntax#{
+        member_id => binary
+    };
+
 api('', get_messages, Syntax) ->
     Syntax#{
         id => binary,

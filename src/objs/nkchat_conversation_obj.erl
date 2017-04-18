@@ -25,6 +25,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/4, add_member/3, remove_member/3, get_messages/3]).
+-export([get_member_conversations/3]).
 -export([message_created/3, message_deleted/2, message_updated/3]).
 -export([register_session/3]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
@@ -98,6 +99,33 @@ remove_member(Srv, Id, MemberId) ->
 
 
 %% @doc
+get_member_conversations(Srv, Domain, MemberId) ->
+    case nkdomain_obj_lib:find(Srv, Domain) of
+        #obj_id_ext{srv_id=SrvId, path=DomainPath} ->
+            Filters = #{
+                type => ?CHAT_CONVERSATION,
+                childs_of => DomainPath,
+                << ?CHAT_CONVERSATION/binary, ".member_ids">> => MemberId
+            },
+            Search2 = #{
+                sort => [#{created_time => #{order => desc}}],
+                fields => [created_time, description, <<?CHAT_CONVERSATION/binary, ".member_ids">>],
+                filters => Filters
+            },
+            case nkdomain_store:find(SrvId, Search2) of
+                {ok, N, List, _Meta} ->
+                    {ok, #{total=>N, data=>List}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, object_not_found} ->
+            {error, domain_unknown};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @doc
 get_messages(Srv, Id, Spec) ->
     case nkdomain_obj_lib:load(Srv, Id, #{}) of
         #obj_id_ext{srv_id=SrvId, obj_id=ConvId} ->
@@ -131,6 +159,12 @@ get_messages(Srv, Id, Spec) ->
         {error, Error} ->
             {error, Error}
     end.
+
+
+
+
+
+
 
 
 %% @private Called from nkchat_session_obj

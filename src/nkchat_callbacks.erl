@@ -42,7 +42,7 @@ plugin_deps() ->
     [nkdomain, nkapi].
 
 
-%%error_code(obj_not_found)   		-> {0, "Object not found"};
+%%error_code(object_not_found)   		-> {0, "Object not found"};
 %%error_code(_) -> continue.
 
 

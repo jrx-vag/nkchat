@@ -43,7 +43,7 @@ cmd('', create, Data, State) ->
     end;
 
 cmd('', add_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
-    case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
+    case nkdomain_api_util:get_id(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
             case nkchat_conversation_obj:add_member(SrvId, Id, MemberId) of
                 {ok, MemberObjId} ->
@@ -56,7 +56,7 @@ cmd('', add_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
     end;
 
 cmd('', remove_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
-    case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
+    case nkdomain_api_util:get_id(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
             case nkchat_conversation_obj:remove_member(SrvId, Id, MemberId) of
                 ok ->
@@ -69,13 +69,31 @@ cmd('', remove_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
     end;
 
 cmd('', get_messages, Data, #{srv_id:=SrvId}=State) ->
-    case nkdomain_api_util:getid(?CHAT_CONVERSATION, Data, State) of
+    case nkdomain_api_util:get_id(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
             case nkchat_conversation_obj:get_messages(SrvId, Id, Data) of
                 {ok, Reply} ->
                     {ok, Reply, State};
                 {error, Error} ->
                     {error, Error, State}
+            end;
+        Error ->
+            Error
+    end;
+
+cmd('', list, Data, #{srv_id:=SrvId}=State) ->
+    case nkdomain_api_util:get_domain(State) of
+        {ok, Domain} ->
+            case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, State) of
+                {ok, MemberId} ->
+                    case nkchat_conversation_obj:get_member_conversations(SrvId, Domain, MemberId) of
+                        {ok, Reply} ->
+                            {ok, Reply, State};
+                        {error, Error} ->
+                            {error, Error, State}
+                    end;
+                _ ->
+                    {error, user_unknown, State}
             end;
         Error ->
             Error

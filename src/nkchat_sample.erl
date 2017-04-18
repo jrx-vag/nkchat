@@ -31,6 +31,14 @@ conv_get() ->
 conv_get(Id) ->
     cmd(?CHAT_CONVERSATION, get, #{id=>Id}).
 
+conv_list() ->
+    cmd(?CHAT_CONVERSATION, list, #{}).
+
+conv_list(MemberId) ->
+    cmd(?CHAT_CONVERSATION, list, #{member_id=>MemberId}).
+
+
+
 conv_add_member(Id, Member) ->
     cmd(?CHAT_CONVERSATION, add_member, #{id=>Id, member_id=>Member}).
 
@@ -77,11 +85,11 @@ session_create(UserId) ->
 session_start(SessId) ->
     cmd(?CHAT_SESSION, start, #{id=>SessId}).
 
-session_info() ->
-    cmd(?CHAT_SESSION, get_info, #{}).
+session_get() ->
+    cmd(?CHAT_SESSION, get, #{}).
 
-session_info(SessId) ->
-    cmd(?CHAT_SESSION, get_info, #{id=>SessId}).
+session_get(SessId) ->
+    cmd(?CHAT_SESSION, get, #{id=>SessId}).
 
 session_stop() ->
     cmd(?CHAT_SESSION, stop, #{}).
@@ -98,7 +106,11 @@ session_add_conversation(ConvId) ->
 session_remove_conversation(ConvId) ->
     cmd(?CHAT_SESSION, remove_conversation, #{conversation_id=>ConvId}).
 
+session_get_all_conversations() ->
+    cmd(?CHAT_SESSION, get_all_conversations, #{}).
 
+session_get_conversation(ConvId) ->
+    cmd(?CHAT_SESSION, get_conversation, #{conversation_id=>ConvId}).
 
 
 %% ===================================================================
