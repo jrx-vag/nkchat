@@ -296,8 +296,6 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, Session) ->
                         last_delivered_message_id => <<>>,
                         last_delivered_message_time => nklib_util:m_timestamp()
                     },
-                    lager:error("CREATED: ~p", [Conv]),
-
                     SessConv = #{
                         linked => true,
                         unread_count => 0
@@ -339,15 +337,12 @@ object_sync_op(_Op, _From, _Session) ->
 object_async_op({?MODULE, conversation_event,
                 #event{subclass = <<"message">>, type = <<"created">>}=Event}, Session) ->
     #event{obj_id=ConvId, body = #{message_id:=MsgId, created_time:=Time}=Body} = Event,
-    lager:error("NEW MSG"),
-
     Active = get_active(Session),
     case get_conv(ConvId, Session) of
         {ok, ConvId, Conv, SessConv} when Active==ConvId ->
             Body2 = Body#{conversation_id=>ConvId},
             Event2 = session_event(?CHAT_CONVERSATION, <<"message_created">>, Body2, Session),
             ?MODULE:send_api_event(Event2, Session),
-            lager:error("DELIVERY ACTIVE"),
             Conv2 = Conv#{
                 last_delivered_message_id => MsgId,
                 last_delivered_message_time => Time
@@ -357,7 +352,6 @@ object_async_op({?MODULE, conversation_event,
             {noreply, Session2};
         {ok, ConvId, Conv, SessConv} ->
             Count = maps:get(unread_count, SessConv, 0) + 1,
-            lager:error("DELIVERY NOT ACTIVE: ~p", [Count]),
             SessConv2 = SessConv#{unread_count=>Count},
             Session2 = update_conv(ConvId, Conv, SessConv2, Session),
             Body2 = #{conversation_id=>ConvId, counter=>Count},
@@ -512,8 +506,6 @@ get_conv_info(ConvId, Session) ->
                         ?CHAT_CONVERSATION := #{member_ids:=MemberIds}
                     } = ConvObj,
                     {Num, _Time} = find_unread(Conv, Session),
-                    lager:error("NUM is ~p, should ~p", [Num, maps:get(unread_count, SessConv)]),
-
                     SessConv2 = SessConv#{unread_count=>Num},
                     Data = Conv#{
                         path => Path,
@@ -626,10 +618,8 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
         },
         size => 0
     },
-
     case nkdomain_store:find(SrvId, Search) of
         {ok, Num, [], _Meta} ->
-            lager:error("Search: ~p ~p: ~p", [Time, Num, Search]),
             {Num, Time};
         {error, Error} ->
             ?LLOG(error, "error reading unread count: ~p", [Error], Session),

@@ -212,7 +212,8 @@ session1(Pid, Ref) ->
     {A2, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
     true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
 
-    timer:sleep(2000),
+    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M1}),
+    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M2}),
 
     {ok, Conv1} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
     #{
@@ -306,7 +307,7 @@ session1(Pid, Ref) ->
     {created, S, C1, M6, _, <<"msgC1_5">>} = wait_session(Ref),
     {A10, C1, M6, T1, <<"msgC1_5">>} = wait_push(Ref),
     {A11, C1, M6, _, <<"msgC1_5">>} = wait_push(Ref),
-%%    true = lists:sort([U2, U3]) == lists:sort([A10, A11]),
+    true = lists:sort([U2, U3]) == lists:sort([A10, A11]),
 
     {ok, Conv6} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
     #{
