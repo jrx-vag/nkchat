@@ -113,6 +113,7 @@ session_get_conversation(ConvId) ->
     cmd(?CHAT_SESSION, get_conversation, #{conversation_id=>ConvId}).
 
 
+
 %% ===================================================================
 %% Client fun
 %% ===================================================================

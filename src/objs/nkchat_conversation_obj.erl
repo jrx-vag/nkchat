@@ -161,12 +161,6 @@ get_messages(Srv, Id, Spec) ->
     end.
 
 
-
-
-
-
-
-
 %% @private Called from nkchat_session_obj
 %% Adds the user and register the session
 register_session(ConvPid, UserId, Link) ->

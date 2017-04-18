@@ -36,8 +36,8 @@ cmd('', find, Data, #{srv_id:=SrvId}=State) ->
     case get_user_id(Data, State) of
         {ok, UserId} ->
             case nkchat_session_obj:find(SrvId, UserId) of
-                {ok, ObjId} ->
-                    {ok, #{obj_id=>ObjId}, State};
+                {ok, List} ->
+                    {ok, #{sessions=>List}, State};
                 {error, Error} ->
                     {error, Error, State}
             end;
