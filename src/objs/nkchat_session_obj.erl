@@ -25,10 +25,10 @@
 
 -export([create/2, find/2, start/3, stop/2, get_all_conversations/2, get_conversation/3]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
--export([conversation_event/2]).
+-export([conversation_event/5]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
--export([object_start/1, object_stop/2, object_save/1,
+-export([object_init/1, object_start/1, object_stop/2, object_save/1,
          object_sync_op/3, object_async_op/2, object_handle_info/2]).
 -export([find_unread/2]).
 -export([send_api_event/2]).        % Exported for mocking in tests
@@ -144,8 +144,8 @@ set_active_conversation(Srv, Id, ConvId) ->
 
 
 %% @doc
-conversation_event(Pid, #event{class = ?CHAT_CONVERSATION}=Event) ->
-    ok = nkdomain_obj:async_op(Pid, {?MODULE, conversation_event, Event}).
+conversation_event(_SrvId, ConvId, MemberId, Sessions, Event) ->
+    lager:notice("SESS EVENT (~s, ~s, ~p) ~p", [ConvId, MemberId, Event, Sessions]).
 
 
 
@@ -224,6 +224,11 @@ object_api_cmd(Sub, Cmd, Data, State) ->
     nkchat_session_obj_api:cmd(Sub, Cmd, Data, State).
 
 
+%% @private
+object_init(Session) ->
+    {ok, Session#obj_session{data=#?MODULE{}}}.
+
+
 %% @private When the object is loaded, we make our cache
 object_start(#obj_session{obj=Obj}=Session) ->
     #{?CHAT_SESSION := #{conversations := ConvsList}} = Obj,
@@ -231,7 +236,6 @@ object_start(#obj_session{obj=Obj}=Session) ->
         convs = maps:from_list([{Id, C} || #{obj_id:=Id}=C <- ConvsList]),
         sess_convs = make_sess_convs(ConvsList, #{}, Session)
     },
-    self() ! {?MODULE, check_time},
     {ok, Session#obj_session{data=Data}}.
 
 
@@ -340,6 +344,7 @@ object_async_op({?MODULE, conversation_event,
     Active = get_active(Session),
     case get_conv(ConvId, Session) of
         {ok, ConvId, Conv, SessConv} when Active==ConvId ->
+            ?DEBUG("message event for active conversation", [], Session),
             Body2 = Body#{conversation_id=>ConvId},
             Event2 = session_event(?CHAT_CONVERSATION, <<"message_created">>, Body2, Session),
             ?MODULE:send_api_event(Event2, Session),
@@ -351,6 +356,7 @@ object_async_op({?MODULE, conversation_event,
             ?DEBUG("set last message for conversation ~s", [ConvId], Session),
             {noreply, Session2};
         {ok, ConvId, Conv, SessConv} ->
+            ?DEBUG("message event for NOT active conversation", [], Session),
             Count = maps:get(unread_count, SessConv, 0) + 1,
             SessConv2 = SessConv#{unread_count=>Count},
             Session2 = update_conv(ConvId, Conv, SessConv2, Session),
@@ -474,12 +480,11 @@ make_sess_convs([#{obj_id:=ConvId}|Rest], Acc, Session) ->
 %% @private
 link_conv(ConvId, #obj_session{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
     Opts = #{
-        usage_link => {SessId, {?MODULE, usage, SessId}},
-        event_link => {SessId, {?MODULE, event, SessId}}
+        usage_link => {SessId, {?MODULE, SessId}}
     },
     case nkdomain_obj_lib:load(SrvId, ConvId, Opts) of
         #obj_id_ext{obj_id=ConvObjId, pid=Pid} ->
-            ok = nkchat_conversation_obj:register_session(Pid, UserId, {?MODULE, self()}),
+            ok = nkchat_conversation_obj:add_session(Pid, UserId, SessId),
             {ok, ConvObjId};
         {error, Error} ->
             {error, Error}
@@ -635,7 +640,6 @@ send_api_event(Event, #obj_session{data=Data}) ->
         _ ->
             ok
     end.
-
 
 
 %% @private

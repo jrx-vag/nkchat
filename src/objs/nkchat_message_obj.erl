@@ -25,8 +25,7 @@
 
 -export([create/4]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
-         object_api_syntax/3, object_api_allow/4, object_api_cmd/4,
-         object_start/1, object_deleted/1, object_updated/2]).
+         object_api_syntax/3, object_api_allow/4, object_api_cmd/4, object_event/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -48,7 +47,7 @@ create(Srv, ConvId, AuthorId, Message) ->
     case nkdomain_obj_lib:load(Srv, ConvId, #{}) of
         #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvObjId} ->
             Opts = #{
-                referred_id => AuthorId,
+                created_by => AuthorId,
                 parent => ConvObjId,
                 type_obj => Message
             },
@@ -109,27 +108,19 @@ object_api_cmd(Sub, Cmd, Data, State) ->
 
 
 %% @private
-object_start(#obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj, is_created=true}=Session) ->
-    #{referred_id:=UserId, created_time:=Time, ?CHAT_MESSAGE:=Msg} = Obj,
-    Msg2 = add_user(UserId, Msg, Session),
-    ok = nkchat_conversation_obj:message_created(ParentId, ObjId, Msg2#{created_time=>Time}),
-    {ok, Session};
-
-object_start(Session) ->
-    {ok, Session}.
-
-
-%% @private
-object_deleted(#obj_session{parent_id=ParentId, obj_id=ObjId}=Session) ->
-    ok = nkchat_conversation_obj:message_deleted(ParentId, ObjId),
-    {ok, Session}.
-
-
-%% @private
-object_updated(_Update, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
-    #{referred_id:=UserId, updated_time:=Time, ?CHAT_MESSAGE:=Msg} = Obj,
-    Msg2 = add_user(UserId, Msg, Session),
-    ok = nkchat_conversation_obj:message_updated(ParentId, ObjId, Msg2#{updated_time=>Time}),
+object_event(Event, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
+    case Event of
+        created ->
+            Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),
+            ok = nkchat_conversation_obj:message_event(ParentId, {created, Msg});
+        deleted ->
+            ok = nkchat_conversation_obj:message_event(ParentId, {deleted, ObjId});
+        {updated, _} ->
+            Msg = maps:with([obj_id, updated_time, ?CHAT_MESSAGE], Obj),
+            ok = nkchat_conversation_obj:message_event(ParentId, {updated, Msg});
+        _ ->
+            ok
+    end,
     {ok, Session}.
 
 
@@ -137,11 +128,3 @@ object_updated(_Update, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=
 %% ===================================================================
 %% Internal
 %% ===================================================================
-
-
-%% @private
-add_user(UserId, Data, #obj_session{srv_id=SrvId}) ->
-    case nkdomain_user_obj:get_name(SrvId, UserId) of
-        {ok, User} -> Data#{user=>User};
-        {error, _} -> Data#{user=>#{}}
-    end.

@@ -21,7 +21,6 @@
 -module(nkchat_callbacks).
 
 -export([plugin_deps/0, api_error/1]).
--export([object_session_event/2]).
 -export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
@@ -30,6 +29,7 @@
 -include_lib("nkchat.hrl").
 -include_lib("nkapi/include/nkapi.hrl").
 -include_lib("nkservice/include/nkservice.hrl").
+-include_lib("nkdomain/include/nkdomain.hrl").
 
 
 
@@ -96,15 +96,6 @@ api_error(_)   		                        -> continue.
 %% ===================================================================
 %% Object
 %% ===================================================================
-
-
-object_session_event({nkchat_session_obj, Pid}, #event{class = ?CHAT_CONVERSATION}=Event) ->
-    nkchat_session_obj:conversation_event(Pid, Event);
-
-object_session_event(_Link, _Event) ->
-    continue.
-
-
 
 
 %% ===================================================================
@@ -180,3 +171,7 @@ chat_mm_proxy_handle_info(Msg, State) ->
     lager:error("Module ~p received unexpected info: ~p", [?MODULE, Msg]),
     {ok, State}.
 
+
+%% ===================================================================
+%% Implemented objects
+%% ===================================================================

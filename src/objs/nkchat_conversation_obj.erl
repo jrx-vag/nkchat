@@ -24,13 +24,13 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/4, add_member/3, remove_member/3, get_messages/3]).
--export([get_member_conversations/3]).
--export([message_created/3, message_deleted/2, message_updated/3]).
--export([register_session/3]).
+-export([create/4, add_member/3, remove_member/3, add_session/4, remove_session/2]).
+-export([get_messages/3, get_member_conversations/3]).
+-export([message_event/2]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
-         object_api_syntax/3, object_api_allow/4, object_api_cmd/4,
-         object_start/1, object_sync_op/3, object_async_op/2, object_handle_info/2]).
+         object_api_syntax/3, object_api_allow/4, object_api_cmd/4, object_send_event/2,
+         object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
+         object_event/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -38,35 +38,15 @@
 -include_lib("nkservice/include/nkservice.hrl").
 
 
-%% Period to find for inactive users
--define(CHECK_TIME, 5*60*1000).
-
-%% Conversation creates events with class = ?CHAT_CONVERSATION, obj_id = ConvId
-%%
-%% - Subclass: <<"message">>
-%%
-%%   - Type: <<"created">>
-%%     Body: message_id, created_time, text, user
-%%
-%%   - Type: <<"deleted">>
-%%     Body: message_id
-%%
-%%   - Type: <<"updated">>
-%%     Body: message_id, updated_time, text, user
-%%
-%% - Subclass: <<"member">>
-%%
-%%   - Type: <<"added">>
-%%     Body: member_id, user
-%%
-%%   - Type: <<"removed">>
-%%     Body: member_id
-%%
-
 %% ===================================================================
 %% Types
 %% ===================================================================
 
+
+
+%% ===================================================================
+%% Public
+%% ===================================================================
 
 %% @doc
 %% Data must follow object's syntax
@@ -77,12 +57,13 @@ create(Srv, Domain, Name, Desc) ->
     Opts = #{
         name => Name,
         description => Desc,
-        type_obj => #{member_ids => []}
+        type_obj => #{members => []}
     },
     nkdomain_obj_lib:make_and_create(Srv, Domain, ?CHAT_CONVERSATION, Opts).
 
 
-%% @doc
+%% @doc Members will be changed for roles
+
 -spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id()) ->
     {ok, nkdomain:obj_id()} | {error, term()}.
 
@@ -96,6 +77,20 @@ add_member(Srv, Id, MemberId) ->
 
 remove_member(Srv, Id, MemberId) ->
     sync_op(Srv, Id, {?MODULE, remove_member, MemberId}).
+
+
+%% @private Called from nkchat_session_obj
+%% Sessions receive notifications for every message, calling
+
+add_session(ConvId, MemberId, SessId, Meta) ->
+    nkdomain_obj:sync_op(ConvId, {?MODULE, add_session, MemberId, SessId, Meta}).
+
+
+%% @private Called from nkchat_session_obj
+%% Sessions receive notifications for every message, calling
+
+remove_session(ConvId, SessId) ->
+    nkdomain_obj:sync_op(ConvId, {?MODULE, remove_session, SessId}).
 
 
 %% @doc
@@ -142,13 +137,13 @@ get_messages(Srv, Id, Spec) ->
             end,
             Search2 = Search1#{
                 sort => [#{created_time => #{order => desc}}],
-                fields => [created_time, ?CHAT_MESSAGE, referred_id],
+                fields => [created_time, ?CHAT_MESSAGE, created_by],
                 filters => Filters2
             },
             case nkdomain_store:find(SrvId, Search2) of
                 {ok, N, List, _Meta} ->
                     List2 = lists:map(
-                        fun(#{<<"referred_id">>:=UserId}=D) -> add_user(SrvId, UserId, D) end,
+                        fun(#{<<"created_by">>:=MemberId}=D) -> add_user(SrvId, MemberId, D) end,
                         List),
                     {ok, #{total=>N, data=>List2}};
                 {error, Error} ->
@@ -161,36 +156,21 @@ get_messages(Srv, Id, Spec) ->
     end.
 
 
-%% @private Called from nkchat_session_obj
-%% Adds the user and register the session
-register_session(ConvPid, UserId, Link) ->
-    nkdomain_obj:sync_op(ConvPid, {?MODULE, register_session, UserId, Link}).
-
-
 %% @private Called from nkchat_message_obj
-message_created(ConvId, MsgId, Msg) ->
-    nkdomain_obj:async_op(ConvId, {?MODULE, message_created, MsgId, Msg}).
+%% When an event is received a conversation-level is sent to the Erlang layer
+%% Is is captured at object_event/2 and sent to the sessions in send_to_sessions/3
+
+message_event(ConvId, Event) ->
+    nkdomain_obj:async_op(ConvId, {?MODULE, message_event, Event}).
 
 
-%% @private
-message_deleted(ConvId, MsgId) ->
-    nkdomain_obj:async_op(ConvId, {?MODULE, message_deleted, MsgId}).
-
-
-%% @private
-message_updated(ConvId, MsgId, Msg) ->
-    nkdomain_obj:async_op(ConvId, {?MODULE, message_updated, MsgId, Msg}).
-
-
-
-
-%% ===================================================================
+%% =================================================================
 %% nkdomain_obj behaviour
 %% ===================================================================
 
 -record(?MODULE, {
-    sessions = #{} :: #{nkdomain:obj_id() => nklib:link()},
-    session_pids = #{} :: #{pid() => nkdomain:obj_id()},
+    members = [] :: [{nkdomain:obj_id(), map()}],
+    sessions = #{} :: #{SessId::nkdomain:obj_id() => map()},
     meta = #{} :: map()
 }).
 
@@ -208,15 +188,43 @@ object_get_info() ->
 %% @private
 object_mapping() ->
     #{
-        member_ids => #{type => keyword}
+        members => #{
+            type => object,
+            dynamic => false,
+            properties => #{
+                member_id => #{type => keyword},
+                added_time => #{type => date},
+                session_ids => #{type => keyword}
+            }
+        }
     }.
 
 
 %% @private
 object_syntax(_) ->
     #{
-        member_ids => {list, binary}
+        members => {list,
+            {syntax, #{
+                member_id => binary,
+                added_time => integer,
+                session_ids => {list, binary},
+                '__mandatory' => [
+                    <<?CHAT_CONVERSATION/binary, ".members.member_id">>
+                ]
+            }}}
     }.
+
+
+%% @private
+object_send_event(Event, Session) ->
+    nkchat_conversation_events:event(Event, Session).
+
+
+%% @private
+object_event(Event, #obj_session{data=Data}=Session) ->
+    #?MODULE{members=Members} = Data,
+    send_to_sessions(Members, Event, Session),
+    {ok, Session}.
 
 
 %% @private
@@ -234,80 +242,86 @@ object_api_cmd(Sub, Cmd, Data, State) ->
     nkchat_conversation_obj_api:cmd(Sub, Cmd, Data, State).
 
 
+%% @private
+object_init(Session) ->
+    {ok, Session#obj_session{data=#?MODULE{}}}.
+
+
 %% @private When the object is loaded, we make our cache
-object_start(Session) ->
-    Data = #?MODULE{},
+object_start(#obj_session{obj=Obj}=Session) ->
+    #{?CHAT_CONVERSATION := #{members := MemberList}} = Obj,
+    % It should not take a lot of memory, it is a copy
+    Data = #?MODULE{
+        members = [{Id, M} || #{member_id:=Id} = M <- MemberList]
+    },
     {ok, Session#obj_session{data=Data}}.
 
 
+%% @private Prepare the object for saving
+object_restore(#obj_session{obj = Obj, data = #?MODULE{} = Data} = Session) ->
+    #?MODULE{members = Members} = Data,
+    Values = [M || {_, M} <- Members],
+    Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, #{members=>Values}, Obj),
+    {ok, Session#obj_session{obj = Obj2}}.
+
+
 %% @private
-object_sync_op({?MODULE, add_member, Id}, _From, #obj_session{srv_id=SrvId}=Session) ->
+object_sync_op({?MODULE, add_member, Id}, _From, Session) ->
     case add_member(Id, Session) of
-        {ok, UserId, Session2} ->
-            Event = make_event(member, added, add_user(SrvId, UserId, #{member_id=>UserId}), Session),
-            send_event(Event, without_push, Session),
-            {reply_and_save, {ok, UserId}, Session2};
+        {ok, MemberId, Session2} ->
+            Event = {added_member, MemberId},
+            Session3 = nkdomain_obj_util:event(Event, Session2),
+            {reply_and_save, {ok, MemberId}, Session3};
         {error, Error} ->
             {reply, {error, Error}, Session}
     end;
 
 object_sync_op({?MODULE, remove_member, Id}, _From, Session) ->
     case rm_member(Id, Session) of
-        {ok, Session2} ->
-            Event = make_event(member, removed, #{member_id=>Id}, Session),
-            send_event(Event, without_push, Session),
-            {reply_and_save, ok, Session2};
+        {ok, MemberId, Session2} ->
+            Event = {removed_member, MemberId},
+            Session3 = nkdomain_obj_util:event(Event, Session2),
+            {reply_and_save, ok, Session3};
         {error, Error} ->
             {reply, {error, Error}, Session}
     end;
 
-object_sync_op({?MODULE, register_session, UserId, Link}, _From, Session) ->
-    Session2 = do_register_session(UserId, Link, Session),
-    {reply, ok, Session2};
+object_sync_op({?MODULE, add_session, MemberId, SessId, Meta}, _From, Session) ->
+    case do_add_session(MemberId, SessId, Meta, Session) of
+        {ok, Session2} ->
+            Event = {added_session, MemberId, SessId},
+            Session3 = nkdomain_obj_util:event(Event, Session2),
+            {reply_and_save, ok, Session3};
+        {error, Error} ->
+            {reply, {error, Error}, Session}
+    end;
+
+object_sync_op({?MODULE, remove_session, SessId}, _From, Session) ->
+    case do_rm_session(SessId, Session) of
+        {ok, MemberId, Session2} ->
+            Event = {removed_session, MemberId, SessId},
+            Session3 = nkdomain_obj_util:event(Event, Session2),
+            {reply_and_save, ok, Session3};
+        {error, Error} ->
+            {reply, {error, Error}, Session}
+    end;
 
 object_sync_op(_Op, _From, _Session) ->
     continue.
 
 
 %% @private
-object_async_op({?MODULE, message_created, MsgId, Msg}, Session) ->
-    ?DEBUG("message ~s created", [MsgId], Session),
-    Event = make_event(message, created, Msg#{message_id=>MsgId}, Session),
-    send_event(Event, with_push, Session),
-    {noreply, Session};
-
-object_async_op({?MODULE, message_deleted, MsgId}, Session) ->
-    ?DEBUG("message ~s deleted", [MsgId], Session),
-    Event = make_event(message, deleted, #{message_id=>MsgId}, Session),
-    send_event(Event, without_push, Session),
-    {noreply, Session};
-
-object_async_op({?MODULE, message_updated, MsgId, Msg}, Session) ->
-    ?DEBUG("message ~s updated", [MsgId], Session),
-    Event = make_event(message, updated, Msg#{message_id=>MsgId}, Session),
-    send_event(Event, without_push, Session),
-    {noreply, Session};
+object_async_op({?MODULE, message_event, MsgEvent}, Session) ->
+    Event = case MsgEvent of
+        {created, Msg} -> {message_created, Msg};
+        {deleted, MsgId} -> {message_deleted, MsgId};
+        {updated, Msg} -> {messaged_deleted, Msg}
+    end,
+    {noreply, nkdomain_obj_util:event(Event, Session)};
 
 object_async_op(_Op, _Session) ->
     continue.
 
-
-%% @private
-object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, Session) ->
-    #obj_session{data=#?MODULE{session_pids=Pids, sessions=Sessions}=Data} = Session,
-    case maps:find(Pid, Pids) of
-        {ok, UserId} ->
-            Sessions2 = maps:remove(UserId, Sessions),
-            Pids2 = maps:remove(Pid, Pids),
-            Data2 = Data#?MODULE{sessions=Sessions2, session_pids=Pids2},
-            Session2 = Session#obj_session{data=Data2},
-            {noreply, Session2};
-        error ->
-            continue
-    end;
-
-object_handle_info(_Info, _Session) ->
-    continue.
 
 
 
@@ -327,18 +341,18 @@ sync_op(Srv, Id, Op) ->
 
 %% @private
 find_member(Id, #obj_session{srv_id=SrvId}=Session) ->
-    MemberIds = get_members(Session),
-    case lists:member(Id, MemberIds) of
-        true ->
-            {true, Id};
+    Members = get_members(Session),
+    case lists:keyfind(Id, 1, Members) of
+        {_, Member} ->
+            {true, Id, Member, Members};
         false ->
             case nkdomain_obj_lib:find(SrvId, Id) of
                 #obj_id_ext{obj_id=ObjId} ->
-                    case lists:member(ObjId, MemberIds) of
-                        true ->
-                            {true, ObjId};
+                    case lists:keyfind(ObjId, 1, Members) of
+                        {_, Member} ->
+                            {true, ObjId, Member, Members};
                         false ->
-                            {false, ObjId}
+                            {false, ObjId, Members}
                     end;
                 {error, Error} ->
                     {error, Error}
@@ -346,15 +360,18 @@ find_member(Id, #obj_session{srv_id=SrvId}=Session) ->
     end.
 
 
-
 %% @private
 add_member(Id, Session) ->
     case find_member(Id, Session) of
-        {false, MemberId} ->
-            MemberIds = get_members(Session),
-            Session2 = set_members([MemberId|MemberIds], Session),
-            {ok, MemberId, Session2};
-        {true, _} ->
+        {false, MemberId, Members} ->
+            Member = #{
+                member_id => MemberId,
+                added_time => nklib_util:m_timestamp(),
+                session_ids => []
+            },
+            Members2 = lists:keystore(MemberId, 1, Members, {MemberId, Member}),
+            {ok, MemberId, set_members(Members2, Session)};
+        {true, _, _, _} ->
             {error, member_already_present};
         {error, object_not_found} ->
             {error, member_not_found};
@@ -366,11 +383,14 @@ add_member(Id, Session) ->
 %% @private
 rm_member(Id, Session) ->
     case find_member(Id, Session) of
-        {true, MemberId} ->
-            MemberIds = get_members(Session),
-            Session2 = set_members(MemberIds -- [MemberId], Session),
-            {ok, Session2};
-        {false, _} ->
+        {true, MemberId, Member, Members} ->
+            SessionIds = maps:get(session_ids, Member, []),
+            #obj_session{data=#?MODULE{sessions=SessMetas}=Data} = Session,
+            SessMetas2 = maps:without(SessionIds, SessMetas),
+            Data2 = Data#?MODULE{sessions=SessMetas2},
+            Members2 = lists:keydelete(MemberId, 1, Members),
+            {ok, MemberId, set_members(Members2, Session#obj_session{data=Data2})};
+        {false, _, _} ->
             {error, member_not_found};
         {error, Error} ->
             {error, Error}
@@ -378,107 +398,133 @@ rm_member(Id, Session) ->
 
 
 %% @private
-do_register_session(MemberId, Link, #obj_session{data=Data}=Session) ->
-    #?MODULE{sessions=Sessions, session_pids=Pids} = Data,
-    Pid = nklib_links:get_pid(Link),
-    case maps:is_key(Pid, Pids) of
-        true ->
-            Session;
-        false ->
-            monitor(process, Pid),
-            Sessions2 = Sessions#{MemberId => Link},
-            Pids2 = Pids#{Pid => MemberId},
-            Data2 = Data#?MODULE{sessions=Sessions2, session_pids=Pids2},
-            Session#obj_session{data=Data2}
+do_add_session(Id, SessionId, Meta, Session) ->
+    case find_member(Id, Session) of
+        {true, MemberId, Member, Members} ->
+            SessionIds1 = maps:get(session_ids, Member, []),
+            Session2 = case lists:member(SessionId, SessionIds1) of
+                false ->
+                    SessionIds2 = [SessionId|SessionIds1],
+                    Member2 = Member#{session_ids=>SessionIds2},
+                    Members2 = lists:keystore(MemberId, 1, Members, {MemberId, Member2}),
+                    set_members(Members2, Session);
+                true ->
+                    % It will not set is_dirty
+                    Session
+            end,
+            #obj_session{data=#?MODULE{sessions=SessMetas}=Data} = Session2,
+            Meta2 = Meta#{member_id=>MemberId},
+            SessMetas2 = SessMetas#{SessionId => Meta2},
+            Data2 = Data#?MODULE{sessions=SessMetas2},
+            {ok, Session2#obj_session{data=Data2}};
+        {false, _, _} ->
+            {error, member_not_found};
+        {error, Error} ->
+            {error, Error}
     end.
 
 
 %% @private
-get_members(#obj_session{obj=Obj}) ->
-    #{?CHAT_CONVERSATION:=#{member_ids:=MemberIds}} = Obj,
-    MemberIds.
-
-
-%% @private
-set_members(MemberIds, #obj_session{obj=Obj}=Session) ->
-    #{?CHAT_CONVERSATION:=ChatConv} = Obj,
-    ChatConv2 = ChatConv#{member_ids=>MemberIds},
-    Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, ChatConv2, Obj),
-    Session#obj_session{obj=Obj2, is_dirty=true}.
-
-
-%% @private
-send_event(Event, Push, #obj_session{data=Data}=Session) ->
-    MemberIds = get_members(Session),
-    #?MODULE{sessions=Sessions} = Data,
-    send_event_sessions(maps:to_list(Sessions), Event, Push, Session),
-    case Push of
-        with_push ->
-            send_event_members(MemberIds, Event, Sessions, Session);
-        without_push ->
-            ok
+do_rm_session(SessionId, Session) ->
+    #obj_session{data=#?MODULE{sessions=SessMetas}=Data} = Session,
+    case maps:find(SessionId, SessMetas) of
+        {ok, #{member_id:=MemberId}} ->
+            SessMetas2 = maps:remove(SessionId, SessMetas),
+            Data2 = Data#?MODULE{sessions=SessMetas2},
+            {true, MemberId, Member, Members} = find_member(MemberId, Session),
+            SessionIds1 = maps:get(session_ids, Member, []),
+            SessionIds2 = SessionIds1 -- [SessionId],
+            Member2 = Member#{session_ids=>SessionIds2},
+            Members2 = lists:keystore(MemberId, 1, Members, {MemberId, Member2}),
+            {ok, MemberId, set_members(Members2, Session#obj_session{data=Data2})};
+        error ->
+            {error, session_not_found}
     end.
 
 
 %% @private
-send_event_sessions([], _Event, _Push, _Session) ->
+get_members(#obj_session{data=#?MODULE{members=Members}}) ->
+    Members.
+
+
+%% @private
+set_members(Members, #obj_session{data=#?MODULE{}=Data}=Session) ->
+    Session#obj_session{data=Data#?MODULE{members=Members}, is_dirty=true}.
+
+
+%% @private
+send_to_sessions([], _Event, _Session) ->
     ok;
 
-send_event_sessions([{MemberId, Link}|Rest], Event, Push, #obj_session{srv_id=SrvId}=Session) ->
-    case SrvId:object_session_event(Link, Event) of
-        ok ->
-            ok;
-        {error, Error} ->
-            ?LLOG(notice, "error sending message to session ~s: ~p", [MemberId, Error], Session),
-            case Push of
-                with_push ->
-                    send_push(MemberId, Event, Session);
-                without_push ->
-                    ok
-            end
-    end,
-    send_event_sessions(Rest, Event, Push, Session).
-
-
-%% @private
-send_event_members([], _Event, _Sessions, _Session) ->
-    ok;
-
-send_event_members([MemberId|Rest], Event, Sessions, Session) ->
-    case maps:is_key(MemberId, Sessions) of
-        true ->
-            ok;
-        false ->
-            send_push(MemberId, Event, Session)
-    end,
-    send_event_members(Rest, Event, Sessions, Session).
-
-
-%% @private
-send_push(MemberId, Event, #obj_session{srv_id=SrvId}) ->
-    case SrvId:object_member_event(SrvId, MemberId, Event) of
-        ok ->
-            ok;
-        {error, Error} ->
-            ?LLOG(notice, "error sending push to ~s: ~p", [MemberId], Error)
-    end.
-
-
-%% @private
-make_event(Sub, Type, Body, #obj_session{srv_id=SrvId, obj_id=ObjId}) ->
-    #event{
-        srv_id = SrvId,
-        class = ?CHAT_CONVERSATION,
-        subclass = nklib_util:to_binary(Sub),
-        type = nklib_util:to_binary(Type),
-        obj_id = ObjId,
-        body = Body
-    }.
+send_to_sessions([{MemberId, Member}|Rest], Event, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
+    #obj_session{data=#?MODULE{sessions=SessMetas}} = Session,
+    SessionIds1 = maps:get(session_ids, Member, []),
+    SessionIds2 = [{Id, maps:get(Id, SessMetas, #{})} || Id <- SessionIds1],
+    nkchat_session_obj:conversation_event(SrvId, ConvId, MemberId, SessionIds2, Event),
+    send_to_sessions(Rest, Event, Session).
 
 
 %% @private
 add_user(SrvId, UserId, Data) ->
     case nkdomain_user_obj:get_name(SrvId, UserId) of
-        {ok, User} -> Data#{user=>User};
+        {ok, User} -> Data#{user=>User#{obj_id=>UserId}};
         {error, _} -> Data#{user=>#{}}
     end.
+
+
+
+%%%% @private
+%%send_event(Event, Push, #obj_session{data=Data}=Session) ->
+%%    Members = get_members(Session),
+%%    #?MODULE{sessions=Sessions} = Data,
+%%    send_event_sessions(maps:to_list(Sessions), Event, Push, Session),
+%%    case Push of
+%%        with_push ->
+%%            send_event_members(Members, Event, Sessions, Session);
+%%        without_push ->
+%%            ok
+%%    end.
+
+
+%%%% @private
+%%send_event_sessions([], _Event, _Push, _Session) ->
+%%    ok;
+%%
+%%send_event_sessions([{MemberId, Link}|Rest], Event, Push, #obj_session{srv_id=SrvId}=Session) ->
+%%    case SrvId:object_session_event(Link, Event) of
+%%        ok ->
+%%            ok;
+%%        {error, Error} ->
+%%            ?LLOG(notice, "error sending message to session ~s: ~p", [MemberId, Error], Session),
+%%            case Push of
+%%                with_push ->
+%%                    send_push(MemberId, Event, Session);
+%%                without_push ->
+%%                    ok
+%%            end
+%%    end,
+%%    send_event_sessions(Rest, Event, Push, Session).
+%%
+%%
+%%%% @private
+%%send_event_members([], _Event, _Sessions, _Session) ->
+%%    ok;
+%%
+%%send_event_members([MemberId|Rest], Event, Sessions, Session) ->
+%%    case maps:is_key(MemberId, Sessions) of
+%%        true ->
+%%            ok;
+%%        false ->
+%%            send_push(MemberId, Event, Session)
+%%    end,
+%%    send_event_members(Rest, Event, Sessions, Session).
+%%
+%%
+%%%% @private
+%%send_push(MemberId, Event, #obj_session{srv_id=SrvId}) ->
+%%    case SrvId:object_member_event(SrvId, MemberId, Event) of
+%%        ok ->
+%%            ok;
+%%        {error, Error} ->
+%%            ?LLOG(notice, "error sending push to ~s: ~p", [MemberId], Error)
+%%    end.

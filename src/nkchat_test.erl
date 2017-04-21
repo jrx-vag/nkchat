@@ -240,7 +240,7 @@ session1(Pid, Ref) ->
         <<"is_enabled">> := true
     } = Conv2,
     false = maps:is_key(<<"_unread_count">>, Conv2),
-    {ok, #{<<"conversations">>:=[CL1, CL2]}} = cmd_session(Pid, get_all_conversations, #{}),
+    {ok, #{<<"conversations">>:=[_CL1, _CL2]}} = cmd_session(Pid, get_all_conversations, #{}),
 %%    true = lists:sort([Conv1, Conv2]) == lists:sort([CL1, CL2]),
 
     % Send msg to C2, U1 and U2 receive push

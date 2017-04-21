@@ -15,11 +15,18 @@
 login() ->
     nkdomain_sample:login("/chattest/users/u1", "p1").
 
+
+
+
+
 domain_find_convs() ->
     cmd(domain, find_all_childs, #{type=>?CHAT_CONVERSATION, sort=>[type, path]}).
 
 
 
+conv_subs() ->
+    {ok, _, UserId, _, _} = nkdomain:find("/chattest/users/u1"),
+    cmd(event, subscribe, #{class=>domain, subclass=>conversation, obj_id=>UserId}).
 
 
 conv_create(Domain, Name, Desc) ->
