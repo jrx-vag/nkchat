@@ -220,10 +220,11 @@ object_send_event(Event, Session) ->
     nkchat_conversation_events:event(Event, Session).
 
 
-%% @private
-object_event(Event, #obj_session{data=Data}=Session) ->
-    #?MODULE{members=Members} = Data,
-    send_to_sessions(Members, Event, Session),
+%% @private Send every event to my sessions
+object_event(Event, #obj_session{srv_id=SrvId, obj_id=ConvId, data=Data}=Session) ->
+    #?MODULE{sessions=SessMetas1} = Data,
+    SessMetas2 = maps:to_list(SessMetas1),
+    nkchat_session_obj:conversation_event(SrvId, Event, ConvId, SessMetas2),
     {ok, Session}.
 
 
@@ -452,16 +453,16 @@ set_members(Members, #obj_session{data=#?MODULE{}=Data}=Session) ->
     Session#obj_session{data=Data#?MODULE{members=Members}, is_dirty=true}.
 
 
-%% @private
-send_to_sessions([], _Event, _Session) ->
-    ok;
-
-send_to_sessions([{MemberId, Member}|Rest], Event, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
-    #obj_session{data=#?MODULE{sessions=SessMetas}} = Session,
-    SessionIds1 = maps:get(session_ids, Member, []),
-    SessionIds2 = [{Id, maps:get(Id, SessMetas, #{})} || Id <- SessionIds1],
-    nkchat_session_obj:conversation_event(SrvId, ConvId, MemberId, SessionIds2, Event),
-    send_to_sessions(Rest, Event, Session).
+%%%% @private
+%%send_to_sessions([], _Event, _Session) ->
+%%    ok;
+%%
+%%send_to_sessions([{SessId, Meta}|Rest], Event, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
+%%    #obj_session{data=#?MODULE{sessions=SessMetas}} = Session,
+%%    SessionIds1 = maps:get(session_ids, Member, []),
+%%    SessionIds2 = [{Id, maps:get(Id, SessMetas, #{})} || Id <- SessionIds1],
+%%    nkchat_session_obj:conversation_event(SrvId, ConvId, SessionIds2, Event),
+%%    send_to_sessions(Rest, Event, Session).
 
 
 %% @private

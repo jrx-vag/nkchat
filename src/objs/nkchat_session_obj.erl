@@ -25,7 +25,7 @@
 
 -export([create/2, find/2, start/3, stop/2, get_all_conversations/2, get_conversation/3]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
--export([conversation_event/5]).
+-export([conversation_event/4]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 -export([object_init/1, object_start/1, object_stop/2, object_save/1,
@@ -36,7 +36,7 @@
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
--include_lib("nkservice/include/nkservice.hrl").
+-include_lib("nkevent/include/nkevent.hrl").
 
 
 %% Period to find for inactive conversations
@@ -144,8 +144,48 @@ set_active_conversation(Srv, Id, ConvId) ->
 
 
 %% @doc
-conversation_event(_SrvId, ConvId, MemberId, Sessions, Event) ->
-    lager:notice("SESS EVENT (~s, ~s, ~p) ~p", [ConvId, MemberId, Event, Sessions]).
+conversation_event(_SrvId, _Event, _ConvId, []) ->
+    ok;
+
+conversation_event(SrvId, Event, ConvId, Sessions) ->
+    case find_online(Sessions, []) of
+        [] ->
+            conversation_event_offline(SrvId, Event, ConvId);
+        Pids ->
+            conversation_event_online(SrvId, Event, ConvId, Pids)
+    end,
+    ok.
+
+
+%% @private
+conversation_event_offline(_SrvId, Event, ConvId) ->
+    lager:error("Chat session offline for ~s/~s: ~p", [ConvId, Event]).
+
+
+%% @private
+conversation_event_online(_SrvId, _Event, _ConvId, []) ->
+    ok;
+
+conversation_event_online(SrvId, Event, ConvId, [Pid|Rest]) ->
+    lager:error("Chat session online for ~s: ~p", [ConvId, Event]),
+    nkdomain_obj:async_op(Pid, {?MODULE, conversation_event, ConvId, Event}),
+    conversation_event_online(SrvId, Event, ConvId, Rest).
+
+
+
+%% @private
+find_online([], Acc) ->
+    Acc;
+
+find_online([{SessId, _Meta}|Rest], Acc) ->
+    Acc2 = case nkdomain_obj_lib:find_loaded(SessId) of
+        #obj_id_ext{pid=Pid} ->
+            [Pid|Acc];
+        not_found ->
+            Acc
+    end,
+    find_online(Rest, Acc2).
+
 
 
 
@@ -338,70 +378,92 @@ object_sync_op(_Op, _From, _Session) ->
 
 
 %% @private
-object_async_op({?MODULE, conversation_event,
-                #event{subclass = <<"message">>, type = <<"created">>}=Event}, Session) ->
-    #event{obj_id=ConvId, body = #{message_id:=MsgId, created_time:=Time}=Body} = Event,
-    Active = get_active(Session),
-    case get_conv(ConvId, Session) of
-        {ok, ConvId, Conv, SessConv} when Active==ConvId ->
-            ?DEBUG("message event for active conversation", [], Session),
-            Body2 = Body#{conversation_id=>ConvId},
-            Event2 = session_event(?CHAT_CONVERSATION, <<"message_created">>, Body2, Session),
-            ?MODULE:send_api_event(Event2, Session),
-            Conv2 = Conv#{
-                last_delivered_message_id => MsgId,
-                last_delivered_message_time => Time
-            },
-            Session2 = update_conv(ConvId, Conv2, SessConv, Session),
-            ?DEBUG("set last message for conversation ~s", [ConvId], Session),
-            {noreply, Session2};
-        {ok, ConvId, Conv, SessConv} ->
-            ?DEBUG("message event for NOT active conversation", [], Session),
-            Count = maps:get(unread_count, SessConv, 0) + 1,
-            SessConv2 = SessConv#{unread_count=>Count},
-            Session2 = update_conv(ConvId, Conv, SessConv2, Session),
-            Body2 = #{conversation_id=>ConvId, counter=>Count},
-            Event2 = session_event(?CHAT_CONVERSATION, <<"unread_counter">>, Body2, Session),
-            ?MODULE:send_api_event(Event2, Session2),
-            {noreply, Session2};
-        not_found ->
-            ?LLOG(warning, "received event for unknown conversation", [], Session),
-            {noreply, Session}
-    end;
-
-object_async_op({?MODULE, conversation_event, #event{subclass = <<"message">>, type=Type}=Event}, Session)
-        when Type == <<"updated">>; Type == <<"deleted">> ->
-    #event{type=Type, obj_id=ConvId, body=Body} = Event,
-    case get_active(Session) of
-        ConvId ->
-            Type2 = case Type of
-                <<"updated">> -> <<"message_updated">>;
-                <<"deleted">> -> <<"message_deleted">>
-            end,
-            Body2 = Body#{conversation_id=>ConvId},
-            Event2 = session_event(?CHAT_CONVERSATION, Type2, Body2, Session),
-            ?MODULE:send_api_event(Event2, Session);
+object_async_op({?MODULE, conversation_event, ConvId, Event}, Session) ->
+    Active = case Session of
+        #obj_session{data=#?MODULE{active_id=ConvId}} -> active;
+        _ -> not_active
+    end,
+    Event2 = case Event of
+        {added_member, MemberId} ->
+            {added_member, ConvId, Active, MemberId};
+        {removed_member, MemberId} ->
+            {added_member, ConvId, Active, MemberId};
         _ ->
-            ok
+            ignore
+    end,
+    case Event2 of
+        ignore ->
+            ok;
+        _ ->
+            nkdomain_obj_util:event(Event2, Session)
     end,
     {noreply, Session};
 
-object_async_op({?MODULE, conversation_event, #event{subclass = <<"member">>, type=Type}=Event}, Session)
-        when Type == <<"added">>; Type == <<"removed">> ->
-    #event{type=Type, obj_id=ConvId, body=Body} = Event,
-    case get_active(Session) of
-        ConvId ->
-            Type2 = case Type of
-                <<"added">> -> <<"member_added">>;
-                <<"removed">> -> <<"member_removed">>
-            end,
-            Body2 = Body#{conversation_id=>ConvId},
-            Event2 = session_event(?CHAT_CONVERSATION, Type2, Body2, Session),
-            ?MODULE:send_api_event(Event2, Session);
-        _ ->
-            ok
-    end,
-    {noreply, Session};
+
+%%object_async_op({?MODULE, conversation_event,
+%%                #event{subclass = <<"message">>, type = <<"created">>}=Event}, Session) ->
+%%    #event{obj_id=ConvId, body = #{message_id:=MsgId, created_time:=Time}=Body} = Event,
+%%    Active = get_active(Session),
+%%    case get_conv(ConvId, Session) of
+%%        {ok, ConvId, Conv, SessConv} when Active==ConvId ->
+%%            ?DEBUG("message event for active conversation", [], Session),
+%%            Body2 = Body#{conversation_id=>ConvId},
+%%            Event2 = session_event(?CHAT_CONVERSATION, <<"message_created">>, Body2, Session),
+%%            ?MODULE:send_api_event(Event2, Session),
+%%            Conv2 = Conv#{
+%%                last_delivered_message_id => MsgId,
+%%                last_delivered_message_time => Time
+%%            },
+%%            Session2 = update_conv(ConvId, Conv2, SessConv, Session),
+%%            ?DEBUG("set last message for conversation ~s", [ConvId], Session),
+%%            {noreply, Session2};
+%%        {ok, ConvId, Conv, SessConv} ->
+%%            ?DEBUG("message event for NOT active conversation", [], Session),
+%%            Count = maps:get(unread_count, SessConv, 0) + 1,
+%%            SessConv2 = SessConv#{unread_count=>Count},
+%%            Session2 = update_conv(ConvId, Conv, SessConv2, Session),
+%%            Body2 = #{conversation_id=>ConvId, counter=>Count},
+%%            Event2 = session_event(?CHAT_CONVERSATION, <<"unread_counter">>, Body2, Session),
+%%            ?MODULE:send_api_event(Event2, Session2),
+%%            {noreply, Session2};
+%%        not_found ->
+%%            ?LLOG(warning, "received event for unknown conversation", [], Session),
+%%            {noreply, Session}
+%%    end;
+%%
+%%object_async_op({?MODULE, conversation_event, #event{subclass = <<"message">>, type=Type}=Event}, Session)
+%%        when Type == <<"updated">>; Type == <<"deleted">> ->
+%%    #event{type=Type, obj_id=ConvId, body=Body} = Event,
+%%    case get_active(Session) of
+%%        ConvId ->
+%%            Type2 = case Type of
+%%                <<"updated">> -> <<"message_updated">>;
+%%                <<"deleted">> -> <<"message_deleted">>
+%%            end,
+%%            Body2 = Body#{conversation_id=>ConvId},
+%%            Event2 = session_event(?CHAT_CONVERSATION, Type2, Body2, Session),
+%%            ?MODULE:send_api_event(Event2, Session);
+%%        _ ->
+%%            ok
+%%    end,
+%%    {noreply, Session};
+%%
+%%object_async_op({?MODULE, conversation_event, #event{subclass = <<"member">>, type=Type}=Event}, Session)
+%%        when Type == <<"added">>; Type == <<"removed">> ->
+%%    #event{type=Type, obj_id=ConvId, body=Body} = Event,
+%%    case get_active(Session) of
+%%        ConvId ->
+%%            Type2 = case Type of
+%%                <<"added">> -> <<"member_added">>;
+%%                <<"removed">> -> <<"member_removed">>
+%%            end,
+%%            Body2 = Body#{conversation_id=>ConvId},
+%%            Event2 = session_event(?CHAT_CONVERSATION, Type2, Body2, Session),
+%%            ?MODULE:send_api_event(Event2, Session);
+%%        _ ->
+%%            ok
+%%    end,
+%%    {noreply, Session};
 
 object_async_op({?MODULE, conversation_event, Event}, Session) ->
     ?LLOG(warning, "unexpected conversation event: ~p", [Event], Session),
@@ -484,8 +546,12 @@ link_conv(ConvId, #obj_session{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) -
     },
     case nkdomain_obj_lib:load(SrvId, ConvId, Opts) of
         #obj_id_ext{obj_id=ConvObjId, pid=Pid} ->
-            ok = nkchat_conversation_obj:add_session(Pid, UserId, SessId),
-            {ok, ConvObjId};
+            case nkchat_conversation_obj:add_session(Pid, UserId, SessId, #{}) of
+                ok ->
+                    {ok, ConvObjId};
+                {error, Error} ->
+                    {error, Error}
+            end;
         {error, Error} ->
             {error, Error}
     end.
@@ -553,9 +619,9 @@ get_conv_extra_info(ConvId, #obj_session{srv_id=SrvId}=Session) ->
     end.
 
 
-%% @private
-get_active(#obj_session{data=#?MODULE{active_id=Active}}) ->
-    Active.
+%%%% @private
+%%get_active(#obj_session{data=#?MODULE{active_id=Active}}) ->
+%%    Active.
 
 
 %% @private
@@ -644,7 +710,7 @@ send_api_event(Event, #obj_session{data=Data}) ->
 
 %% @private
 session_event(Sub, Type, Body, #obj_session{srv_id=SrvId, obj_id=ObjId}) ->
-    #event{
+    #nkevent{
         srv_id = SrvId,
         class = ?CHAT_SESSION,
         subclass = Sub,
