@@ -100,5 +100,5 @@ cmd('', list, Data, #{srv_id:=SrvId}=State) ->
     end;
 
 cmd(Sub, Cmd, Data, State) ->
-    nkdomain_api_util:cmd_common(Sub, Cmd, Data, ?CHAT_CONVERSATION, State).
+    nkdomain_obj_api:api(Sub, Cmd, Data, ?CHAT_CONVERSATION, State).
 

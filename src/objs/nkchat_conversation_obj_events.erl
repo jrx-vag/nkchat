@@ -20,28 +20,11 @@
 
 %% @doc Conversation Object
 
--module(nkchat_conversation_events).
+-module(nkchat_conversation_obj_events).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
-
 -export([event/2]).
--export_type([events/0]).
 
 -include_lib("nkdomain/include/nkdomain.hrl").
-
-%% ===================================================================
-%% Types
-%% ===================================================================
-
-
--type events() ::
-    {message_created, nkdomain:obj()} |
-    {message_updated, nkdomain:obj()} |
-    {message_deleted, nkdomain:obj_id()} |
-    {added_member, nkdomain:obj_id()} |
-    {removed_member, nkdomain:obj_id()} |
-    {added_session, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
-    {removed_session, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()}.
-
 
 %% ===================================================================
 %% Public
@@ -62,9 +45,15 @@ event({added_member, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
     nkdomain_obj_lib:send_event(added_to_conversation, MemberId, #{conversation_id=>ConvId}, Session),
     {event, added_member, #{member_id=>MemberId}, Session};
 
+event({added_to_conversation, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
+    {event, added_to_conversation, MemberId, #{conversation_id=>ConvId}, Session};
+
 event({removed_member, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
     nkdomain_obj_lib:send_event(removed_from_conversation, MemberId, #{conversation_id=>ConvId}, Session),
     {event, removed_member, #{member_id=>MemberId}, Session};
+
+event({removed_from_conversation, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
+    {event, removed_from_conversation, MemberId, #{conversation_id=>ConvId}, Session};
 
 event({added_session, UserId, SessId}, Session) ->
     {event, added_session, #{member_id=>UserId, session_id=>SessId}, Session};

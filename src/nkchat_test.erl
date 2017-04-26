@@ -34,16 +34,15 @@
 test() ->
 
     clear(),
-    Ref = make_ref(),
-    Pid = login("admin", ?ADMIN_PASS, Ref),
+    Ref1 = make_ref(),
+    Pid = login("admin", ?ADMIN_PASS, Ref1),
     ok = create(Pid),
-    ok = base_msgs(Pid, Ref).
-%%    nkapi_client:stop(Pid),
-%%    Pid2 = login("/chattest/users/u1", "p1"),
-%%    session1(Pid2, Ref),
-%%    unmock_push(),
-%%    unmock_session(),
-%%    lager:notice("Chat test ok!").
+    ok = base_msgs(Pid, Ref1),
+    nkapi_client:stop(Pid),
+    Ref2 = make_ref(),
+    Pid2 = login("/chattest/users/u1", "p1", Ref2),
+    session1(Pid2, Ref2),
+    lager:notice("Chat test ok!").
 
 
 
@@ -149,39 +148,27 @@ create(Pid) ->
 
 %% Send messages to conversations without sessions, notifications are not sent (but events can be used)
 base_msgs(Pid, Ref) ->
-%%    mock_push(Ref),
-
     {ok, #{}} = cmd(Pid, event, subscribe, #{class=>domain, subclass=>conversation,
                     type=>[message_created, message_deleted]}),
 
-    {ok, _, U1, _, _} = nkdomain:find(root, "/chattest/users/u1"),
-    {ok, _, U2, _, _} = nkdomain:find(root, "/chattest/users/u2"),
-    {ok, _, U3, _, _} = nkdomain:find(root, "/chattest/users/u3"),
     {ok, _, C1, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv1">>),
     {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
     {ok, _, C3, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv3">>),
     BC1 = #{conversation_id=><<"/chattest/conversations/conv1">>},
     BC2 = #{conversation_id=><<"/chattest/conversations/conv2">>},
-    BC3 = #{conversation_id=><<"/chattest/conversations/conv3">>},
 
+    % We send a message to a conversation without sessions, only the event is sent
     {ok, #{<<"obj_id">>:=M1}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_1}}),
-%%    {A1, C1, M1, _, <<"msgC1_1">>} = wait_push(Ref),
-%%    {A2, C1, M1, _, <<"msgC1_1">>} = wait_push(Ref),
-%%    {A3, C1, M1, _, <<"msgC1_1">>} = wait_push(Ref),
-%%    true = lists:sort([U1, U2, U3]) == lists:sort([A1, A2, A3]),
-%%
-%%    {ok, #{<<"obj_id">>:=M2}} = cmd_message(Pid, create, BC2#{?CHAT_MESSAGE => #{text=>msgC2_1}}),
-%%    {A4, C2, M2, _, <<"msgC2_1">>} = wait_push(Ref),
-%%    {A5, C2, M2, _, <<"msgC2_1">>} = wait_push(Ref),
-%%    true = lists:sort([U1, U2]) == lists:sort([A4, A5]),
-%%
-%%    {ok, #{<<"obj_id">>:=M3}} = cmd_message(Pid, create, BC3#{?CHAT_MESSAGE => #{text=>msgC3_1}}),
-%%    {A6, C3, M3, _, <<"msgC3_1">>} = wait_push(Ref),
-%%    {A7, C3, M3, _, <<"msgC3_1">>} = wait_push(Ref),
-%%    true = lists:sort([U2, U3]) == lists:sort([A6, A7]),
-%%    {ok, #{<<"obj_id">>:=M4}} = cmd_message(Pid, create, BC3#{?CHAT_MESSAGE => #{text=>msgC3_2}}),
-%%    {A6, C3, M4, _, <<"msgC3_2">>} = wait_push(Ref),
-%%    {A7, C3, M4, _, <<"msgC3_2">>} = wait_push(Ref),
+    #nkevent{subclass = ?CHAT_CONVERSATION, type = <<"message_created">>, obj_id=C1, body=#{<<"message_id">>:=M1}} =
+        wait_event(Ref),
+
+    {ok, #{<<"obj_id">>:=M2}} = cmd_message(Pid, create, BC2#{?CHAT_MESSAGE => #{text=>msgC2_1}}),
+    #nkevent{subclass = ?CHAT_CONVERSATION, type = <<"message_created">>, obj_id=C2, body=#{<<"message_id">>:=M2}} =
+        wait_event(Ref),
+
+    {ok, #{}} = cmd_message(Pid, delete, #{id=>M2}),
+    #nkevent{subclass = ?CHAT_CONVERSATION, type = <<"message_deleted">>, obj_id=C2, body=#{<<"message_id">>:=M2}} =
+        wait_event(Ref),
     ok.
 
 
@@ -197,176 +184,176 @@ session1(Pid, Ref) ->
     {ok, #{<<"obj_id">>:=S, <<"conversations">>:=[]}} = cmd_session(Pid, start, #{id=>S}),
     {ok, _, _, _, SPid} = nkdomain:find(root, S),
 
-    % Start C1 and C3
+    % Adds C1 and C3
     {ok, #{<<"conversation_id">>:=C1}} =
         cmd_session(Pid, add_conversation, #{conversation_id=>"/chattest/conversations/conv1"}),
     {ok, #{<<"conversation_id">>:=C3}} =
         cmd_session(Pid, add_conversation, #{conversation_id=>"/chattest/conversations/conv3"}),
-    {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
 
-    BC1 = #{conversation_id=><<"/chattest/conversations/conv1">>},
-    BC2 = #{conversation_id=><<"/chattest/conversations/conv2">>},
-    BC3 = #{conversation_id=>C3},
-    {ok, _, U1, _, _} = nkdomain:find(root, "/chattest/users/u1"),
-    {ok, _, U2, _, _} = nkdomain:find(root, "/chattest/users/u2"),
-    {ok, _, U3, _, _} = nkdomain:find(root, "/chattest/users/u3"),
-
-    mock_session(Ref),
-
-    % Send a message to C1, U1 receives an updated counter, U2 and U3 receive push
-    {ok, #{<<"obj_id">>:=M1}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_2}}),
-    {counter, S, C1, 1} = wait_session(Ref),
-    {A1, C1, M1, _, <<"msgC1_2">>} = wait_push(Ref),
-    {A2, C1, M1, _, <<"msgC1_2">>} = wait_push(Ref),
-    true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
-
-    {ok, #{<<"obj_id">>:=M2}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_3}}),
-    {counter, S, C1, 2} = wait_session(Ref),
-    {A1, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
-    {A2, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
-    true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
-
-    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M1}),
-    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M2}),
-
-    {ok, Conv1} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
-    #{
-        <<"obj_id">> := C1,
-%%        <<"name">> := <<"conv1">>,
-        <<"description">> := <<"Conv 1">>,
-        <<"last_active_time">> := 0,
-        <<"last_delivered_message_id">> := <<>>,
-        <<"last_delivered_message_time">> := _,
-        <<"unread_count">> := 2,
-        <<"is_enabled">> := true
-    } = Conv1,
-
-    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, get_conversation, #{conversation_id=>C2}),
-
-    {ok, Conv2} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
-    #{
-        <<"obj_id">> := C3,
-%%        <<"name">> := <<"conv3">>,
-        <<"description">> := <<"Conv 3">>,
-        <<"last_active_time">> := 0,
-        <<"last_delivered_message_id">> := <<>>,
-        <<"last_delivered_message_time">> := _,
-        <<"is_enabled">> := true
-    } = Conv2,
-    false = maps:is_key(<<"_unread_count">>, Conv2),
-    {ok, #{<<"conversations">>:=[_CL1, _CL2]}} = cmd_session(Pid, get_all_conversations, #{}),
-%%    true = lists:sort([Conv1, Conv2]) == lists:sort([CL1, CL2]),
-
-    % Send msg to C2, U1 and U2 receive push
-    {ok, #{<<"obj_id">>:=M3}} = cmd_message(Pid, create, BC2#{?CHAT_MESSAGE => #{text=>msgC2_2}}),
-    {A3, C2, M3, _, <<"msgC2_2">>} = wait_push(Ref),
-    {A4, C2, M3, _, <<"msgC2_2">>} = wait_push(Ref),
-    true = lists:sort([U1, U2]) == lists:sort([A3, A4]),
-
-    % Send msg to C3, U2 receive push, U1 has a session and receives counter event
-    {ok, #{<<"obj_id">>:=M4}} = cmd_message(Pid, create, BC3#{?CHAT_MESSAGE => #{text=>msgC3_3}}),
-    {counter, S, C3, 1} = wait_session(Ref),
-    {A5, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
-    {A6, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
-    true = lists:sort([U2, U3]) == lists:sort([A5, A6]),
-
-    % If we stop the session, we receive pushes again. We we start it back, counters are regenerated
-    {ok, #{}} = cmd_session(Pid, stop, #{}),
-
-
-    session_stopped = wait_session(Ref),
-    timer:sleep(1000),
-    false = is_process_alive(SPid),
-    % Send msg to C3
-    {ok, #{<<"obj_id">>:=M5}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_4}}),
-    {A7, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
-    {A8, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
-    {A9, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
-    true = lists:sort([U1, U2, U3]) == lists:sort([A7, A8, A9]),
-    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M5}),
-    {ok, #{<<"conversations">>:=[CL3, CL4]}} = cmd_session(Pid, start, #{id=>S}),
-
-    {ok, Conv3} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
-    #{
-        <<"obj_id">> := C1,
-        <<"last_active_time">> := 0,
-        <<"last_delivered_message_id">> := <<>>,
-        <<"last_delivered_message_time">> := _,
-        <<"unread_count">> := 3,
-        <<"is_enabled">> := true
-    } = Conv3,
-
-    {ok, Conv4} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
-    #{
-        <<"obj_id">> := C3,
-        <<"last_active_time">> := 0,
-        <<"last_delivered_message_id">> := <<>>,
-        <<"last_delivered_message_time">> := _,
-        <<"unread_count">> := 1,
-        <<"is_enabled">> := true
-    } = Conv4,
-    {ok, #{<<"conversations">>:=[CL3, CL4]}} = cmd_session(Pid, get_all_conversations, #{}),
-%%    true = lists:sort([Conv3, Conv4]) == lists:sort([CL3, CL4]),
-
-    % Now we activate C1, and send a message, that must be received. Counters should be reset.
-    {ok, Conv5} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C1}),
-    #{
-        <<"obj_id">> := C1,
+%%    {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
+%%    BC1 = #{conversation_id=><<"/chattest/conversations/conv1">>},
+%%    BC2 = #{conversation_id=><<"/chattest/conversations/conv2">>},
+%%    BC3 = #{conversation_id=>C3},
+%%    {ok, _, U1, _, _} = nkdomain:find(root, "/chattest/users/u1"),
+%%    {ok, _, U2, _, _} = nkdomain:find(root, "/chattest/users/u2"),
+%%    {ok, _, U3, _, _} = nkdomain:find(root, "/chattest/users/u3"),
+%%
+%%    mock_session(Ref),
+%%
+%%    % Send a message to C1, U1 receives an updated counter, U2 and U3 receive push
+%%    {ok, #{<<"obj_id">>:=M1}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_2}}),
+%%    {counter, S, C1, 1} = wait_session(Ref),
+%%    {A1, C1, M1, _, <<"msgC1_2">>} = wait_push(Ref),
+%%    {A2, C1, M1, _, <<"msgC1_2">>} = wait_push(Ref),
+%%    true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
+%%
+%%    {ok, #{<<"obj_id">>:=M2}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_3}}),
+%%    {counter, S, C1, 2} = wait_session(Ref),
+%%    {A1, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
+%%    {A2, C1, M2, _, <<"msgC1_3">>} = wait_push(Ref),
+%%    true = lists:sort([U2, U3]) == lists:sort([A1, A2]),
+%%
+%%    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M1}),
+%%    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M2}),
+%%
+%%    {ok, Conv1} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
+%%    #{
+%%        <<"obj_id">> := C1,
+%%%%        <<"name">> := <<"conv1">>,
+%%        <<"description">> := <<"Conv 1">>,
 %%        <<"last_active_time">> := 0,
-        <<"last_delivered_message_id">> := <<>>,
-        <<"last_delivered_message_time">> := _,
-        <<"unread_count">> := 3
-    } = Conv5,
-    {ok, #{<<"obj_id">>:=M6}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_5}}),
-    {created, S, C1, M6, _, <<"msgC1_5">>} = wait_session(Ref),
-    {A10, C1, M6, T1, <<"msgC1_5">>} = wait_push(Ref),
-    {A11, C1, M6, _, <<"msgC1_5">>} = wait_push(Ref),
-    true = lists:sort([U2, U3]) == lists:sort([A10, A11]),
-
-    {ok, Conv6} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
-    #{
-        <<"obj_id">> := C1,
-        <<"last_active_time">> := _T2,
-        <<"last_delivered_message_id">> := M6,
-        <<"last_delivered_message_time">> := T1,
-        <<"unread_count">> := 0,
-        <<"is_enabled">> := true
-    } = Conv6,
-    {ok, Conv4} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
-
-    % Lets update a message in C1, we should receive only session update
-    {ok, #{}} = cmd_message(Pid, update, #{id=>M5, ?CHAT_MESSAGE => #{text=>msgC1_5B}}),
-    {updated, S, C1, M5, _, <<"msgC1_5B">>} = wait_session(Ref),
-
-    % Lets delete a message in C1, we should receive only session update
-    {ok, #{}} = cmd_message(Pid, delete, #{id=>M5}),
-    {deleted, S, C1, M5} = wait_session(Ref),
-
-    % Lets add and remove an user to C3, since it is not active nothing happens
-    {ok, #{<<"member_obj_id">>:=<<"admin">>}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>admin}),
-    {ok, #{}} = cmd_conversation(Pid, remove_member, #{id=>C3, member_id=>admin}),
-
-    % Lets activate C3 and repeat
-    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C2}),
-    {ok, _} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C3}),
-    {ok, #{<<"member_obj_id">>:=<<"admin">>}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>admin}),
-    {member_added, S, C3, <<"admin">>} = wait_session(Ref),
-    {ok, #{}} = cmd_conversation(Pid, remove_member, #{id=>C3, member_id=><<"admin">>}),
-    {member_removed, S, C3, <<"admin">>} = wait_session(Ref),
-
-    % Lets add and remove conversations
-    % Start C1 and C3
-    {ok, #{<<"conversation_id">>:=C2}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
-    {error, {<<"conversation_is_already_member">>, _}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
-    {conversation_added, S, C2} = wait_session(Ref),
-    {ok, #{}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
-    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
-    {conversation_removed, S, C2} = wait_session(Ref),
-
-    {ok, #{}} = cmd_session(Pid, stop, #{}),
-    session_stopped = wait_session(Ref),
-    flush(),
-    false = is_process_alive(SPid),
+%%        <<"last_delivered_message_id">> := <<>>,
+%%        <<"last_delivered_message_time">> := _,
+%%        <<"unread_count">> := 2,
+%%        <<"is_enabled">> := true
+%%    } = Conv1,
+%%
+%%    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, get_conversation, #{conversation_id=>C2}),
+%%
+%%    {ok, Conv2} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
+%%    #{
+%%        <<"obj_id">> := C3,
+%%%%        <<"name">> := <<"conv3">>,
+%%        <<"description">> := <<"Conv 3">>,
+%%        <<"last_active_time">> := 0,
+%%        <<"last_delivered_message_id">> := <<>>,
+%%        <<"last_delivered_message_time">> := _,
+%%        <<"is_enabled">> := true
+%%    } = Conv2,
+%%    false = maps:is_key(<<"_unread_count">>, Conv2),
+%%    {ok, #{<<"conversations">>:=[_CL1, _CL2]}} = cmd_session(Pid, get_all_conversations, #{}),
+%%%%    true = lists:sort([Conv1, Conv2]) == lists:sort([CL1, CL2]),
+%%
+%%    % Send msg to C2, U1 and U2 receive push
+%%    {ok, #{<<"obj_id">>:=M3}} = cmd_message(Pid, create, BC2#{?CHAT_MESSAGE => #{text=>msgC2_2}}),
+%%    {A3, C2, M3, _, <<"msgC2_2">>} = wait_push(Ref),
+%%    {A4, C2, M3, _, <<"msgC2_2">>} = wait_push(Ref),
+%%    true = lists:sort([U1, U2]) == lists:sort([A3, A4]),
+%%
+%%    % Send msg to C3, U2 receive push, U1 has a session and receives counter event
+%%    {ok, #{<<"obj_id">>:=M4}} = cmd_message(Pid, create, BC3#{?CHAT_MESSAGE => #{text=>msgC3_3}}),
+%%    {counter, S, C3, 1} = wait_session(Ref),
+%%    {A5, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
+%%    {A6, C3, M4, _, <<"msgC3_3">>} = wait_push(Ref),
+%%    true = lists:sort([U2, U3]) == lists:sort([A5, A6]),
+%%
+%%    % If we stop the session, we receive pushes again. We we start it back, counters are regenerated
+%%    {ok, #{}} = cmd_session(Pid, stop, #{}),
+%%
+%%
+%%    session_stopped = wait_session(Ref),
+%%    timer:sleep(1000),
+%%    false = is_process_alive(SPid),
+%%    % Send msg to C3
+%%    {ok, #{<<"obj_id">>:=M5}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_4}}),
+%%    {A7, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
+%%    {A8, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
+%%    {A9, C1, M5, _, <<"msgC1_4">>} = wait_push(Ref),
+%%    true = lists:sort([U1, U2, U3]) == lists:sort([A7, A8, A9]),
+%%    {ok, #{}} = cmd_message(Pid, wait_for_save, #{id=>M5}),
+%%    {ok, #{<<"conversations">>:=[CL3, CL4]}} = cmd_session(Pid, start, #{id=>S}),
+%%
+%%    {ok, Conv3} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
+%%    #{
+%%        <<"obj_id">> := C1,
+%%        <<"last_active_time">> := 0,
+%%        <<"last_delivered_message_id">> := <<>>,
+%%        <<"last_delivered_message_time">> := _,
+%%        <<"unread_count">> := 3,
+%%        <<"is_enabled">> := true
+%%    } = Conv3,
+%%
+%%    {ok, Conv4} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
+%%    #{
+%%        <<"obj_id">> := C3,
+%%        <<"last_active_time">> := 0,
+%%        <<"last_delivered_message_id">> := <<>>,
+%%        <<"last_delivered_message_time">> := _,
+%%        <<"unread_count">> := 1,
+%%        <<"is_enabled">> := true
+%%    } = Conv4,
+%%    {ok, #{<<"conversations">>:=[CL3, CL4]}} = cmd_session(Pid, get_all_conversations, #{}),
+%%%%    true = lists:sort([Conv3, Conv4]) == lists:sort([CL3, CL4]),
+%%
+%%    % Now we activate C1, and send a message, that must be received. Counters should be reset.
+%%    {ok, Conv5} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C1}),
+%%    #{
+%%        <<"obj_id">> := C1,
+%%%%        <<"last_active_time">> := 0,
+%%        <<"last_delivered_message_id">> := <<>>,
+%%        <<"last_delivered_message_time">> := _,
+%%        <<"unread_count">> := 3
+%%    } = Conv5,
+%%    {ok, #{<<"obj_id">>:=M6}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_5}}),
+%%    {created, S, C1, M6, _, <<"msgC1_5">>} = wait_session(Ref),
+%%    {A10, C1, M6, T1, <<"msgC1_5">>} = wait_push(Ref),
+%%    {A11, C1, M6, _, <<"msgC1_5">>} = wait_push(Ref),
+%%    true = lists:sort([U2, U3]) == lists:sort([A10, A11]),
+%%
+%%    {ok, Conv6} = cmd_session(Pid, get_conversation, #{conversation_id=>C1}),
+%%    #{
+%%        <<"obj_id">> := C1,
+%%        <<"last_active_time">> := _T2,
+%%        <<"last_delivered_message_id">> := M6,
+%%        <<"last_delivered_message_time">> := T1,
+%%        <<"unread_count">> := 0,
+%%        <<"is_enabled">> := true
+%%    } = Conv6,
+%%    {ok, Conv4} = cmd_session(Pid, get_conversation, #{conversation_id=>C3}),
+%%
+%%    % Lets update a message in C1, we should receive only session update
+%%    {ok, #{}} = cmd_message(Pid, update, #{id=>M5, ?CHAT_MESSAGE => #{text=>msgC1_5B}}),
+%%    {updated, S, C1, M5, _, <<"msgC1_5B">>} = wait_session(Ref),
+%%
+%%    % Lets delete a message in C1, we should receive only session update
+%%    {ok, #{}} = cmd_message(Pid, delete, #{id=>M5}),
+%%    {deleted, S, C1, M5} = wait_session(Ref),
+%%
+%%    % Lets add and remove an user to C3, since it is not active nothing happens
+%%    {ok, #{<<"member_obj_id">>:=<<"admin">>}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>admin}),
+%%    {ok, #{}} = cmd_conversation(Pid, remove_member, #{id=>C3, member_id=>admin}),
+%%
+%%    % Lets activate C3 and repeat
+%%    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C2}),
+%%    {ok, _} = cmd_session(Pid, set_active_conversation, #{conversation_id=>C3}),
+%%    {ok, #{<<"member_obj_id">>:=<<"admin">>}} = cmd_conversation(Pid, add_member, #{id=>C3, member_id=>admin}),
+%%    {member_added, S, C3, <<"admin">>} = wait_session(Ref),
+%%    {ok, #{}} = cmd_conversation(Pid, remove_member, #{id=>C3, member_id=><<"admin">>}),
+%%    {member_removed, S, C3, <<"admin">>} = wait_session(Ref),
+%%
+%%    % Lets add and remove conversations
+%%    % Start C1 and C3
+%%    {ok, #{<<"conversation_id">>:=C2}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
+%%    {error, {<<"conversation_is_already_member">>, _}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
+%%    {conversation_added, S, C2} = wait_session(Ref),
+%%    {ok, #{}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
+%%    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
+%%    {conversation_removed, S, C2} = wait_session(Ref),
+%%
+%%    {ok, #{}} = cmd_session(Pid, stop, #{}),
+%%    session_stopped = wait_session(Ref),
+%%    flush(),
+%%    false = is_process_alive(SPid),
     ok.
 
 
@@ -388,6 +375,7 @@ login(User, Pass, Ref) ->
 
 
 api_client_fun(#nkapi_req{class=event, data=Event}, #{ref:=Ref, pid:=Pid}=UserData) ->
+    lager:warning("Event: ~p", [Event]),
     Pid ! {Ref, Event},
     {ok, UserData};
 
@@ -445,6 +433,15 @@ wait_push(Ref) ->
     after 1000 ->
         error(?LINE)
     end.
+
+
+wait_event(Ref) ->
+    receive {Ref, #nkevent{}=Ev} ->
+        Ev
+    after 1000 ->
+        error(?LINE)
+    end.
+
 
 
 mock_session(Ref) ->

@@ -147,7 +147,7 @@ cmd('', remove_conversation, #{conversation_id:=ConvId}=Data, #{srv_id:=SrvId}=S
     end;
 
 cmd(Sub, Cmd, Data, State) ->
-    nkdomain_api_util:cmd_common(Sub, Cmd, Data, ?CHAT_SESSION, State).
+    nkdomain_obj_api:api(Sub, Cmd, Data, ?CHAT_SESSION, State).
 
 
 

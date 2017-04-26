@@ -88,4 +88,4 @@ api('', remove_conversation, Syntax) ->
     nklib_syntax:add_mandatory([conversation_id], Syntax2);
 
 api(Sub, Cmd, Syntax) ->
-    nkdomain_api_util:syntax_common(Sub, Cmd, Syntax).
+    nkdomain_obj_syntax:syntax(Sub, Cmd, Syntax).

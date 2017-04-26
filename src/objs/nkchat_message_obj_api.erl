@@ -40,5 +40,5 @@ cmd('', create, #{conversation_id:=ConvId, ?CHAT_MESSAGE_ATOM:=Msg}, #{srv_id:=S
     end;
 
 cmd(Sub, Cmd, Data, State) ->
-    nkdomain_api_util:cmd_common(Sub, Cmd, Data, ?CHAT_MESSAGE, State).
+    nkdomain_obj_api:api(Sub, Cmd, Data, ?CHAT_MESSAGE, State).
 

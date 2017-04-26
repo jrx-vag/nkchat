@@ -19,6 +19,12 @@
 %% -------------------------------------------------------------------
 
 %% @doc Conversation Object
+%% Messages having this conversation call message_event/2, and this object
+%% will send events message_created, deleted, updated.
+%%
+%% You can add and remove members (and stores member creation date)
+%% You can attach sessions to existing members, with any metadata
+%% All sessions events are forwarded to the session in object_event/2
 
 -module(nkchat_conversation_obj).
 -behavior(nkdomain_obj).
@@ -31,6 +37,7 @@
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4, object_send_event/2,
          object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
          object_event/2]).
+-export_type([events/0]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -41,6 +48,19 @@
 %% ===================================================================
 %% Types
 %% ===================================================================
+
+
+
+-type events() ::
+    {message_created, nkdomain:obj()} |
+    {message_updated, nkdomain:obj()} |
+    {message_deleted, nkdomain:obj_id()} |
+    {added_member, nkdomain:obj_id()} |
+    {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
+    {removed_member, nkdomain:obj_id()} |
+    {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
+    {added_session, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
+    {removed_session, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()}.
 
 
 
@@ -159,9 +179,19 @@ get_messages(Srv, Id, Spec) ->
 %% @private Called from nkchat_message_obj
 %% When an event is received a conversation-level is sent to the Erlang layer
 %% Is is captured at object_event/2 and sent to the sessions in send_to_sessions/3
-
 message_event(ConvId, Event) ->
-    nkdomain_obj:async_op(ConvId, {?MODULE, message_event, Event}).
+    Event2 = case Event of
+        {created, Msg} -> {message_created, Msg};
+        {deleted, MsgId} -> {message_deleted, MsgId};
+        {updated, Msg} -> {messaged_updated, Msg};
+        _ -> ignore
+    end,
+    case Event2 of
+        ignore ->
+            ok;
+        _ ->
+            nkdomain_obj:send_event(ConvId, Event2)
+    end.
 
 
 %% =================================================================
@@ -217,7 +247,7 @@ object_syntax(_) ->
 
 %% @private
 object_send_event(Event, Session) ->
-    nkchat_conversation_events:event(Event, Session).
+    nkchat_conversation_obj_events:event(Event, Session).
 
 
 %% @private Send every event to my sessions
@@ -267,12 +297,14 @@ object_restore(#obj_session{obj = Obj, data = #?MODULE{} = Data} = Session) ->
 
 
 %% @private
-object_sync_op({?MODULE, add_member, Id}, _From, Session) ->
+object_sync_op({?MODULE, add_member, Id}, _From, #obj_session{obj_id=ConvId}=Session) ->
     case add_member(Id, Session) of
         {ok, MemberId, Session2} ->
-            Event = {added_member, MemberId},
-            Session3 = nkdomain_obj_util:event(Event, Session2),
-            {reply_and_save, {ok, MemberId}, Session3};
+            Event1 = {added_member, MemberId},
+            Session3 = nkdomain_obj_util:event(Event1, Session2),
+            Event2 = {added_to_conversation, MemberId},
+            Session4 = nkdomain_obj_util:event(Event2, Session3),
+            {reply_and_save, {ok, MemberId}, Session4};
         {error, Error} ->
             {reply, {error, Error}, Session}
     end;
@@ -280,9 +312,11 @@ object_sync_op({?MODULE, add_member, Id}, _From, Session) ->
 object_sync_op({?MODULE, remove_member, Id}, _From, Session) ->
     case rm_member(Id, Session) of
         {ok, MemberId, Session2} ->
-            Event = {removed_member, MemberId},
-            Session3 = nkdomain_obj_util:event(Event, Session2),
-            {reply_and_save, ok, Session3};
+            Event1 = {removed_member, MemberId},
+            Session3 = nkdomain_obj_util:event(Event1, Session2),
+            Event2 = {removed_from_conversation, MemberId},
+            Session4 = nkdomain_obj_util:event(Event2, Session3),
+            {reply_and_save, ok, Session4};
         {error, Error} ->
             {reply, {error, Error}, Session}
     end;
@@ -312,14 +346,6 @@ object_sync_op(_Op, _From, _Session) ->
 
 
 %% @private
-object_async_op({?MODULE, message_event, MsgEvent}, Session) ->
-    Event = case MsgEvent of
-        {created, Msg} -> {message_created, Msg};
-        {deleted, MsgId} -> {message_deleted, MsgId};
-        {updated, Msg} -> {messaged_deleted, Msg}
-    end,
-    {noreply, nkdomain_obj_util:event(Event, Session)};
-
 object_async_op(_Op, _Session) ->
     continue.
 

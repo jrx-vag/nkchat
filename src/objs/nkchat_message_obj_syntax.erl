@@ -57,4 +57,4 @@ api('', update, Syntax) ->
     ], Syntax2);
 
 api(Sub, Cmd, Syntax) ->
-    nkdomain_api_util:syntax_common(Sub, Cmd, Syntax).
+    nkdomain_obj_syntax:syntax(Sub, Cmd, Syntax).
