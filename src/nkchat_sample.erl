@@ -1,5 +1,6 @@
 
--module(nkchat_sample).
+-module(
+nkchat_sample).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -compile([export_all]).
@@ -12,15 +13,77 @@
 -include_lib("nkapi/include/nkapi.hrl").
 
 
+p() ->
+    Obj = #{
+        type=>'conversation',
+        obj_id=>a,
+        parent_id=>a,
+        path=>a,
+        created_time=>1,
+        <<"conversation">> => #{
+            members => [
+                #{
+                    member_id => a,
+                    added_time => "1",
+                    sessions => [
+                        #{
+                            session_id => s1,
+                            session_meta => #{a=>1}
+                        },
+                        #{
+                            session_id => s2,
+                            session_meta => #{a=>1}
+                        }
+                    ]
+                },
+                #{
+                    member_id => b,
+                    added_time => "2",
+                    sessions => [
+                        #{
+                            session_id => s3,
+                            session_meta => #{a=>1}
+                        },
+                        #{
+                            session_id => s4,
+                            session_meta => #{a=>1}
+                        }
+                    ]
+                }
+
+
+            ]
+        }
+    },
+    root:object_parse(root, load, <<"conversation">>, Obj).
+
+
+
 login() ->
-    nkdomain_sample:login("/chattest/users/u1", "p1").
-
-
+    nkdomain_sample:login("/chattest/users/u1", "1234").
 
 
 
 domain_find_convs() ->
     cmd(domain, find_all_childs, #{type=>?CHAT_CONVERSATION, sort=>[type, path]}).
+
+
+init() ->
+    {ok, _} = nkdomain_sample:user_create("/chattest", u1, s1, "n1@s1"),
+    {ok, _} = nkdomain_sample:user_create("/chattest", u2, s2, "n2@s2"),
+    {ok, _} = nkdomain_sample:user_create("/chattest", u3, s3, "n3@s3"),
+    {ok, _} = conv_create("/chattest", c1, "C1"),
+    {ok, _} = conv_create("/chattest", c2, "C2"),
+    {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> "/chattest/conversations/c1"}),
+    {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> "/chattest/conversations/c2"}),
+
+    {ok, _} = conv_add_member("/chattest/conversations/c1", "/chattest/users/u1"),
+    {ok, _} = conv_add_member("/chattest/conversations/c1", "/chattest/users/u2"),
+    {ok, _} = conv_add_member("/chattest/conversations/c2", "/chattest/users/u1"),
+    {ok, _} = conv_add_member("/chattest/conversations/c2", "/chattest/users/u3").
+
+
+
 
 
 
@@ -38,13 +101,11 @@ conv_get() ->
 conv_get(Id) ->
     cmd(?CHAT_CONVERSATION, get, #{id=>Id}).
 
-conv_list() ->
-    cmd(?CHAT_CONVERSATION, list, #{}).
+conv_get_member_conversations() ->
+    cmd(?CHAT_CONVERSATION, get_member_conversations, #{}).
 
-conv_list(MemberId) ->
-    cmd(?CHAT_CONVERSATION, list, #{member_id=>MemberId}).
-
-
+conv_get_member_conversations(MemberId) ->
+    cmd(?CHAT_CONVERSATION, get_member_conversations, #{member_id=>MemberId}).
 
 conv_add_member(Id, Member) ->
     cmd(?CHAT_CONVERSATION, add_member, #{id=>Id, member_id=>Member}).

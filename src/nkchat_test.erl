@@ -222,8 +222,8 @@ session1(Pid, Ref) ->
 %%%%        <<"name">> := <<"conv1">>,
 %%        <<"description">> := <<"Conv 1">>,
 %%        <<"last_active_time">> := 0,
-%%        <<"last_delivered_message_id">> := <<>>,
-%%        <<"last_delivered_message_time">> := _,
+%%        <<"last_seen_message_id">> := <<>>,
+%%        <<"last_seen_message_time">> := _,
 %%        <<"unread_count">> := 2,
 %%        <<"is_enabled">> := true
 %%    } = Conv1,
@@ -236,8 +236,8 @@ session1(Pid, Ref) ->
 %%%%        <<"name">> := <<"conv3">>,
 %%        <<"description">> := <<"Conv 3">>,
 %%        <<"last_active_time">> := 0,
-%%        <<"last_delivered_message_id">> := <<>>,
-%%        <<"last_delivered_message_time">> := _,
+%%        <<"last_seen_message_id">> := <<>>,
+%%        <<"last_seen_message_time">> := _,
 %%        <<"is_enabled">> := true
 %%    } = Conv2,
 %%    false = maps:is_key(<<"_unread_count">>, Conv2),
@@ -277,8 +277,8 @@ session1(Pid, Ref) ->
 %%    #{
 %%        <<"obj_id">> := C1,
 %%        <<"last_active_time">> := 0,
-%%        <<"last_delivered_message_id">> := <<>>,
-%%        <<"last_delivered_message_time">> := _,
+%%        <<"last_seen_message_id">> := <<>>,
+%%        <<"last_seen_message_time">> := _,
 %%        <<"unread_count">> := 3,
 %%        <<"is_enabled">> := true
 %%    } = Conv3,
@@ -287,8 +287,8 @@ session1(Pid, Ref) ->
 %%    #{
 %%        <<"obj_id">> := C3,
 %%        <<"last_active_time">> := 0,
-%%        <<"last_delivered_message_id">> := <<>>,
-%%        <<"last_delivered_message_time">> := _,
+%%        <<"last_seen_message_id">> := <<>>,
+%%        <<"last_seen_message_time">> := _,
 %%        <<"unread_count">> := 1,
 %%        <<"is_enabled">> := true
 %%    } = Conv4,
@@ -300,8 +300,8 @@ session1(Pid, Ref) ->
 %%    #{
 %%        <<"obj_id">> := C1,
 %%%%        <<"last_active_time">> := 0,
-%%        <<"last_delivered_message_id">> := <<>>,
-%%        <<"last_delivered_message_time">> := _,
+%%        <<"last_seen_message_id">> := <<>>,
+%%        <<"last_seen_message_time">> := _,
 %%        <<"unread_count">> := 3
 %%    } = Conv5,
 %%    {ok, #{<<"obj_id">>:=M6}} = cmd_message(Pid, create, BC1#{?CHAT_MESSAGE => #{text=>msgC1_5}}),
@@ -314,8 +314,8 @@ session1(Pid, Ref) ->
 %%    #{
 %%        <<"obj_id">> := C1,
 %%        <<"last_active_time">> := _T2,
-%%        <<"last_delivered_message_id">> := M6,
-%%        <<"last_delivered_message_time">> := T1,
+%%        <<"last_seen_message_id">> := M6,
+%%        <<"last_seen_message_time">> := T1,
 %%        <<"unread_count">> := 0,
 %%        <<"is_enabled">> := true
 %%    } = Conv6,

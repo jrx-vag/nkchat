@@ -39,12 +39,14 @@ api('', find, Syntax) ->
 
 api('', create, Syntax) ->
     Syntax#{
-        user_id => binary
+        user_id => binary,
+        events => {list, binary}
     };
 
 api('', start, Syntax) ->
     Syntax2 = Syntax#{
-        id => binary
+        id => binary,
+        events => {list, binary}
     },
     nklib_syntax:add_mandatory([id], Syntax2);
 

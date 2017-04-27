@@ -81,7 +81,7 @@ cmd('', get_messages, Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', list, Data, #{srv_id:=SrvId}=State) ->
+cmd('', get_member_conversations, Data, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:get_domain(State) of
         {ok, Domain} ->
             case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, State) of

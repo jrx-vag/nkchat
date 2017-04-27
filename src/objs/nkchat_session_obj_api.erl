@@ -25,6 +25,21 @@
 -export([cmd/4]).
 
 -include("nkchat.hrl").
+-include_lib("nkdomain/include/nkdomain.hrl").
+-include_lib("nkevent/include/nkevent.hrl").
+
+-define(SESSION_DEF_EVENT_TYPES, [
+    <<"unloaded">>,
+    <<"conversation_added">>,
+    <<"conversation_removed">>,
+    <<"member_added">>,
+    <<"member_removed">>,
+    <<"message_created">>,
+    <<"message_udpdated">>,
+    <<"message_deleted">>,
+    <<"unread_counter_updated">>
+]).
+
 
 %% ===================================================================
 %% API
@@ -50,7 +65,7 @@ cmd('', create, Data, #{srv_id:=SrvId}=State) ->
         {ok, UserId} ->
             case nkchat_session_obj:create(SrvId, UserId) of
                 {ok, ObjId, _Path, _Pid} ->
-                    cmd('', start, #{id=>ObjId}, State);
+                    cmd('', start, Data#{id=>ObjId}, State);
                 {error, Error} ->
                     {error, Error, State}
             end;
@@ -58,11 +73,20 @@ cmd('', create, Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', start, #{id:=Id}, #{srv_id:=SrvId}=State) ->
+cmd('', start, #{id:=Id}=Data, #{srv_id:=SrvId}=State) ->
     case nkchat_session_obj:start(SrvId, Id, self()) of
-        {ok, ObjId, Data} ->
+        {ok, ObjId, Reply} ->
             State2 = nkdomain_api_util:add_id(?CHAT_SESSION, ObjId, State),
-            {ok, Data#{obj_id=>ObjId}, State2};
+            Types = maps:get(events, Data, ?SESSION_DEF_EVENT_TYPES),
+            Subs = #{
+                srv_id => SrvId,
+                class => ?DOMAIN_EVENT_CLASS,
+                subclass => ?CHAT_SESSION,
+                type => Types,
+                obj_id => ObjId
+            },
+            ok = nkapi_server:subscribe(self(), Subs),
+            {ok, Reply#{obj_id=>ObjId}, State2#{nkchat_session_types=>Types}};
         {error, Error} ->
             {error, Error, State}
     end;
@@ -70,12 +94,25 @@ cmd('', start, #{id:=Id}, #{srv_id:=SrvId}=State) ->
 cmd('', stop, Data, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
         {ok, Id} ->
+            State2 = case State of
+                #{nkchat_session_types:=Types} ->
+                    Subs = #{
+                        srv_id => SrvId,
+                        class => ?DOMAIN_EVENT_CLASS,
+                        subclass => ?CHAT_SESSION,
+                        type => Types,
+                        obj_id => Id
+                    },
+                    nkapi_server:unsubscribe(self(), Subs),
+                    maps:remove(nkchat_session_types, State);
+                _ ->
+                    State
+            end,
             case nkchat_session_obj:stop(SrvId, Id) of
                 ok ->
-                    {ok, #{}, State};
+                    {ok, #{}, State2};
                 {error, Error} ->
-
-                    {error, Error, State}
+                    {error, Error, State2}
             end;
         Error ->
             Error
@@ -155,7 +192,7 @@ cmd(Sub, Cmd, Data, State) ->
 %% Internal
 %% ===================================================================
 
-
+%% @private
 get_user_id(#{user_id:=UserId}, _State) ->
     {ok, UserId};
 get_user_id(_, #{user_id:=UserId}) when UserId /= <<>> ->
