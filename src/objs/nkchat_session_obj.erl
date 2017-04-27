@@ -318,7 +318,6 @@ object_sync_op({?MODULE, set_active_conv, ConvId}, _From, Session) ->
                     Session3 = Session2#obj_session{data=Data#?MODULE{active_id=ConvObjId}},
                     {ok, Reply, Session4} = get_conv_extra_info(ConvObjId, false, Session3),
                     Session5 = do_event({conversation_activated, ConvObjId}, Session4),
-                    lager:error("DATA5: ~p", [lager:pr(Session5#obj_session.data, ?MODULE)]),
                     {reply_and_save, {ok, Reply}, Session5};
                 {ok, false} ->
                     {reply, {error, object_is_disabled}, Session}
