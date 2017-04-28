@@ -126,7 +126,7 @@ get_member_conversations(Srv, Domain, MemberId) ->
             },
             Search2 = #{
                 sort => [#{created_time => #{order => desc}}],
-                fields => [created_time, description, <<?CHAT_CONVERSATION/binary, ".members.member_id">>],
+                fields => [created_time, description, name, path, <<?CHAT_CONVERSATION/binary, ".members.member_id">>],
                 filters => Filters
             },
             case nkdomain_store:find(SrvId, Search2) of
