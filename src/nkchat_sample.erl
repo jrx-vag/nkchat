@@ -94,7 +94,7 @@ conv_subs() ->
 
 
 conv_create(Domain, Name, Desc) ->
-    cmd(?CHAT_CONVERSATION, create, #{name=>Name, type=>private, description=>Desc, domain=>Domain}).
+    cmd(?CHAT_CONVERSATION, create, #{name=>Name, subtype=>private, description=>Desc, domain=>Domain}).
 
 conv_get() ->
     cmd(?CHAT_CONVERSATION, get, #{}).

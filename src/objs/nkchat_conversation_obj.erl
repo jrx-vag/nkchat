@@ -30,7 +30,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/4, add_member/3, remove_member/3, add_session/4, remove_session/3]).
+-export([create/5, add_member/3, remove_member/3, add_session/4, remove_session/3]).
 -export([get_messages/3, get_member_conversations/3]).
 -export([message_event/2, get_sess_info/1]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
@@ -285,14 +285,14 @@ object_event(Event, #obj_session{srv_id=SrvId, obj_id=ConvId}=Session) ->
                             ?LLOG(notice, "event with no sessions for ~s: ~p", [MemberId, Event], Session);
                         Sessions ->
                             lists:foreach(
-                                fun(#{session_id:=SessId}=Session) ->
-                                    Meta = maps:get(session_meta, Session, #{}),
+                                fun(#{session_id:=SessId}=SessData) ->
+                                    Meta = maps:get(session_meta, SessData, #{}),
                                     nkchat_session_obj:conversation_event(SrvId, SessId, MemberId, ConvId, Event, Meta)
                                 end,
                                 Sessions)
                     end
                 end,
-                maps:to_list(get_members2(Session))
+                maps:to_list(get_members(Session))
             ),
             {ok, Session};
         false ->
@@ -344,7 +344,7 @@ object_start(#obj_session{obj=Obj}=Session) ->
 
 %% @private Prepare the object for saving
 object_restore(#obj_session{obj=Obj}=Session) ->
-    Members = get_members2(Session),
+    Members = get_members(Session),
     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, #{members=>maps:values(Members)}, Obj),
     {ok, Session#obj_session{obj = Obj2}}.
 
@@ -390,9 +390,11 @@ object_sync_op({?MODULE, remove_session, UserId, SessId}, _From, Session) ->
 
 object_sync_op({?MODULE, get_session_info}, _From, #obj_session{obj_id=ObjId}=Session) ->
     #obj_session{is_enabled=Enabled, path=Path, obj=Obj} = Session,
-    MemberIds = maps:keys(get_members2(Session)),
+    Name = maps:get(name, Obj, <<>>),
+    MemberIds = maps:keys(get_members(Session)),
     Reply = #{
         obj_id => ObjId,
+        name => Name,
         path => Path,
         description => maps:get(description, Obj, <<>>),
         is_enabled => Enabled,
@@ -427,7 +429,7 @@ sync_op(Srv, Id, Op) ->
 
 %% @private
 find_member(Id, #obj_session{srv_id=SrvId}=Session) ->
-    Members = get_members2(Session),
+    Members = get_members(Session),
     case maps:find(Id, Members) of
         {ok, Member} ->
             {true, Id, Member, Members};
@@ -456,7 +458,7 @@ add_member(Id, Session) ->
                 sessions => []
             },
             Members2 = Members#{MemberId => Member},
-            {ok, MemberId, set_members2(Members2, Session)};
+            {ok, MemberId, set_members(Members2, Session)};
         {true, _, _, _} ->
             {error, member_already_present};
         {error, object_not_found} ->
@@ -471,7 +473,7 @@ rm_member(Id, Session) ->
     case find_member(Id, Session) of
         {true, MemberId, _Member, Members} ->
             Members2 = maps:remove(MemberId, Members),
-            {ok, MemberId, set_members2(Members2, Session)};
+            {ok, MemberId, set_members(Members2, Session)};
         {false, _, _} ->
             {error, member_not_found};
         {error, Error} ->
@@ -491,7 +493,7 @@ do_add_session(Id, SessionId, Meta, Session) ->
                     Sessions2 = [SessionObj|Sessions1],
                     Member2 = Member#{sessions=>Sessions2},
                     Members2 = Members#{MemberId => Member2},
-                    {ok, set_members2(Members2, Session)};
+                    {ok, set_members(Members2, Session)};
                 true ->
                     % It will not set is_dirty
                     {ok, Session}
@@ -514,7 +516,7 @@ do_rm_session(Id, SessionId, Session) ->
                     Sessions4 = [S || {_, S} <-Sessions3],
                     Member2 = Member#{sessions=>Sessions4},
                     Members2 = Members#{MemberId => Member2},
-                    {ok, MemberId, set_members2(Members2, Session)};
+                    {ok, MemberId, set_members(Members2, Session)};
                 false ->
                     {error, session_not_found}
             end;
@@ -524,11 +526,11 @@ do_rm_session(Id, SessionId, Session) ->
 
 
 %% @private
-get_members2(#obj_session{data=#?MODULE{members2=Members}}) ->
+get_members(#obj_session{data=#?MODULE{members2=Members}}) ->
     Members.
 
 %% @private
-set_members2(Members, #obj_session{data=Data}=Session) ->
+set_members(Members, #obj_session{data=Data}=Session) ->
     Data2 = Data#?MODULE{members2=Members},
     Session#obj_session{data=Data2, is_dirty=true}.
 
