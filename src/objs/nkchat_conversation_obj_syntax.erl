@@ -34,11 +34,12 @@
 %% @doc
 api('', create, Syntax) ->
     Syntax2 = Syntax#{
-        obj_name => binary,
+        name => binary,
         description => binary,
+        subtype => {atom, [private, channel, one2one]},
         domain => binary
     },
-    nklib_syntax:add_mandatory([obj_name, description], Syntax2);
+    nklib_syntax:add_mandatory([name, description], Syntax2);
 
 api('', update, Syntax) ->
     Syntax2 = Syntax#{

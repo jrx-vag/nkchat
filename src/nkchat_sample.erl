@@ -84,7 +84,8 @@ init() ->
 
 
 
-
+conv_user_subs(UserId) ->
+    cmd(event, subscribe, #{class=>domain, subclass=>conversation, type=>added_to_conversation, obj_id=>UserId}).
 
 
 conv_subs() ->
@@ -93,7 +94,7 @@ conv_subs() ->
 
 
 conv_create(Domain, Name, Desc) ->
-    cmd(?CHAT_CONVERSATION, create, #{obj_name=>Name, description=>Desc, domain=>Domain}).
+    cmd(?CHAT_CONVERSATION, create, #{name=>Name, type=>private, description=>Desc, domain=>Domain}).
 
 conv_get() ->
     cmd(?CHAT_CONVERSATION, get, #{}).

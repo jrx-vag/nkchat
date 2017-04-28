@@ -32,9 +32,10 @@
 %% ===================================================================
 
 cmd('', create, Data, State) ->
-    #{obj_name:=Name, description:=Desc} = Data,
+    #{name:=Name, description:=Desc} = Data,
     #{srv_id:=SrvId, domain:=Domain} = State,
-    case nkchat_conversation_obj:create(SrvId, Domain, Name, Desc) of
+    Type = maps:get(subtype, Data, private),
+    case nkchat_conversation_obj:create(SrvId, Domain, Type, Name, Desc) of
         {ok, ObjId, Path, _Pid} ->
             State2 = nkdomain_api_util:add_id(?CHAT_CONVERSATION, ObjId, State),
             {ok, #{obj_id=>ObjId, path=>Path}, State2};

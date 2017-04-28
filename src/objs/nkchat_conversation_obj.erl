@@ -63,6 +63,8 @@
     {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()}.
 
 
+-type subtype() :: channel | private | one2one.
+
 
 %% ===================================================================
 %% Public
@@ -70,14 +72,15 @@
 
 %% @doc
 %% Data must follow object's syntax
--spec create(nkservice:id(), nkdomain:id(), nkdomain:name(), binary()) ->
+-spec create(nkservice:id(), nkdomain:id(), subtype(), nkdomain:name(), binary()) ->
     {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
 
-create(Srv, Domain, Name, Desc) ->
+create(Srv, Domain, SubType, Name, Desc) ->
     Opts = #{
         name => Name,
         obj_name => Name,
         description => Desc,
+        subtype => SubType,
         type_obj => #{members => []}
     },
     nkdomain_obj_lib:make_and_create(Srv, Domain, ?CHAT_CONVERSATION, Opts).
