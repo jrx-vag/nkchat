@@ -26,12 +26,13 @@
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
+-include_lib("nkapi/include/nkapi.hrl").
 
 %% ===================================================================
 %% API
 %% ===================================================================
 
-cmd('', create, Data, State) ->
+cmd('', create, #nkapi_req{data=Data}, State) ->
     #{name:=Name, description:=Desc} = Data,
     #{srv_id:=SrvId, domain:=Domain} = State,
     Type = maps:get(subtype, Data, private),
@@ -43,7 +44,7 @@ cmd('', create, Data, State) ->
             {error, Error, State}
     end;
 
-cmd('', add_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
+cmd('', add_member, #nkapi_req{data=#{member_id:=MemberId}=Data}, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:get_id(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
             case nkchat_conversation_obj:add_member(SrvId, Id, MemberId) of
@@ -56,7 +57,7 @@ cmd('', add_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', remove_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
+cmd('', remove_member, #nkapi_req{data=#{member_id:=MemberId}=Data}, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:get_id(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
             case nkchat_conversation_obj:remove_member(SrvId, Id, MemberId) of
@@ -69,7 +70,7 @@ cmd('', remove_member, #{member_id:=MemberId}=Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', get_messages, Data, #{srv_id:=SrvId}=State) ->
+cmd('', get_messages, #nkapi_req{data=Data}, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:get_id(?CHAT_CONVERSATION, Data, State) of
         {ok, Id} ->
             case nkchat_conversation_obj:get_messages(SrvId, Id, Data) of
@@ -82,7 +83,7 @@ cmd('', get_messages, Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', get_member_conversations, Data, #{srv_id:=SrvId}=State) ->
+cmd('', get_member_conversations, #nkapi_req{data=Data}, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:get_domain(State) of
         {ok, Domain} ->
             case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, State) of
@@ -100,6 +101,6 @@ cmd('', get_member_conversations, Data, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd(Sub, Cmd, Data, State) ->
-    nkdomain_obj_api:api(Sub, Cmd, Data, ?CHAT_CONVERSATION, State).
+cmd(Sub, Cmd, Req, State) ->
+    nkdomain_obj_api:api(Sub, Cmd, Req, ?CHAT_CONVERSATION, State).
 
