@@ -25,13 +25,14 @@
 -export([cmd/4]).
 
 -include("nkchat.hrl").
+-include_lib("nkapi/include/nkapi.hrl").
 
 %% ===================================================================
 %% API
 %% ===================================================================
 
 %% @doc
-cmd('', create, #{conversation_id:=ConvId, ?CHAT_MESSAGE_ATOM:=Msg}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
+cmd('', create, #nkapi_req{data=#{conversation_id:=ConvId, ?CHAT_MESSAGE_ATOM:=Msg}}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
     case nkchat_message_obj:create(SrvId, ConvId, UserId, Msg) of
         {ok, ObjId, Path, _Pid} ->
             {ok, #{obj_id=>ObjId, path=>Path}, State};
@@ -39,6 +40,6 @@ cmd('', create, #{conversation_id:=ConvId, ?CHAT_MESSAGE_ATOM:=Msg}, #{srv_id:=S
             {error, Error, State}
     end;
 
-cmd(Sub, Cmd, Data, State) ->
-    nkdomain_obj_api:api(Sub, Cmd, Data, ?CHAT_MESSAGE, State).
+cmd(Sub, Cmd, Req, State) ->
+    nkdomain_obj_api:api(Sub, Cmd, Req, ?CHAT_MESSAGE, State).
 
