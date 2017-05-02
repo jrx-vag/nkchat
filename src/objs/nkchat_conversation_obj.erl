@@ -121,7 +121,7 @@ get_member_conversations(Srv, Domain, MemberId) ->
         #obj_id_ext{srv_id=SrvId, path=DomainPath} ->
             Filters = #{
                 type => ?CHAT_CONVERSATION,
-                childs_of => DomainPath,
+                path => <<"childs_of:", DomainPath/binary>>,
                 << ?CHAT_CONVERSATION/binary, ".members.member_id">> => MemberId
             },
             Search2 = #{
