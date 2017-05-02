@@ -619,7 +619,7 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
         filters => #{
             type => ?CHAT_MESSAGE,
             parent_id => ConvId,
-            created_time => {Time+1, none}
+            created_time => <<">", (integer_to_binary(Time))/binary>>
         },
         size => 0
     },
