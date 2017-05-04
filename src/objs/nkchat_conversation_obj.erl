@@ -126,7 +126,7 @@ get_member_conversations(Srv, Domain, MemberId) ->
             },
             Search2 = #{
                 sort => [#{created_time => #{order => desc}}],
-                fields => [created_time, description, name, path, <<?CHAT_CONVERSATION/binary, ".members.member_id">>],
+                fields => [created_time, description, name, path, subtype, <<?CHAT_CONVERSATION/binary, ".members.member_id">>],
                 filters => Filters
             },
             case nkdomain_store:find(SrvId, Search2) of
@@ -396,6 +396,7 @@ object_sync_op({?MODULE, get_session_info}, _From, #obj_session{obj_id=ObjId}=Se
         obj_id => ObjId,
         name => Name,
         path => Path,
+        subtype => maps:get(subtype, Obj, <<>>),
         description => maps:get(description, Obj, <<>>),
         is_enabled => Enabled,
         member_ids => MemberIds
