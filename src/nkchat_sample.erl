@@ -72,8 +72,8 @@ init() ->
     {ok, _} = nkdomain_sample:user_create("/chattest", u1, s1, "n1@s1"),
     {ok, _} = nkdomain_sample:user_create("/chattest", u2, s2, "n2@s2"),
     {ok, _} = nkdomain_sample:user_create("/chattest", u3, s3, "n3@s3"),
-    {ok, _} = conv_create("/chattest", c1, "C1"),
-    {ok, _} = conv_create("/chattest", c2, "C2"),
+    {ok, _} = conv_create("/chattest", c1, "C1", private),
+    {ok, _} = conv_create("/chattest", c2, "C2", private),
     {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> "/chattest/conversations/c1"}),
     {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> "/chattest/conversations/c2"}),
 
@@ -93,8 +93,8 @@ conv_subs() ->
     cmd(event, subscribe, #{class=>domain, subclass=>conversation, obj_id=>UserId}).
 
 
-conv_create(Domain, Name, Desc) ->
-    cmd(?CHAT_CONVERSATION, create, #{name=>Name, subtype=>private, description=>Desc, domain=>Domain}).
+conv_create(Domain, Name, Desc, Type) ->
+    cmd(?CHAT_CONVERSATION, create, #{name=>Name, subtype=>Type, description=>Desc, domain=>Domain}).
 
 conv_get() ->
     cmd(?CHAT_CONVERSATION, get, #{}).

@@ -361,11 +361,13 @@ object_sync_op({?MODULE, add_member, Id}, _From, Session) ->
     end;
 
 object_sync_op({?MODULE, remove_member, Id}, _From, Session) ->
+    Members1 = get_members(Session),
     case rm_member(Id, Session) of
         {ok, MemberId, Session2} ->
-            Session3 = do_event({member_removed, MemberId}, Session2),
+            Members2 = get_members(Session2),
+            Session3 = do_event({member_removed, MemberId}, set_members(Members1, Session2)),
             Session4 = do_event({removed_from_conversation, MemberId}, Session3),
-            {reply_and_save, ok, Session4};
+            {reply_and_save, ok, set_members(Members2, Session4)};
         {error, Error} ->
             {reply, {error, Error}, Session}
     end;
