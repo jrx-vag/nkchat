@@ -308,7 +308,7 @@ object_sync_op({?MODULE, set_active_conv, ConvId}, _From, Session) ->
                     Now = nklib_util:m_timestamp(),
                     Conv2 = Conv#{
                         last_active_time => Now,
-                        last_seen_message_id => Now
+                        last_seen_message_time => Now
                     },
                     SessConv2 = SessConv#{
                         unread_count => 0
