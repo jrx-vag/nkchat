@@ -62,12 +62,12 @@ cmd('', find, #nkapi_req{data=Data}, #{srv_id:=SrvId}=State) ->
             Error
     end;
 
-cmd('', create, #nkapi_req{data=Data}, #{srv_id:=SrvId}=State) ->
+cmd('', create, #nkapi_req{data=Data}=Req, #{srv_id:=SrvId}=State) ->
     case get_user_id(Data, State) of
         {ok, UserId} ->
             case nkchat_session_obj:create(SrvId, UserId) of
                 {ok, ObjId, _Path, _Pid} ->
-                    cmd('', start, Data#{id=>ObjId}, State);
+                    cmd('', start, Req#nkapi_req{data=Data#{id=>ObjId}}, State);
                 {error, Error} ->
                     {error, Error, State}
             end;
