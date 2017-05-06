@@ -30,7 +30,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/5, add_member/3, remove_member/3, add_session/4, remove_session/3]).
+-export([create/6, add_member/3, remove_member/3, add_session/4, remove_session/3]).
 -export([get_messages/3, get_member_conversations/3]).
 -export([message_event/2, get_sess_info/1]).
 -export([object_get_info/0, object_mapping/0, object_syntax/1,
@@ -72,15 +72,16 @@
 
 %% @doc
 %% Data must follow object's syntax
--spec create(nkservice:id(), nkdomain:id(), subtype(), nkdomain:name(), binary()) ->
+-spec create(nkservice:id(), nkdomain:id(), subtype(), nkdomain:name(), binary(), nkdomain:obj_id()) ->
     {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
 
-create(Srv, Domain, SubType, Name, Desc) ->
+create(Srv, Domain, SubType, Name, Desc, UserId) ->
     Opts = #{
         name => Name,
         obj_name => Name,
         description => Desc,
         subtype => SubType,
+        created_by => UserId,
         type_obj => #{members => []}
     },
     nkdomain_obj_lib:make_and_create(Srv, Domain, ?CHAT_CONVERSATION, Opts).
@@ -398,6 +399,7 @@ object_sync_op({?MODULE, get_session_info}, _From, #obj_session{obj_id=ObjId}=Se
         obj_id => ObjId,
         name => Name,
         path => Path,
+        created_by => maps:get(created_by, Obj, <<>>),
         subtype => maps:get(subtype, Obj, <<>>),
         description => maps:get(description, Obj, <<>>),
         is_enabled => Enabled,

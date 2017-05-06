@@ -32,11 +32,12 @@
 %% API
 %% ===================================================================
 
-cmd('', create, #nkapi_req{data=Data}, State) ->
+cmd('', create, #nkapi_req{data=Data}, #{user_id:=UserId}=State) ->
     #{name:=Name, description:=Desc} = Data,
     #{srv_id:=SrvId, domain:=Domain} = State,
     Type = maps:get(subtype, Data, private),
-    case nkchat_conversation_obj:create(SrvId, Domain, Type, Name, Desc) of
+    lager:error("NKLOG USER ~p", [UserId]),
+    case nkchat_conversation_obj:create(SrvId, Domain, Type, Name, Desc, UserId) of
         {ok, ObjId, Path, _Pid} ->
             State2 = nkdomain_api_util:add_id(?CHAT_CONVERSATION, ObjId, State),
             {ok, #{obj_id=>ObjId, path=>Path}, State2};
