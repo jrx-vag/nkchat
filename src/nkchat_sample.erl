@@ -13,54 +13,9 @@ nkchat_sample).
 -include_lib("nkapi/include/nkapi.hrl").
 
 
-p() ->
-    Obj = #{
-        type=>'conversation',
-        obj_id=>a,
-        parent_id=>a,
-        path=>a,
-        created_time=>1,
-        <<"conversation">> => #{
-            members => [
-                #{
-                    member_id => a,
-                    added_time => "1",
-                    sessions => [
-                        #{
-                            session_id => s1,
-                            session_meta => #{a=>1}
-                        },
-                        #{
-                            session_id => s2,
-                            session_meta => #{a=>1}
-                        }
-                    ]
-                },
-                #{
-                    member_id => b,
-                    added_time => "2",
-                    sessions => [
-                        #{
-                            session_id => s3,
-                            session_meta => #{a=>1}
-                        },
-                        #{
-                            session_id => s4,
-                            session_meta => #{a=>1}
-                        }
-                    ]
-                }
-
-
-            ]
-        }
-    },
-    root:object_parse(root, load, <<"conversation">>, Obj).
-
-
 
 login() ->
-    nkdomain_sample:login("/chattest/users/u1", "1234").
+    nkdomain_sample:login("/ct/users/u1", "1234").
 
 
 
@@ -68,20 +23,31 @@ domain_find_convs() ->
     cmd(domain, find_all_childs, #{type=>?CHAT_CONVERSATION, sort=>[type, path]}).
 
 
+%% f(C1), f(C2), f(C3), f(U1), f(U2), f(U3), {C1, C2, C3, U1, U2, U3} = nkchat_sample:init().
 init() ->
-    {ok, _} = nkdomain_sample:user_create("/chattest", u1, s1, "n1@s1"),
-    {ok, _} = nkdomain_sample:user_create("/chattest", u2, s2, "n2@s2"),
-    {ok, _} = nkdomain_sample:user_create("/chattest", u3, s3, "n3@s3"),
-    {ok, _} = conv_create("/chattest", c1, "C1", private),
-    {ok, _} = conv_create("/chattest", c2, "C2", private),
-    {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> "/chattest/conversations/c1"}),
-    {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> "/chattest/conversations/c2"}),
+    C1 = <<"/ct/conversations/c1">>,
+    C2 = <<"/ct/conversations/c2">>,
+    C3 = <<"/ct/conversations/c3">>,
+    U1 = <<"/ct/users/u1">>,
+    U2 = <<"/ct/users/u2">>,
+    U3 = <<"/ct/users/u3">>,
+    _ = nkdomain_sample:domain_create("/", ct, "ChatTest"),
+    {ok, _} = cmd(domain, wait_for_save, #{id => "/"}),
+    {ok, _} = nkdomain_sample:user_create("/ct", u1, s1, "n1@s1"),
+    {ok, _} = nkdomain_sample:user_create("/ct", u2, s2, "n2@s2"),
+    {ok, _} = nkdomain_sample:user_create("/ct", u3, s3, "n3@s3"),
+    {ok, _} = conv_create("/ct", c1, "C1", private),
+    {ok, _} = conv_create("/ct", c2, "C2", private),
+    {ok, _} = conv_create("/ct", c3, "C3", private),
+    {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> C1}),
+    {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> C2}),
+    {ok, _} = cmd(?CHAT_CONVERSATION, wait_for_save, #{id=> C3}),
 
-    {ok, _} = conv_add_member("/chattest/conversations/c1", "/chattest/users/u1"),
-    {ok, _} = conv_add_member("/chattest/conversations/c1", "/chattest/users/u2"),
-    {ok, _} = conv_add_member("/chattest/conversations/c2", "/chattest/users/u1"),
-    {ok, _} = conv_add_member("/chattest/conversations/c2", "/chattest/users/u3").
-
+    {ok, _} = conv_add_member(C1, U1),
+    {ok, _} = conv_add_member(C1, U2),
+    {ok, _} = conv_add_member(C2, U1),
+    {ok, _} = conv_add_member(C2, U3),
+    {C1, C2, C3, U1, U2, U3}.
 
 
 conv_user_subs(UserId) ->
@@ -150,6 +116,9 @@ session_create() ->
 
 session_create(UserId) ->
     cmd(?CHAT_SESSION, create, #{user_id=>UserId}).
+
+session_start() ->
+    cmd(?CHAT_SESSION, start, #{}).
 
 session_start(SessId) ->
     cmd(?CHAT_SESSION, start, #{id=>SessId}).

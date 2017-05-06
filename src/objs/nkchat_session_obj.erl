@@ -115,7 +115,7 @@ find(Srv, User) ->
 
 %% @doc Starts a new session, connected to the Caller
 %% If the caller stops, we will stop the session
-%% TODO: if the session is stopped, an final event should be sent
+%% TODO: if the session is stopped, a final event should be sent
 start(Srv, Id, CallerPid) ->
     case nkdomain_obj_lib:load(Srv, Id, #{usage_link=>{CallerPid, ?MODULE}}) of
         #obj_id_ext{pid=Pid} ->
@@ -184,7 +184,13 @@ conversation_event(_SrvId, SessId, MemberId, ConvId, Event, Meta) ->
 %% nkdomain_obj behaviour
 %% ===================================================================
 
--type sess_conv() :: #{linked=>boolean(), unread_count=>integer()}.
+-type sess_conv() :: #{
+    linked => boolean(),
+    unread_count => integer(),
+    last_message => nkdomain:obj_id(),
+    last_message_time => nklib_util:m_timestamp()
+}.
+
 
 -record(?MODULE, {
     obj_convs :: #{nkdomain:obj_id() => map()},             % Conversation cache
@@ -213,7 +219,8 @@ object_mapping() ->
             properties => #{
                 obj_id => #{type => keyword},
                 last_active_time => #{type => date},
-                last_seen_message => #{type=>object, enabled=>false},
+                % last_seen_message => #{type=>object, enabled=>false},
+                % last_seen_message_id => #{type => keyword},
                 last_seen_message_time => #{type => date}
             }
         }
@@ -228,7 +235,8 @@ object_syntax(_) ->
                 {syntax, #{
                     obj_id => binary,
                     last_active_time => integer,
-                    last_seen_meesage => map,
+                    % last_seen_message => map,
+                    % last_seen_message_id => binary,
                     last_seen_message_time => integer
                 }}
             }
@@ -264,16 +272,20 @@ object_init(Session) ->
 %% @private When the object is loaded, we make our cache
 object_start(#obj_session{obj=Obj}=Session) ->
     #{?CHAT_SESSION := #{conversations := ConvsList}} = Obj,
+    ObjConvs = maps:from_list([{Id, C} || #{obj_id:=Id}=C <- ConvsList]),
+    SessConvs = lists:foldl(
+        fun(ConvId, Acc) -> Acc#{ConvId => make_sess_conv(ConvId, Session)} end,
+        #{},
+        maps:keys(ObjConvs)),
     Data = #?MODULE{
-        obj_convs = maps:from_list([{Id, C} || #{obj_id:=Id}=C <- ConvsList]),
-        sess_convs = make_sess_convs(ConvsList, #{}, Session)
+        obj_convs = ObjConvs,
+        sess_convs = SessConvs
     },
     {ok, Session#obj_session{data=Data}}.
 
 
 %% @private Prepare the object for saving
 object_restore(#obj_session{obj = Obj, data = #?MODULE{} = Data} = Session) ->
-%%    lager:error("SESS RESTORE: ~p", [lager:pr(Data, ?MODULE)]),
     #?MODULE{obj_convs = Convs} = Data,
     Obj2 = ?ADD_TO_OBJ(?CHAT_SESSION, #{conversations=>maps:values(Convs)}, Obj),
     {ok, Session#obj_session{obj = Obj2}}.
@@ -317,7 +329,8 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, Session) ->
         not_found ->
             case do_add_conv(ConvId, Session) of
                 {ok, ConvObjId, Session2} ->
-                    {reply_and_save, {ok, ConvObjId}, Session2};
+                    {ok, Data, Session3} = get_conv_extra_info(ConvObjId, false, Session2),
+                    {reply_and_save, {ok, Data}, Session3};
                 {error, Error} ->
                     {reply, {error, Error}, Session}
             end;
@@ -386,16 +399,8 @@ do_set_active_conv(ConvId, Conv, SessConv, Session) ->
     case nkdomain_obj:is_enabled(ConvId) of
         {ok, true} ->
             ?DEBUG("activated conversation ~s", [ConvId], Session),
-            Now = nklib_util:m_timestamp(),
-            LastMsg = case find_last(ConvId, Session) of
-                {ok, Msg} -> Msg;
-                _ -> #{}
-            end,
-            lager:error("NKLOG Last Message ~p", [LastMsg]),
             Conv2 = Conv#{
-                last_active_time => Now,
-                last_seen_message => LastMsg,
-                last_seen_message_time => Now
+                last_active_time => nkdomain_util:timestamp()
             },
             SessConv2 = SessConv#{
                 unread_count => 0
@@ -418,13 +423,9 @@ do_add_conv(ConvId, Session) ->
             Conv = #{
                 obj_id => ConvId,
                 last_active_time => 0,
-                last_seen_message => #{},
-                last_seen_message_time => nklib_util:m_timestamp()
+                last_seen_message_time => nkdomain_util:timestamp()
             },
-            SessConv = #{
-                linked => true,
-                unread_count => 0
-            },
+            SessConv = make_sess_conv(ConvId, Session),
             ?DEBUG("added conversation ~s", [ConvObjId], Session),
             Session2 = update_conv(ConvObjId, Conv, SessConv, Session),
             Session3 = do_event({conversation_added, ConvObjId}, Session2),
@@ -452,11 +453,8 @@ do_rm_conv(ConvId, _Conv, _SessConv, Session) ->
     {ok, Reply, Session4}.
 
 
-%% @private
-make_sess_convs([], Acc, _Session) ->
-    Acc;
-
-make_sess_convs([#{obj_id:=ConvId}|Rest], Acc, Session) ->
+%% @private generates a sess_conv object
+make_sess_conv(ConvId, Session) ->
     Linked = case link_conv(ConvId, Session) of
         {ok, ConvId} ->
             true;
@@ -464,7 +462,14 @@ make_sess_convs([#{obj_id:=ConvId}|Rest], Acc, Session) ->
             ?LLOG(notice, "could not load conversation ~s: ~p", [ConvId, Error], Session),
             false
     end,
-    make_sess_convs(Rest, Acc#{ConvId=>#{linked=>Linked, unread_count=>0}}, Session).
+    LastMsg = find_last_message(ConvId, Session),
+    #{
+        linked => Linked,
+        unread_count => 0,
+        last_message => LastMsg,
+        last_message_time => maps:get(<<"created_time">>, LastMsg, 0)
+    }.
+
 
 
 %% @private
@@ -520,21 +525,30 @@ do_conversation_event({member_removed, MemberId}, ConvId, IsActive, _Conv, _Sess
 
 do_conversation_event({message_created, Msg}, ConvId, true, Conv, SessConv, Session) ->
     ?DEBUG("message event for active conversation", [], Session),
-    #{obj_id:=MsgId, created_time:=Time} = Msg,
+    #{created_time:=Time} = Msg,
     lager:error("MSG: ~p", [Msg]),
-
-
     Conv2 = Conv#{
-        last_seen_message => Msg,
+        % last_seen_message => Msg,
+        % last_seen_message_id => MsgId,
         last_seen_message_time => Time
     },
-    Session2 = update_conv(ConvId, Conv2, SessConv, Session),
+    SessConv2 = SessConv#{
+        unread_count := 0,
+        last_message := Msg,
+        last_message_time := Time
+    },
+    Session2 = update_conv(ConvId, Conv2, SessConv2, Session),
     {noreply, do_event({message_created, ConvId, Msg}, Session2)};
 
 do_conversation_event({message_created, Msg}, ConvId, false, Conv, SessConv, Session) ->
     ?DEBUG("message event for not active conversation", [], Session),
+    #{created_time:=Time} = Msg,
     Count = maps:get(unread_count, SessConv, 0) + 1,
-    SessConv2 = SessConv#{unread_count=>Count},
+    SessConv2 = SessConv#{
+        unread_count => Count,
+        last_message => Msg,
+        last_message_time => Time
+    },
     Session2 = update_conv(ConvId, Conv, SessConv2, Session),
     {noreply, do_event({unread_counter_updated, ConvId, Count, Msg}, Session2)};
 
@@ -563,17 +577,20 @@ get_convs_info([ConvId|Rest], Acc, Session) ->
 get_conv_info(ConvId, GetUnread, Session) ->
     case get_conv(ConvId, Session) of
         {ok, ConvObjId, Conv, SessConv} ->
-            ConvData1 = maps:with([last_active_time, last_seen_message, last_seen_message_time], Conv),
-            {ConvData2, Session2} = case GetUnread of
+            ConvData1 = maps:with([last_active_time, last_seen_message_time], Conv),
+            #{unread_count:=Count0, last_message:=LastMsg} = SessConv,
+            Count = case GetUnread of
                 true ->
-                    {Num, _Time} = find_unread(Conv, Session),
-                    SessConv2 = SessConv#{unread_count=>Num},
-                    {
-                        ConvData1#{unread_count=>Num},
-                        update_conv(ConvObjId, Conv, SessConv2, Session)
-                    };
+                    find_unread(Conv, Session);
                 false ->
-                    {ConvData1, Session}
+                    Count0
+            end,
+            ConvData2 = ConvData1#{last_message => LastMsg, unread_count=>Count},
+            Session2 = case Count of
+                Count0 ->
+                    Session;
+                _ ->
+                    update_conv(ConvObjId, Conv, SessConv#{unread_count:=Count}, Session)
             end,
             case nkchat_conversation_obj:get_sess_info(ConvObjId) of
                 {ok, Data1} ->
@@ -584,7 +601,7 @@ get_conv_info(ConvId, GetUnread, Session) ->
                                 [PeerId] ->
                                     case nkdomain_user_obj:get_name(SrvId, PeerId) of
                                         {ok, User} ->
-                                            Data1#{peer=>User};
+                                            maps:remove(member_ids, Data1#{peer=>User});
                                         {error, _Error} ->
                                             Data1
                                     end;
@@ -701,17 +718,19 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
         },
         size => 0
     },
+    lager:error("NKLOG S ~p", [Search]),
+
     case nkdomain_store:find(SrvId, Search) of
         {ok, Num, [], _Meta} ->
-            {Num, Time};
+            Num;
         {error, Error} ->
             ?LLOG(error, "error reading unread count: ~p", [Error], Session),
-            {-1, Time}
+            0
     end.
 
 
 %% @private
-find_last(ConvId, #obj_session{srv_id=SrvId}=Session) ->
+find_last_message(ConvId, #obj_session{srv_id=SrvId}=Session) ->
     Search = #{
         filters => #{
             type => ?CHAT_MESSAGE,
@@ -723,10 +742,12 @@ find_last(ConvId, #obj_session{srv_id=SrvId}=Session) ->
     },
     case nkdomain_store:find(SrvId, Search) of
         {ok, 0, [], _Meta} ->
-            {ok, #{}};
+            #{};
         {ok, _Num, [Obj], _Meta} ->
-            {ok, Obj};
+            Obj;
         {error, Error} ->
             ?LLOG(error, "error reading unread count: ~p", [Error], Session),
-            {error, Error}
+            #{}
     end.
+
+

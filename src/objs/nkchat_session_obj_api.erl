@@ -93,6 +93,16 @@ cmd('', start, #nkapi_req{data=#{id:=Id}=Data}, #{srv_id:=SrvId}=State) ->
             {error, Error, State}
     end;
 
+cmd('', start, #nkapi_req{data=Data}=Req, State) ->
+    case cmd('', find, Req, State) of
+        {ok, #{sessions:=[#{<<"obj_id">>:=SessId}|_]}, State2} ->
+            cmd('', start, Req#nkapi_req{data=Data#{id=>SessId}}, State2);
+        {ok, #{sessions:=[]}, State2} ->
+            {error, session_not_found, State2};
+        {error, Error, State2} ->
+            {error, Error, State2 }
+    end;
+
 cmd('', stop, #nkapi_req{data=Data}, #{srv_id:=SrvId}=State) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
         {ok, Id} ->

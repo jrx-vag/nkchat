@@ -44,11 +44,10 @@ api('', create, Syntax) ->
     };
 
 api('', start, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
         events => {list, binary}
-    },
-    nklib_syntax:add_mandatory([id], Syntax2);
+    };
 
 api('', stop, Syntax) ->
     Syntax#{
