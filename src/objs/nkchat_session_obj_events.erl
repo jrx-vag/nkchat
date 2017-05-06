@@ -47,17 +47,17 @@ event({member_added, ConvId, true, MemberId}, Session) ->
 event({member_removed, ConvId, true, MemberId}, Session) ->
     {event, member_removed, #{conversation_id=>ConvId, member_id=>MemberId}, Session};
 
-event({message_created, Msg}, Session) ->
-    {event, message_created, #{message=>Msg}, Session};
+event({message_created, ConvId, Msg}, Session) ->
+    {event, message_created, #{conversation_id=>ConvId, message=>Msg}, Session};
 
-event({message_updated, Msg}, Session) ->
-    {event, message_updated, #{message=>Msg}, Session};
+event({message_updated, ConvId, Msg}, Session) ->
+    {event, message_updated, #{conversation_id=>ConvId, message=>Msg}, Session};
 
-event({message_deleted, MsgId}, Session) ->
-    {event, message_deleted, #{message_id=>MsgId}, Session};
+event({message_deleted, ConvId, MsgId}, Session) ->
+    {event, message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}, Session};
 
-event({unread_counter_updated, ConvId, Counter}, Session) ->
-    {event, unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}, Session};
+event({unread_counter_updated, ConvId, Counter, Msg}, Session) ->
+    {event, unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter, message=>Msg}, Session};
 
 event(_Event, Session) ->
     {ok, Session}.

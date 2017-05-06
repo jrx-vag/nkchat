@@ -372,7 +372,7 @@ sync_op(Srv, Id, Op) ->
 
 %% @private
 parse_online_event(Pid, ConvId, Event) ->
-    lager:warning("Chat session online for ~s: ~p", [ConvId, Event]),
+    % lager:warning("Chat session online for ~s: ~p", [ConvId, Event]),
     nkdomain_obj:async_op(Pid, {?MODULE, conversation_event, ConvId, Event}).
 
 
@@ -529,20 +529,20 @@ do_conversation_event({message_created, Msg}, ConvId, true, Conv, SessConv, Sess
         last_seen_message_time => Time
     },
     Session2 = update_conv(ConvId, Conv2, SessConv, Session),
-    {noreply, do_event({message_created, Msg}, Session2)};
+    {noreply, do_event({message_created, ConvId, Msg}, Session2)};
 
-do_conversation_event({message_created, _Msg}, ConvId, false, Conv, SessConv, Session) ->
+do_conversation_event({message_created, Msg}, ConvId, false, Conv, SessConv, Session) ->
     ?DEBUG("message event for not active conversation", [], Session),
     Count = maps:get(unread_count, SessConv, 0) + 1,
     SessConv2 = SessConv#{unread_count=>Count},
     Session2 = update_conv(ConvId, Conv, SessConv2, Session),
-    {noreply, do_event({unread_counter_updated, ConvId, Count}, Session2)};
+    {noreply, do_event({unread_counter_updated, ConvId, Count, Msg}, Session2)};
 
-do_conversation_event({message_updated, Msg}, _ConvId, true, _Conv, _SessConv, Session) ->
-    {noreply, do_event({message_updated, Msg}, Session)};
+do_conversation_event({message_updated, Msg}, ConvId, true, _Conv, _SessConv, Session) ->
+    {noreply, do_event({message_updated, ConvId, Msg}, Session)};
 
-do_conversation_event({message_deleted, MsgId}, _ConvId, true, _Conv, _SessConv, Session) ->
-    {noreply, do_event({message_deleted, MsgId}, Session)};
+do_conversation_event({message_deleted, MsgId}, ConvId, true, _Conv, _SessConv, Session) ->
+    {noreply, do_event({message_deleted, ConvId, MsgId}, Session)};
 
 do_conversation_event(_Event, _ConvId, _IsActive, _Conv, _SessConv, Session) ->
     lager:notice("NOT PROCESSED EVENT: ~p", [_Event]),
