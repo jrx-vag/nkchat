@@ -33,34 +33,34 @@
 
 %% @doc
 api('', create, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         name => binary,
         description => binary,
         subtype => {atom, [private, channel, one2one]},
-        domain => binary
-    },
-    nklib_syntax:add_mandatory([name, description], Syntax2);
+        domain => binary,
+        '__mandatory' => [name, description]
+    };
 
 api('', update, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        description => binary
-    },
-    nklib_syntax:add_mandatory([id, description], Syntax2);
+        description => binary,
+        '__mandatory' => [id, description]
+    };
 
 api('', add_member, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        member_id => binary
-    },
-    nklib_syntax:add_mandatory([member_id], Syntax2);
+        member_id => binary,
+        '__mandatory' => [member_id]
+    };
 
 api('', remove_member, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        member_id => binary
-    },
-    nklib_syntax:add_mandatory([member_id], Syntax2);
+        member_id => binary,
+        '__mandatory' => [member_id]
+    };
 
 api('', get_member_conversations, Syntax) ->
     Syntax#{

@@ -254,17 +254,19 @@ object_syntax(_) ->
     #{
         members =>
             {list,
-                {syntax, #{
+                #{
                     member_id => binary,
                     added_time => integer,
                     sessions =>
                         {list,
-                            {syntax, #{
+                            #{
                                 session_id => binary,
-                                session_meta => map
-                            }}
-                        }
-                }}
+                                session_meta => map,
+                                '__mandatory' => [session_id]
+                            }
+                        },
+                    '__mandatory' => [member_id]
+                }
             }
     }.
 

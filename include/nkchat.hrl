@@ -26,11 +26,8 @@
 %% ===================================================================
 
 -define(CHAT_CONVERSATION, <<"conversation">>).
--define(CHAT_CONVERSATION_ATOM, 'conversation').
 -define(CHAT_MESSAGE, <<"message">>).
--define(CHAT_MESSAGE_ATOM, 'message').
 -define(CHAT_SESSION, <<"chat.session">>).
--define(CHAT_SESSION_ATOM, 'chat.session').
 
 
 

@@ -232,13 +232,14 @@ object_syntax(_) ->
     #{
         conversations =>
             {list,
-                {syntax, #{
+                #{
                     obj_id => binary,
                     last_active_time => integer,
                     % last_seen_message => map,
                     % last_seen_message_id => binary,
-                    last_seen_message_time => integer
-                }}
+                    last_seen_message_time => integer,
+                    '__mandatory' => [obj_id]
+                }
             }
     }.
 
@@ -718,8 +719,6 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
         },
         size => 0
     },
-    lager:error("NKLOG S ~p", [Search]),
-
     case nkdomain_store:find(SrvId, Search) of
         {ok, Num, [], _Meta} ->
             Num;

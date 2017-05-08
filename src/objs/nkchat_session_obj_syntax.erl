@@ -61,32 +61,32 @@ api('', get_all_conversations, Syntax) ->
     };
 
 api('', get_conversation, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        conversation_id => binary
-    },
-    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+        conversation_id => binary,
+        '__mandatory' => [conversation_id]
+    };
 
 api('', set_active_conversation, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        conversation_id => binary
-    },
-    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+        conversation_id => binary,
+        '__mandatory' => [conversation_id]
+    };
 
 api('', add_conversation, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        conversation_id => binary
-    },
-    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+        conversation_id => binary,
+        '__mandatory' => [conversation_id]
+    };
 
 api('', remove_conversation, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        conversation_id => binary
-    },
-    nklib_syntax:add_mandatory([conversation_id], Syntax2);
+        conversation_id => binary,
+        '__mandatory' => [conversation_id]
+    };
 
 api(Sub, Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Sub, Cmd, Syntax).

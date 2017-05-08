@@ -33,28 +33,23 @@
 
 %% @doc
 api('', create, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         conversation_id => binary,
-        ?CHAT_MESSAGE_ATOM => #{
-            text => binary
-        }
-    },
-    nklib_syntax:add_mandatory([
-        conversation_id,
-        << ?CHAT_MESSAGE/binary, ".text" >>
-    ], Syntax2);
+        ?CHAT_MESSAGE => #{
+            text => binary,
+            '__mandatory' => [text]
+        },
+        '__mandatory' => [conversation_id]
+    };
 
 api('', update, Syntax) ->
-    Syntax2 = Syntax#{
+    Syntax#{
         id => binary,
-        ?CHAT_MESSAGE_ATOM => #{
-            text => binary
+        ?CHAT_MESSAGE => #{
+            text => binary,
+            '__mandatory' => [text]
         }
-    },
-    nklib_syntax:add_mandatory([
-        id,
-        << ?CHAT_MESSAGE/binary, ".text" >>
-    ], Syntax2);
+    };
 
 api(Sub, Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Sub, Cmd, Syntax).

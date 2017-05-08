@@ -32,7 +32,8 @@
 %% ===================================================================
 
 %% @doc
-cmd('', create, #nkapi_req{data=#{conversation_id:=ConvId, ?CHAT_MESSAGE_ATOM:=Msg}}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
+cmd('', create, #nkapi_req{data=Data}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
+    #{conversation_id:=ConvId, ?CHAT_MESSAGE:=Msg} = Data,
     case nkchat_message_obj:create(SrvId, ConvId, UserId, Msg) of
         {ok, ObjId, Path, _Pid} ->
             {ok, #{obj_id=>ObjId, path=>Path}, State};
