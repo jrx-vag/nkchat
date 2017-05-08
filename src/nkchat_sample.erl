@@ -25,6 +25,8 @@ domain_find_convs() ->
 
 %% f(C1), f(C2), f(C3), f(U1), f(U2), f(U3), {C1, C2, C3, U1, U2, U3} = nkchat_sample:init().
 init() ->
+    nkdomain_store:delete_all_childs(root, "/ct"),
+    {ok, _, Pid1, _} = nkdomain_sample:login(),
     C1 = <<"/ct/conversations/c1">>,
     C2 = <<"/ct/conversations/c2">>,
     C3 = <<"/ct/conversations/c3">>,
@@ -33,9 +35,9 @@ init() ->
     U3 = <<"/ct/users/u3">>,
     _ = nkdomain_sample:domain_create("/", ct, "ChatTest"),
     {ok, _} = cmd(domain, wait_for_save, #{id => "/"}),
-    {ok, _} = nkdomain_sample:user_create("/ct", u1, s1, "n1@s1"),
-    {ok, _} = nkdomain_sample:user_create("/ct", u2, s2, "n2@s2"),
-    {ok, _} = nkdomain_sample:user_create("/ct", u3, s3, "n3@s3"),
+    {ok, _} = nkdomain_sample:user_create("/ct", u1, s1),
+    {ok, _} = nkdomain_sample:user_create("/ct", u2, s2),
+    {ok, _} = nkdomain_sample:user_create("/ct", u3, s3),
     {ok, _} = conv_create("/ct", c1, "C1", private),
     {ok, _} = conv_create("/ct", c2, "C2", private),
     {ok, _} = conv_create("/ct", c3, "C3", private),
@@ -47,6 +49,12 @@ init() ->
     {ok, _} = conv_add_member(C1, U2),
     {ok, _} = conv_add_member(C2, U1),
     {ok, _} = conv_add_member(C2, U3),
+    exit(Pid1, kill),
+    login(),
+    timer:sleep(500),
+    {ok, _} = session_create(),
+    session_add_conversation(C1),
+    session_add_conversation(C2),
     {C1, C2, C3, U1, U2, U3}.
 
 
