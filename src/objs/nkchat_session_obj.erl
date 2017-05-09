@@ -219,8 +219,6 @@ object_mapping() ->
             properties => #{
                 obj_id => #{type => keyword},
                 last_active_time => #{type => date},
-                % last_seen_message => #{type=>object, enabled=>false},
-                % last_seen_message_id => #{type => keyword},
                 last_seen_message_time => #{type => date}
             }
         }
@@ -235,8 +233,6 @@ object_syntax(_) ->
                 #{
                     obj_id => binary,
                     last_active_time => integer,
-                    % last_seen_message => map,
-                    % last_seen_message_id => binary,
                     last_seen_message_time => integer,
                     '__mandatory' => [obj_id]
                 }
@@ -527,10 +523,7 @@ do_conversation_event({member_removed, MemberId}, ConvId, IsActive, _Conv, _Sess
 do_conversation_event({message_created, Msg}, ConvId, true, Conv, SessConv, Session) ->
     ?DEBUG("message event for active conversation", [], Session),
     #{created_time:=Time} = Msg,
-    lager:error("MSG: ~p", [Msg]),
     Conv2 = Conv#{
-        % last_seen_message => Msg,
-        % last_seen_message_id => MsgId,
         last_seen_message_time => Time
     },
     SessConv2 = SessConv#{
