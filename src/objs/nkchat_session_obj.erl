@@ -73,6 +73,9 @@
 %% ===================================================================
 
 %% @doc
+-spec create(nkservice:id(), nkdomain:id()) ->
+    {ok, nkdomain_obj_lib:make_and_create_reply(), pid()} | {error, term()}.
+
 create(Srv, User) ->
     case nkdomain_obj_lib:find(Srv, User) of
         #obj_id_ext{obj_id = UserId} ->

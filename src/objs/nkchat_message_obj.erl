@@ -33,15 +33,13 @@
 
 
 %% ===================================================================
-%% Types
+%% Public
 %% ===================================================================
 
 
-
 %% @doc
-%% Data must follow object's syntax
 -spec create(nkservice:id(), nkdomain:name(), nkdomain:id(), binary()) ->
-    {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
+    {ok, nkdomain_obj_lib:make_and_create_reply(), pid()} | {error, term()}.
 
 create(Srv, ConvId, AuthorId, Message) ->
     case nkdomain_obj_lib:load(Srv, ConvId, #{}) of

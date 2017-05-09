@@ -66,7 +66,7 @@ cmd('', create, #nkapi_req{data=Data}=Req, #{srv_id:=SrvId}=State) ->
     case get_user_id(Data, State) of
         {ok, UserId} ->
             case nkchat_session_obj:create(SrvId, UserId) of
-                {ok, ObjId, _Path, _Pid} ->
+                {ok, #{obj_id:=ObjId}, _Pid} ->
                     cmd('', start, Req#nkapi_req{data=Data#{id=>ObjId}}, State);
                 {error, Error} ->
                     {error, Error, State}

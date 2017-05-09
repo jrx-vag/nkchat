@@ -71,9 +71,8 @@
 %% ===================================================================
 
 %% @doc
-%% Data must follow object's syntax
 -spec create(nkservice:id(), nkdomain:id(), subtype(), nkdomain:name(), binary(), nkdomain:obj_id()) ->
-    {ok, nkdomain:obj_id(), nkdomain:path(), pid()} | {error, term()}.
+    {ok, nkdomain_obj_lib:make_and_create_reply(), pid()} | {error, term()}.
 
 create(Srv, Domain, SubType, Name, Desc, UserId) ->
     Opts = #{
