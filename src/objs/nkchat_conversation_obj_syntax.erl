@@ -24,6 +24,7 @@
 
 -export([api/3]).
 
+-include("nkchat.hrl").
 
 
 %% ===================================================================
@@ -76,4 +77,4 @@ api('', get_messages, Syntax) ->
     };
 
 api(Sub, Cmd, Syntax) ->
-    nkdomain_obj_syntax:syntax(Sub, Cmd, Syntax).
+    nkdomain_obj_syntax:syntax(Sub, Cmd, ?CHAT_CONVERSATION, Syntax).

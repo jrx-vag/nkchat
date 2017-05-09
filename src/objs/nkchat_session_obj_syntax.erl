@@ -24,6 +24,7 @@
 
 -export([api/3]).
 
+-include("nkchat.hrl").
 
 
 %% ===================================================================
@@ -89,4 +90,4 @@ api('', remove_conversation, Syntax) ->
     };
 
 api(Sub, Cmd, Syntax) ->
-    nkdomain_obj_syntax:syntax(Sub, Cmd, Syntax).
+    nkdomain_obj_syntax:syntax(Sub, Cmd, ?CHAT_SESSION, Syntax).

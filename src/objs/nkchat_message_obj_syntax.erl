@@ -52,4 +52,4 @@ api('', update, Syntax) ->
     };
 
 api(Sub, Cmd, Syntax) ->
-    nkdomain_obj_syntax:syntax(Sub, Cmd, Syntax).
+    nkdomain_obj_syntax:syntax(Sub, Cmd, ?CHAT_MESSAGE, Syntax).
