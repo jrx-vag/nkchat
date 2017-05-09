@@ -396,15 +396,17 @@ do_set_active_conv(ConvId, Conv, SessConv, Session) ->
     case nkdomain_obj:is_enabled(ConvId) of
         {ok, true} ->
             ?DEBUG("activated conversation ~s", [ConvId], Session),
+            {ok, Reply, Session2} = get_conv_extra_info(ConvId, false, Session),
+            Now = nkdomain_util:timestamp(),
             Conv2 = Conv#{
-                last_active_time => nkdomain_util:timestamp()
+                last_active_time => Now,
+                last_seen_message_time => Now
             },
             SessConv2 = SessConv#{
                 unread_count => 0
             },
-            Session2 = update_conv(ConvId, Conv2, SessConv2, Session),
-            Session3 = update_active(ConvId, Session2),
-            {ok, Reply, Session4} = get_conv_extra_info(ConvId, false, Session3),
+            Session3 = update_conv(ConvId, Conv2, SessConv2, Session2),
+            Session4 = update_active(ConvId, Session3),
             Session5 = do_event({conversation_activated, ConvId}, Session4),
             {ok, Reply, Session5};
         {ok, false} ->
