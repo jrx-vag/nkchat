@@ -33,7 +33,7 @@
 -export([create/6, add_member/3, remove_member/3, add_session/4, remove_session/3]).
 -export([get_messages/3, get_member_conversations/3]).
 -export([message_event/2, get_sess_info/1]).
--export([object_get_info/0, object_mapping/0, object_syntax/1,
+-export([object_get_info/0, object_mapping/0, object_parse/3,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4, object_send_event/2,
          object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
          object_event/2]).
@@ -250,7 +250,7 @@ object_mapping() ->
 
 
 %% @private
-object_syntax(_) ->
+object_parse(_SrvId, _Mode, _Obj) ->
     #{
         members =>
             {list,

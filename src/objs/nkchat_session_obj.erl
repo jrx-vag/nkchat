@@ -26,7 +26,7 @@
 -export([create/2, find/2, start/3, stop/2, get_all_conversations/2, get_conversation/3]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_event/6]).
--export([object_get_info/0, object_mapping/0, object_syntax/1,
+-export([object_get_info/0, object_mapping/0, object_parse/3,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4]).
 -export([object_init/1, object_start/1, object_restore/1, object_send_event/2,
          object_sync_op/3, object_async_op/2, object_handle_info/2]).
@@ -226,7 +226,7 @@ object_mapping() ->
 
 
 %% @private
-object_syntax(_) ->
+object_parse(_SrvId, _Mode, _Obj) ->
     #{
         conversations =>
             {list,
