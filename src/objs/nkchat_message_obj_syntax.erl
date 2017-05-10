@@ -33,22 +33,14 @@
 
 %% @doc
 api('', create, Syntax) ->
-    Syntax#{
+    Base = nkdomain_obj_syntax:syntax('', create, ?CHAT_MESSAGE, Syntax),
+    Base#{
         conversation_id => binary,
         ?CHAT_MESSAGE => #{
             text => binary,
             '__mandatory' => [text]
         },
         '__mandatory' => [conversation_id]
-    };
-
-api('', update, Syntax) ->
-    Syntax#{
-        id => binary,
-        ?CHAT_MESSAGE => #{
-            text => binary,
-            '__mandatory' => [text]
-        }
     };
 
 api(Sub, Cmd, Syntax) ->

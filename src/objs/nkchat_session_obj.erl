@@ -79,10 +79,12 @@
 create(Srv, User) ->
     case nkdomain_obj_lib:find(Srv, User) of
         #obj_id_ext{obj_id = UserId} ->
-            Opts = #{
-                type_obj => #{conversations => []}
+            Obj = #{
+                type => ?CHAT_SESSION,
+                parent_id => UserId,
+                ?CHAT_SESSION => #{conversations => []}
             },
-            nkdomain_obj_lib:make_and_create(Srv, UserId, ?CHAT_SESSION, Opts);
+            nkdomain_obj_lib:make_and_create(Srv, <<>>, Obj, #{});
         _ ->
             {error, user_not_found}
     end.

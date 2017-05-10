@@ -30,14 +30,14 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/6, add_member/3, remove_member/3, add_session/4, remove_session/3]).
+-export([create/3, add_member/3, remove_member/3, add_session/4, remove_session/3]).
 -export([get_messages/3, get_member_conversations/3]).
 -export([message_event/2, get_sess_info/1]).
 -export([object_get_info/0, object_mapping/0, object_parse/3,
          object_api_syntax/3, object_api_allow/4, object_api_cmd/4, object_send_event/2,
          object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
          object_event/2]).
--export_type([event/0]).
+-export_type([event/0, subtype/0]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -71,19 +71,12 @@
 %% ===================================================================
 
 %% @doc
--spec create(nkservice:id(), nkdomain:id(), subtype(), nkdomain:name(), binary(), nkdomain:obj_id()) ->
+-spec create(nkservice:id(), nkdomain:name(), nkdomain:obj()) ->
     {ok, nkdomain_obj_lib:make_and_create_reply(), pid()} | {error, term()}.
 
-create(Srv, Domain, SubType, Name, Desc, UserId) ->
-    Opts = #{
-        name => Name,
-        obj_name => Name,
-        description => Desc,
-        subtype => SubType,
-        created_by => UserId,
-        type_obj => #{members => []}
-    },
-    nkdomain_obj_lib:make_and_create(Srv, Domain, ?CHAT_CONVERSATION, Opts).
+create(Srv, Name, Obj) ->
+    Obj2 = Obj#{?CHAT_CONVERSATION => #{members => []}},
+    nkdomain_obj_lib:make_and_create(Srv, Name, Obj2, #{}).
 
 
 %% @doc Members will be changed for roles
@@ -249,7 +242,10 @@ object_mapping() ->
 
 
 %% @private
-object_parse(_SrvId, _Mode, _Obj) ->
+object_parse(_SrvId, update, _Obj) ->
+    #{};
+
+object_parse(_SrvId, load, #{subtype:=_SubType}) ->
     #{
         members =>
             {list,

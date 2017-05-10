@@ -31,15 +31,6 @@
 %% API
 %% ===================================================================
 
-%% @doc
-cmd('', create, #nkapi_req{data=Data}, #{srv_id:=SrvId, user_id:=UserId}=State) ->
-    #{conversation_id:=ConvId, ?CHAT_MESSAGE:=Msg} = Data,
-    case nkchat_message_obj:create(SrvId, ConvId, UserId, Msg) of
-        {ok, Reply, _Pid} ->
-            {ok, Reply, State};
-        {error, Error} ->
-            {error, Error, State}
-    end;
 
 cmd(Sub, Cmd, Req, State) ->
     nkdomain_obj_api:api(Sub, Cmd, Req, ?CHAT_MESSAGE, State).

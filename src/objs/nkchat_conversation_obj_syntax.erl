@@ -34,19 +34,12 @@
 
 %% @doc
 api('', create, Syntax) ->
-    Syntax#{
-        name => binary,
-        description => binary,
+    Base = nkdomain_obj_syntax:syntax('', create, ?CHAT_CONVERSATION, Syntax),
+    Base#{
         subtype => {atom, [private, channel, one2one]},
-        domain => binary,
-        '__mandatory' => [name, description]
-    };
-
-api('', update, Syntax) ->
-    Syntax#{
-        id => binary,
-        description => binary,
-        '__mandatory' => [id, description]
+        ?CHAT_CONVERSATION => #{},
+        '__defaults' => #{subtype => private},
+        '__mandatory' => [obj_name]
     };
 
 api('', add_member, Syntax) ->

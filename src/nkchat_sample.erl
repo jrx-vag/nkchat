@@ -68,7 +68,8 @@ conv_subs() ->
 
 
 conv_create(Domain, Name, Desc, Type) ->
-    cmd(?CHAT_CONVERSATION, create, #{name=>Name, subtype=>Type, description=>Desc, domain=>Domain}).
+    ObjName = nkdomain_util:name(Name),
+    cmd(?CHAT_CONVERSATION, create, #{obj_name=>ObjName, name=>Name, subtype=>Type, description=>Desc, parent_id=>Domain}).
 
 conv_get() ->
     cmd(?CHAT_CONVERSATION, get, #{}).

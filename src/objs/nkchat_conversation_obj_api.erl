@@ -32,16 +32,13 @@
 %% API
 %% ===================================================================
 
-cmd('', create, #nkapi_req{data=Data}, #{user_id:=UserId}=State) ->
-    #{name:=Name, description:=Desc} = Data,
-    #{srv_id:=SrvId, domain:=Domain} = State,
-    Type = maps:get(subtype, Data, private),
-    case nkchat_conversation_obj:create(SrvId, Domain, Type, Name, Desc, UserId) of
-        {ok, #{obj_id:=ObjId}=Reply, _Pid} ->
-            State2 = nkdomain_api_util:add_id(?CHAT_CONVERSATION, ObjId, State),
-            {ok, Reply, State2};
-        {error, Error} ->
-            {error, Error, State}
+cmd('', create, Req, State) ->
+    case nkdomain_obj_api:api('', create, Req, ?CHAT_CONVERSATION, State) of
+        {ok, #{obj_id:=ObjId}=Reply, State2} ->
+            State3 = nkdomain_api_util:add_id(?CHAT_CONVERSATION, ObjId, State2),
+            {ok, Reply, State3};
+        {error, Error, State2} ->
+            {error, Error, State2}
     end;
 
 cmd('', add_member, #nkapi_req{data=#{member_id:=MemberId}=Data}, #{srv_id:=SrvId}=State) ->
