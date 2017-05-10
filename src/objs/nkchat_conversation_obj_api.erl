@@ -81,7 +81,7 @@ cmd('', get_messages, #nkapi_req{data=Data}, #{srv_id:=SrvId}=State) ->
     end;
 
 cmd('', get_member_conversations, #nkapi_req{data=Data}, #{srv_id:=SrvId}=State) ->
-    case nkdomain_api_util:get_domain(State) of
+    case nkdomain_api_util:get_domain(#{}, State) of
         {ok, Domain} ->
             case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, State) of
                 {ok, MemberId} ->
