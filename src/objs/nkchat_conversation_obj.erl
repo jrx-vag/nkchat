@@ -245,7 +245,7 @@ object_mapping() ->
 object_parse(_SrvId, update, _Obj) ->
     #{};
 
-object_parse(_SrvId, load, #{subtype:=_SubType}) ->
+object_parse(_SrvId, load, _Obj) ->
     #{
         members =>
             {list,
