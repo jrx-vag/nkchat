@@ -613,7 +613,8 @@ get_conv_info(ConvId, GetUnread, Session) ->
                             Data1
                     end,
                     {ok, maps:merge(Data2, ConvData2), Session2};
-                {error, _} ->
+                {error, Error} ->
+                    ?LLOG(notice, "could not read conversation ~s: ~p", [ConvObjId, Error], Session2),
                     Data = ConvData2#{
                         is_enabled => false
                     },

@@ -107,7 +107,7 @@ create(Pid) ->
     {error, {<<"member_not_found">>, _}} = cmd_conversation(Pid, add_member, #{id=>C2, member_id=><<"a">>}),
     {error, {<<"conversation_not_found">>, _}} = cmd_conversation(Pid, add_member, #{id=><<"a">>, member_id=>U2}),
 
-    {ok, <<"domain">>, D, ?DOM, _Pid} = nkdomain:find(root, ?DOM),
+    {ok, ?DOMAIN_DOMAIN, D, ?DOM, _Pid} = nkdomain:find(root, ?DOM),
     {ok, #{
         <<"_is_enabled">> := true,
         ?CHAT_CONVERSATION := #{<<"members">> := [#{<<"member_id">>:=C3U1}, #{<<"member_id">>:=C3U2}]},
