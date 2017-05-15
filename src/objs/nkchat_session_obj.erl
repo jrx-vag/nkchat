@@ -579,14 +579,14 @@ get_conv_info(ConvId, GetUnread, Session) ->
     case get_conv(ConvId, Session) of
         {ok, ConvObjId, Conv, SessConv} ->
             ConvData1 = maps:with([last_active_time, last_seen_message_time], Conv),
-            #{unread_count:=Count0, last_message:=LastMsg} = SessConv,
+            #{unread_count:=Count0, last_message:=LastMsg, last_message_time:=LastMsgTime} = SessConv,
             Count = case GetUnread of
                 true ->
                     find_unread(Conv, Session);
                 false ->
                     Count0
             end,
-            ConvData2 = ConvData1#{last_message => LastMsg, unread_count=>Count},
+            ConvData2 = ConvData1#{last_message => LastMsg, last_message_time => LastMsgTime, unread_count=>Count},
             Session2 = case Count of
                 Count0 ->
                     Session;
