@@ -123,7 +123,7 @@ object_event(Event, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Sess
 
 %% @doc
 object_admin_tree(resources, _Num, Data, Acc) ->
-    nkadmin_tree:add_tree_entry(menu_resources_chat_messages, menuSimple, Data, Acc);
+    nkadmin_util:menu_item_label(tree_resources_chat_messages, menuSimple, Data, Acc);
 
 object_admin_tree(_Category, _Num, _Data, Acc) ->
     Acc.
