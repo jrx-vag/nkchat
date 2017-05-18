@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Session Object API
--module(nkchat_session_obj_api).
+-module(    nkchat_session_obj_api).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([cmd/4]).

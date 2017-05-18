@@ -374,7 +374,7 @@ object_handle_info(_Info, _Session) ->
 
 %% @doc
 object_admin_tree(sessions, Num, Data, Acc) ->
-    nkadmin_menu:add_tree_entry(menu_sessions_chat_sessions, {menuBadge, Num}, Data, Acc);
+    nkadmin_tree:add_tree_entry(menu_sessions_chat_sessions, {menuBadge, Num}, Data, Acc);
 
 object_admin_tree(_Category, _Num, _Data, Acc) ->
     Acc.
