@@ -123,7 +123,7 @@ find(Srv, User) ->
 %% If the caller stops, we will stop the session
 %% TODO: if the session is stopped, a final event should be sent
 start(Srv, Id, CallerPid) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{usage_link=>{CallerPid, ?MODULE}}) of
+    case nkdomain_obj_lib:load(Srv, Id, #{usage_link=>{CallerPid, {?MODULE, caller, CallerPid}}}) of
         #obj_id_ext{pid=Pid} ->
             nkdomain_obj:sync_op(Pid, {?MODULE, start, CallerPid});
         {error, Error} ->
