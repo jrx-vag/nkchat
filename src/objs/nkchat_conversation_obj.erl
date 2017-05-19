@@ -418,7 +418,7 @@ object_async_op(_Op, _Session) ->
 %% @doc
 object_admin_tree(resources, List, State) ->
     Item = nkadmin_util:menu_item(domain_tree_resources_chat_conversations, menuSimple, State),
-    {ok, [Item|List]};
+    {ok, [{Item, 2000}|List]};
 
 object_admin_tree(_Category, _List, _State) ->
     ok.
