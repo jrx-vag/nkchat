@@ -28,6 +28,7 @@ start(_Type, _Args) ->
             {ok, Pid} = nkchat_sup:start_link(),
             {ok, Vsn} = application:get_key(?APP, vsn),
             lager:info("NkCHAT v~s has started.", [Vsn]),
+            nkchat_i18n:reload(),
             register_types(),
             {ok, Pid};
         {error, Error} ->
