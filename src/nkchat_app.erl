@@ -45,9 +45,9 @@ stop(_) ->
 
 %% @private
 register_types() ->
-    ok = nkdomain_types:register(nkchat_conversation_obj),
-    ok = nkdomain_types:register(nkchat_message_obj),
-    ok = nkdomain_types:register(nkchat_session_obj).
+    ok = nkdomain_all_types:register(nkchat_conversation_obj),
+    ok = nkdomain_all_types:register(nkchat_message_obj),
+    ok = nkdomain_all_types:register(nkchat_session_obj).
 
 
 %% Config Management
