@@ -375,13 +375,10 @@ object_handle_info(_Info, _Session) ->
 
 
 %% @doc
-object_admin_tree(sessions, List, #{types:=Types}=State) ->
-    Num = maps:get(?CHAT_SESSION, Types),
-    Item = nkadmin_util:menu_item(domain_tree_sessions_chat_sessions, {menuBadge, Num}, State),
-    {ok, [{Item, 2000}|List]};
+object_admin_tree(Category, List, State) ->
+    nkdomain_admin:add_tree_session(Category, ?CHAT_SESSION, ?MODULE,
+                                    domain_tree_sessions_chat_sessions, 2000, List, State).
 
-object_admin_tree(_Category, _Data, _State) ->
-    ok.
 
 
 %% ===================================================================

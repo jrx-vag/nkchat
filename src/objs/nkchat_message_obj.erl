@@ -122,12 +122,10 @@ object_event(Event, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Sess
 
 
 %% @doc
-object_admin_tree(resources, List, State) ->
-    Item = nkadmin_util:menu_item(domain_tree_resources_chat_messages, menuSimple, State),
-    {ok, [{Item, 2001}|List]};
+object_admin_tree(Category, List, State) ->
+    nkdomain_admin:add_tree_resource(Category, domain_tree_resources_chat_messages,
+                                     2001, List, State).
 
-object_admin_tree(_Category, _List, _State) ->
-    ok.
 
 
 
