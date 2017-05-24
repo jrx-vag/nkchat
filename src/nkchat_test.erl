@@ -153,7 +153,7 @@ base_msgs(Pid, Ref) ->
 
     {ok, _, C1, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv1">>),
     {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
-    {ok, _, C3, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv3">>),
+    {ok, _, _C3, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv3">>),
     BC1 = #{conversation_id=><<"/chattest/conversations/conv1">>},
     BC2 = #{conversation_id=><<"/chattest/conversations/conv2">>},
 
@@ -173,7 +173,7 @@ base_msgs(Pid, Ref) ->
 
 
 
-session1(Pid, Ref) ->
+session1(Pid, _Ref) ->
     % Create the session
     {error, {<<"session_not_found">>, _}} = cmd_session(Pid, find, #{}),
     {ok, #{<<"obj_id">>:=S, <<"conversations">>:=[]}} = cmd_session(Pid, create, #{}),
@@ -182,12 +182,12 @@ session1(Pid, Ref) ->
     {error, {<<"object_not_started">>, _}} = cmd_session(Pid, stop, #{}),
     {error, {<<"session_not_found">>, _}} = cmd_session(Pid, stop, #{id=><<"a">>}),
     {ok, #{<<"obj_id">>:=S, <<"conversations">>:=[]}} = cmd_session(Pid, start, #{id=>S}),
-    {ok, _, _, _, SPid} = nkdomain:find(root, S),
+    {ok, _, _, _, _SPid} = nkdomain:find(root, S),
 
     % Adds C1 and C3
-    {ok, #{<<"conversation_id">>:=C1}} =
+    {ok, #{<<"conversation_id">>:=_C1}} =
         cmd_session(Pid, add_conversation, #{conversation_id=>"/chattest/conversations/conv1"}),
-    {ok, #{<<"conversation_id">>:=C3}} =
+    {ok, #{<<"conversation_id">>:=_C3}} =
         cmd_session(Pid, add_conversation, #{conversation_id=>"/chattest/conversations/conv3"}),
 
 %%    {ok, _, C2, _, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
