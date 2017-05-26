@@ -49,8 +49,8 @@
 
 
 %% @doc
-cmd(<<"find">>, #nkreq{data=Data, srv_id=SrvId}, State) ->
-    case get_user_id(Data, State) of
+cmd(<<"find">>, #nkreq{data=Data, srv_id=SrvId}=Req, State) ->
+    case get_user_id(Data, Req, State) of
         {ok, UserId} ->
             case nkchat_session_obj:find(SrvId, UserId) of
                 {ok, List} ->
@@ -63,7 +63,7 @@ cmd(<<"find">>, #nkreq{data=Data, srv_id=SrvId}, State) ->
     end;
 
 cmd(<<"create">>, #nkreq{data=Data, srv_id=SrvId}=Req, State) ->
-    case get_user_id(Data, State) of
+    case get_user_id(Data, Req, State) of
         {ok, UserId} ->
             case nkchat_session_obj:create(SrvId, UserId) of
                 {ok, #{obj_id:=ObjId}, _Pid} ->
@@ -88,8 +88,8 @@ cmd(<<"start">>, #nkreq{data=#{id:=Id}=Data, srv_id=SrvId}, State) ->
                 obj_id => ObjId
             },
             ok = nkapi_server:subscribe(self(), Subs),
-            State2 = State#{nkchat_session_types=>Types},
-            {ok, Reply#{obj_id=>ObjId}, State2};
+            State3 = State2#{nkchat_session_types=>Types},
+            {ok, Reply#{obj_id=>ObjId}, State3};
         {error, Error} ->
             {error, Error, State}
     end;
@@ -206,9 +206,9 @@ cmd(Cmd, State, State) ->
 %% ===================================================================
 
 %% @private
-get_user_id(#{user_id:=UserId}, _State) ->
+get_user_id(#{user_id:=UserId}, _Req, _State) ->
     {ok, UserId};
-get_user_id(_, #{user_id:=UserId}) when UserId /= <<>> ->
+get_user_id(_, #nkreq{user_id=UserId}, _State) when UserId /= <<>> ->
     {ok, UserId};
-get_user_id(_Data, State) ->
+get_user_id(_Data, _Req, State) ->
     {error, missing_user_id, State}.
