@@ -22,7 +22,7 @@
 -module(nkchat_session_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([api/3]).
+-export([api/2]).
 
 -include("nkchat.hrl").
 
@@ -33,61 +33,61 @@
 
 
 %% @doc
-api('', find, Syntax) ->
+api(<<"find">>, Syntax) ->
     Syntax#{
         user_id => binary
     };
 
-api('', create, Syntax) ->
+api(<<"create">>, Syntax) ->
     Syntax#{
         user_id => binary,
         events => {list, binary}
     };
 
-api('', start, Syntax) ->
+api(<<"start">>, Syntax) ->
     Syntax#{
         id => binary,
         events => {list, binary}
     };
 
-api('', stop, Syntax) ->
+api(<<"stop">>, Syntax) ->
     Syntax#{
         id => binary,
         reason => binary
     };
 
-api('', get_all_conversations, Syntax) ->
+api(<<"get_all_conversations">>, Syntax) ->
     Syntax#{
         id => binary
     };
 
-api('', get_conversation, Syntax) ->
+api(<<"get_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api('', set_active_conversation, Syntax) ->
+api(<<"set_active_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api('', add_conversation, Syntax) ->
+api(<<"add_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api('', remove_conversation, Syntax) ->
+api(<<"remove_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api(Sub, Cmd, Syntax) ->
-    nkdomain_obj_syntax:syntax(Sub, Cmd, ?CHAT_SESSION, Syntax).
+api(Cmd, Syntax) ->
+    nkdomain_obj_syntax:syntax(Cmd, ?CHAT_SESSION, Syntax).

@@ -5,7 +5,7 @@
 -compile([export_all]).
 
 -include("nkchat.hrl").
--include_lib("nkapi/include/nkapi.hrl").
+-include_lib("nkservice/include/nkservice.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkevent/include/nkevent.hrl").
 
@@ -370,11 +370,11 @@ login(User, Pass, Ref) ->
         meta => #{a=>nklib_util:to_binary(User)}
     },
     UserData = #{ref=>Ref, pid=>self()},
-    {ok, _SessId, Pid, _Reply} = nkapi_client:start(root, ?WS, Login, Fun, UserData),
+    {ok, _Reply, Pid} = nkapi_client:start(root, ?WS, Login, Fun, UserData),
     Pid.
 
 
-api_client_fun(#nkapi_req{class=event, data=Event}, #{ref:=Ref, pid:=Pid}=UserData) ->
+api_client_fun(#nkreq{cmd = <<"event">>, data=Event}, #{ref:=Ref, pid:=Pid}=UserData) ->
     lager:warning("Event: ~p", [Event]),
     Pid ! {Ref, Event},
     {ok, UserData};

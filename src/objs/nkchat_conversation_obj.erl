@@ -34,7 +34,7 @@
 -export([get_messages/3, get_member_conversations/3]).
 -export([message_event/2, get_sess_info/1]).
 -export([object_get_info/0, object_mapping/0, object_parse/3,
-         object_api_syntax/3, object_api_allow/4, object_api_cmd/4, object_send_event/2,
+         object_api_syntax/2, object_api_allow/3, object_api_cmd/3, object_send_event/2,
          object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
          object_event/2]).
 -export([object_admin_tree/3]).
@@ -313,18 +313,17 @@ session_event_filter(Event) ->
 
 
 %% @private
-object_api_syntax(Sub, Cmd, Syntax) ->
-    nkchat_conversation_obj_syntax:api(Sub, Cmd, Syntax).
+object_api_syntax(Cmd, Syntax) ->
+    nkchat_conversation_obj_syntax:api(Cmd, Syntax).
 
 
 %% @private
-object_api_allow(_Sub, _Cmd, _Data, State) ->
+object_api_allow(_Cmd, _Req, State) ->
     {true, State}.
 
-
 %% @private
-object_api_cmd(Sub, Cmd, Req, State) ->
-    nkchat_conversation_obj_api:cmd(Sub, Cmd, Req, State).
+object_api_cmd(Cmd, Req, State) ->
+    nkchat_conversation_obj_api:cmd(Cmd, Req, State).
 
 
 %% @private

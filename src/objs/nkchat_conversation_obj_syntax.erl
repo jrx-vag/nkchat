@@ -22,7 +22,7 @@
 -module(nkchat_conversation_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([api/3]).
+-export([api/2]).
 
 -include("nkchat.hrl").
 
@@ -33,8 +33,8 @@
 
 
 %% @doc
-api('', create, Syntax) ->
-    Base = nkdomain_obj_syntax:syntax('', create, ?CHAT_CONVERSATION, Syntax),
+api(<<"create">>, Syntax) ->
+    Base = nkdomain_obj_syntax:syntax(<<"create">>, ?CHAT_CONVERSATION, Syntax),
     Base#{
         subtype => {atom, [private, channel, one2one]},
         ?CHAT_CONVERSATION => #{},
@@ -42,26 +42,26 @@ api('', create, Syntax) ->
         '__mandatory' => [obj_name]
     };
 
-api('', add_member, Syntax) ->
+api(<<"add_member">>, Syntax) ->
     Syntax#{
         id => binary,
         member_id => binary,
         '__mandatory' => [member_id]
     };
 
-api('', remove_member, Syntax) ->
+api(<<"remove_member">>, Syntax) ->
     Syntax#{
         id => binary,
         member_id => binary,
         '__mandatory' => [member_id]
     };
 
-api('', get_member_conversations, Syntax) ->
+api(<<"get_member_conversations">>, Syntax) ->
     Syntax#{
         member_id => binary
     };
 
-api('', get_messages, Syntax) ->
+api(<<"get_messages">>, Syntax) ->
     Syntax#{
         id => binary,
         size => integer,
@@ -69,5 +69,5 @@ api('', get_messages, Syntax) ->
         start_date => integer
     };
 
-api(Sub, Cmd, Syntax) ->
-    nkdomain_obj_syntax:syntax(Sub, Cmd, ?CHAT_CONVERSATION, Syntax).
+api(Cmd, Syntax) ->
+    nkdomain_obj_syntax:syntax(Cmd, ?CHAT_CONVERSATION, Syntax).

@@ -22,7 +22,7 @@
 -module(nkchat_message_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([api/3]).
+-export([api/2]).
 
 -include("nkchat.hrl").
 
@@ -32,8 +32,8 @@
 
 
 %% @doc
-api('', create, Syntax) ->
-    Base = nkdomain_obj_syntax:syntax('', create, ?CHAT_MESSAGE, Syntax),
+api(<<"create">>, Syntax) ->
+    Base = nkdomain_obj_syntax:syntax(<<"create">>, ?CHAT_MESSAGE, Syntax),
     Base#{
         conversation_id => binary,
         ?CHAT_MESSAGE => #{
@@ -43,5 +43,5 @@ api('', create, Syntax) ->
         '__mandatory' => [conversation_id]
     };
 
-api(Sub, Cmd, Syntax) ->
-    nkdomain_obj_syntax:syntax(Sub, Cmd, ?CHAT_MESSAGE, Syntax).
+api(Cmd, Syntax) ->
+    nkdomain_obj_syntax:syntax(Cmd, ?CHAT_MESSAGE, Syntax).

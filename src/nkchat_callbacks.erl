@@ -65,7 +65,7 @@ api_error(_)   		                        -> continue.
 
 %%%% @private
 %%api_server_cmd(
-%%    #nkapi_req{class=chat, subclass=Sub, cmd=Cmd}=Req, State) ->
+%%    #nkreq{class=chat, subclass=Sub, cmd=Cmd}=Req, State) ->
 %%    nkchat_api:cmd(Sub, Cmd, Req, State);
 %%
 %%api_server_cmd(_Req, _State) ->
@@ -73,7 +73,7 @@ api_error(_)   		                        -> continue.
 %%
 %%
 %%%% @private
-%%api_server_syntax(#nkapi_req{class=chat, subclass=Sub, cmd=Cmd},
+%%api_server_syntax(#nkreq{class=chat, subclass=Sub, cmd=Cmd},
 %%    Syntax, Defaults, Mandatory) ->
 %%    nkchat_syntax:syntax(Sub, Cmd, Syntax, Defaults, Mandatory);
 %%
