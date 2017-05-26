@@ -20,7 +20,7 @@
 
 -module(nkchat_callbacks).
 
--export([plugin_deps/0, api_error/1]).
+-export([plugin_deps/0, error/1]).
 -export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
@@ -52,10 +52,10 @@ plugin_deps() ->
 %% ===================================================================
 
 %% @doc
-api_error(conversation_not_found)           -> "Conversation not found";
-api_error(conversation_is_already_member)   -> "Conversation is already a member";
-api_error(conversation_is_disabled)         -> "Conversation is currently disabled";
-api_error(_)   		                        -> continue.
+error(conversation_not_found)           -> "Conversation not found";
+error(conversation_is_already_member)   -> "Conversation is already a member";
+error(conversation_is_disabled)         -> "Conversation is currently disabled";
+error(_)   		                        -> continue.
 
 
 
