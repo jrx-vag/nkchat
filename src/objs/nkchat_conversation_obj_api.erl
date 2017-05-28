@@ -81,10 +81,10 @@ cmd(<<"get_messages">>, #nkreq{data=Data, srv_id=SrvId}, State) ->
     end;
 
 cmd(<<"get_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}, State) ->
-    Domain = nkdomain_api_util:get_domain(#{}, State),
+    {ok, DomainId} = nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, State),
     case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, State) of
         {ok, MemberId} ->
-            case nkchat_conversation_obj:get_member_conversations(SrvId, Domain, MemberId) of
+            case nkchat_conversation_obj:get_member_conversations(SrvId, DomainId, MemberId) of
                 {ok, Reply} ->
                     {ok, Reply, State};
                 {error, Error} ->
