@@ -37,7 +37,7 @@
          object_api_syntax/2, object_api_allow/3, object_api_cmd/3, object_send_event/2,
          object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
          object_event/2]).
--export([object_admin_tree/3]).
+-export([object_admin_info/0]).
 -export_type([event/0, subtype/0]).
 
 -include("nkchat.hrl").
@@ -215,6 +215,14 @@ object_get_info() ->
         min_first_time => 5*60*1000,
         dont_create_childs_on_disabled => true,
         dont_update_on_disabled => true
+    }.
+
+%% @doc
+object_admin_info() ->
+    #{
+        class => resource,
+        weight => 2000,
+        tree_id => <<"domain_tree_resources_chat_conversations">>
     }.
 
 
@@ -413,11 +421,6 @@ object_sync_op(_Op, _From, _Session) ->
 object_async_op(_Op, _Session) ->
     continue.
 
-
-%% @doc
-object_admin_tree(Category, List, State) ->
-    nkdomain_admin:add_tree_resource(Category, domain_tree_resources_chat_conversations,
-                                     2000, List, State).
 
 
 

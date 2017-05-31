@@ -26,7 +26,7 @@
 -export([create/3]).
 -export([object_get_info/0, object_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_allow/3, object_api_cmd/3, object_event/2]).
--export([object_admin_tree/3]).
+-export([object_admin_info/0]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -67,6 +67,15 @@ object_get_info() ->
         type => ?CHAT_MESSAGE,
         dont_update_on_disabled => true,
         dont_delete_on_disabled => true
+    }.
+
+
+%% @doc
+object_admin_info() ->
+    #{
+        class => resource,
+        weight => 2001,
+        tree_id => <<"domain_tree_resources_chat_messages">>
     }.
 
 
@@ -120,11 +129,6 @@ object_event(Event, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Sess
     end,
     {ok, Session}.
 
-
-%% @doc
-object_admin_tree(Category, List, State) ->
-    nkdomain_admin:add_tree_resource(Category, domain_tree_resources_chat_messages,
-                                     2001, List, State).
 
 
 
