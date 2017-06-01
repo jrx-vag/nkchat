@@ -18,31 +18,20 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc Message Syntax
--module(nkchat_message_obj_syntax).
+%% @doc Conversation Object API
+-module(nkchat_message_obj_api).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([api/2]).
+-export([cmd/3]).
 
 -include("nkchat.hrl").
+-include_lib("nkdomain/include/nkdomain.hrl").
+-include_lib("nkservice/include/nkservice.hrl").
 
 %% ===================================================================
-%% Syntax
+%% API
 %% ===================================================================
 
+cmd(Cmd, Req, State) ->
+    nkdomain_obj_api:api(Cmd, ?CHAT_MESSAGE, Req, State).
 
-%% @doc
-api(<<"create">>, Syntax) ->
-    Base = nkdomain_obj_syntax:syntax(<<"create">>, ?CHAT_MESSAGE, Syntax),
-    Base#{
-        conversation_id => binary,
-        ?CHAT_MESSAGE => #{
-            text => binary,
-            file_id => binary
-        },
-        '__mandatory' => [conversation_id]
-    };
-
-
-api(Cmd, Syntax) ->
-    nkdomain_obj_syntax:syntax(Cmd, ?CHAT_MESSAGE, Syntax).

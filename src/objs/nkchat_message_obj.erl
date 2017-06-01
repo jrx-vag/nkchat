@@ -110,7 +110,7 @@ object_api_allow(_Cmd, _Req, State) ->
 
 %% @private
 object_api_cmd(Cmd, Req, State) ->
-    nkdomain_obj_api:api(Cmd, ?CHAT_MESSAGE, Req, State).
+    nkchat_message_obj_api:cmd(Cmd, Req, State).
 
 
 %% @private

@@ -103,6 +103,22 @@ conv_get_messages(Id, Spec) ->
 message_create(ConvId, Msg) ->
     cmd(<<"objects/message/create">>, #{conversation_id=>ConvId, ?CHAT_MESSAGE=>#{text=>Msg}}).
 
+message_create_file(ConvId, Name) ->
+    case cmd(<<"objects/file/create">>, #{parent_id=>ConvId, file=>#{}}) of
+        {ok, #{<<"obj_id">>:=FileId}} ->
+            {ok, File} = file:read_file("/etc/hosts"),
+            case nkdomain_sample:upload(FileId, "text/plain", File) of
+                ok ->
+                    cmd(<<"objects/message/create">>,
+                        #{conversation_id=>ConvId, name=>Name, ?CHAT_MESSAGE=>#{file_id=>FileId}});
+                error ->
+                    error
+            end;
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
 message_get(MsgId) ->
      cmd(<<"objects/message/get">>, #{id=>MsgId}).
 
@@ -158,6 +174,8 @@ session_get_all_conversations() ->
 
 session_get_conversation(ConvId) ->
     cmd(<<"objects/chat.session/get_conversation">>, #{conversation_id=>ConvId}).
+
+
 
 
 
