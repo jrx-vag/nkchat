@@ -177,3 +177,13 @@ cmd(Pid, Cmd, Data) ->
 
 
 
+%% ===================================================================
+%% Http
+%% ===================================================================
+
+
+http_conv_get_member_conversations(SessId) ->
+    http(SessId, <<"objects/conversation/get_member_conversations">>, #{}).
+
+http(SessId, Cmd, Data) ->
+    nkdomain_sample:http(SessId, Cmd, Data).
