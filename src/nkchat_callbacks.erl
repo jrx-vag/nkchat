@@ -21,6 +21,7 @@
 -module(nkchat_callbacks).
 
 -export([plugin_deps/0, error/1]).
+-export([admin_element_action/5]).
 -export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
@@ -29,6 +30,7 @@
 -include_lib("nkchat.hrl").
 -include_lib("nkapi/include/nkapi.hrl").
 -include_lib("nkservice/include/nkservice.hrl").
+-include_lib("nkevent/include/nkevent.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 
 
@@ -56,6 +58,18 @@ error(conversation_not_found)           -> "Conversation not found";
 error(conversation_is_already_member)   -> "Conversation is already a member";
 error(conversation_is_disabled)         -> "Conversation is currently disabled";
 error(_)   		                        -> continue.
+
+
+
+
+%% ===================================================================
+%% Admin
+%% ===================================================================
+
+
+%% @doc
+admin_element_action(ElementId, Action, Value, Updates, State) ->
+    nkchat_admin_tree:element_action(ElementId, Action, Value, Updates, State).
 
 
 
