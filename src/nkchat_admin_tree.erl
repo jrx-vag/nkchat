@@ -30,6 +30,9 @@
 %% ===================================================================
 
 %% @doc
+element_action(<<"url">>, updated, <<"/chat_messages">>, Updates, State) ->
+    element_action(<<"domain_tree_resources_chat_messages">>, selected, <<>>, Updates, State);
+
 element_action(<<"domain_tree_resources_chat_messages">>, selected, Value, Updates, State) ->
     #{domain_id:=DomainId} = State,
     Table = nkchat_message_obj_ui:table(root, DomainId),
