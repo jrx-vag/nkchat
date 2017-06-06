@@ -278,11 +278,11 @@ object_send_event(Event, Session) ->
 %% @private
 %% We initialize soon in case of early terminate
 object_init(Session) ->
-    {ok, Session#obj_session{data=#?MODULE{}}}.
+    {ok, Session#?NKOBJ{data=#?MODULE{}}}.
 
 
 %% @private When the object is loaded, we make our cache
-object_start(#obj_session{obj=Obj}=Session) ->
+object_start(#?NKOBJ{obj=Obj}=Session) ->
     #{?CHAT_SESSION := #{conversations := ConvsList}} = Obj,
     ObjConvs = maps:from_list([{Id, C} || #{obj_id:=Id}=C <- ConvsList]),
     SessConvs = lists:foldl(
@@ -293,24 +293,24 @@ object_start(#obj_session{obj=Obj}=Session) ->
         obj_convs = ObjConvs,
         sess_convs = SessConvs
     },
-    {ok, Session#obj_session{data=Data}}.
+    {ok, Session#?NKOBJ{data=Data}}.
 
 
 %% @private Prepare the object for saving
-object_restore(#obj_session{obj = Obj, data = #?MODULE{} = Data} = Session) ->
+object_restore(#?NKOBJ{obj = Obj, data = #?MODULE{} = Data} = Session) ->
     #?MODULE{obj_convs = Convs} = Data,
     Obj2 = ?ADD_TO_OBJ(?CHAT_SESSION, #{conversations=>maps:values(Convs)}, Obj),
-    {ok, Session#obj_session{obj = Obj2}}.
+    {ok, Session#?NKOBJ{obj = Obj2}}.
 
 
 %% @private
-object_sync_op({?MODULE, start, Pid}, From, #obj_session{data=Data}=Session) ->
+object_sync_op({?MODULE, start, Pid}, From, #?NKOBJ{data=Data}=Session) ->
     #?MODULE{api_pids=Pids} = Data,
     Data2 = Data#?MODULE{api_pids=[Pid|Pids]},
-    Session2 = Session#obj_session{data=Data2},
+    Session2 = Session#?NKOBJ{data=Data2},
     object_sync_op({?MODULE, get_all_conversations}, From, Session2);
 
-object_sync_op({?MODULE, get_all_conversations}, _From, #obj_session{obj_id=ObjId}=Session) ->
+object_sync_op({?MODULE, get_all_conversations}, _From, #?NKOBJ{obj_id=ObjId}=Session) ->
     ConvIds = get_conv_ids(Session),
     {Reply, Session2} = get_convs_info(ConvIds, [], Session),
     {reply, {ok, ObjId, #{conversations=>Reply}}, Session2};
@@ -491,7 +491,7 @@ make_sess_conv(ConvId, Session) ->
 
 
 %% @private
-link_conv(ConvId, #obj_session{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
+link_conv(ConvId, #?NKOBJ{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
     Opts = #{
         usage_link => {SessId, {?MODULE, SessId}}
     },
@@ -509,7 +509,7 @@ link_conv(ConvId, #obj_session{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) -
 
 
 %% @private
-unlink_conv(ConvId, #obj_session{obj_id=SessId, parent_id=UserId}) ->
+unlink_conv(ConvId, #?NKOBJ{obj_id=SessId, parent_id=UserId}) ->
 %%    Opts = #{
 %%        usage_link => {SessId, {?MODULE, SessId}}
 %%    },
@@ -529,7 +529,7 @@ do_conversation_event({member_added, MemberId}, ConvId, IsActive, _Conv, _SessCo
 do_conversation_event({member_removed, MemberId}, ConvId, IsActive, _Conv, _SessConv, Session) ->
     Session2 = do_event({member_removed, ConvId, IsActive, MemberId}, Session),
     case Session of
-        #obj_session{parent_id=MemberId} ->
+        #?NKOBJ{parent_id=MemberId} ->
             case get_conv(ConvId, Session2) of
                 {ok, ConvObjId, Conv, SessConv} ->
                     {ok, _Reply, Session3} = do_rm_conv(ConvObjId, Conv, SessConv, Session),
@@ -611,7 +611,7 @@ get_conv_info(ConvId, GetUnread, Session) ->
                 {ok, Data1} ->
                     Data2 = case Data1 of
                         #{subtype:=<<"one2one">>, member_ids:=MemberIds} ->
-                            #obj_session{parent_id=UserId, srv_id=SrvId} = Session,
+                            #?NKOBJ{parent_id=UserId, srv_id=SrvId} = Session,
                             case MemberIds -- [UserId] of
                                 [PeerId] ->
                                     case nkdomain_user_obj:get_name(SrvId, PeerId) of
@@ -640,7 +640,7 @@ get_conv_info(ConvId, GetUnread, Session) ->
 
 
 %% @private
-get_conv_extra_info(ConvId, GetUnread, #obj_session{srv_id=SrvId}=Session) ->
+get_conv_extra_info(ConvId, GetUnread, #?NKOBJ{srv_id=SrvId}=Session) ->
     case get_conv_info(ConvId, GetUnread, Session) of
         {ok, #{member_ids:=MemberIds}=Data, Session2} ->
             Data2 = maps:remove(member_ids, Data),
@@ -662,7 +662,7 @@ get_conv_extra_info(ConvId, GetUnread, #obj_session{srv_id=SrvId}=Session) ->
 
 
 %% @private
-is_active(ConvId, #obj_session{data=#?MODULE{active_id=Active}}) ->
+is_active(ConvId, #?NKOBJ{data=#?MODULE{active_id=Active}}) ->
     ConvId == Active.
 
 
@@ -688,17 +688,17 @@ get_conv(ConvId, Session) ->
 
 
 %% @private
-get_conv_ids(#obj_session{data=#?MODULE{obj_convs=Convs}}) ->
+get_conv_ids(#?NKOBJ{data=#?MODULE{obj_convs=Convs}}) ->
     maps:keys(Convs).
 
 
 %% @private
-get_convs(#obj_session{data=#?MODULE{obj_convs=Convs, sess_convs=SessConvs}}) ->
+get_convs(#?NKOBJ{data=#?MODULE{obj_convs=Convs, sess_convs=SessConvs}}) ->
     {Convs, SessConvs}.
 
 
 %% @private
-update_conv(ConvId, Conv, SessConv, #obj_session{data=Data}=Session) ->
+update_conv(ConvId, Conv, SessConv, #?NKOBJ{data=Data}=Session) ->
     #?MODULE{obj_convs=Convs, sess_convs=SessConvs} = Data,
     Convs2 = Convs#{ConvId => Conv},
     SessConvs2 = SessConvs#{ConvId => SessConv},
@@ -706,13 +706,13 @@ update_conv(ConvId, Conv, SessConv, #obj_session{data=Data}=Session) ->
 
 
 %% @private
-update_active(ActiveId, #obj_session{data=Data}=Session) ->
-    Session#obj_session{data = Data#?MODULE{active_id=ActiveId}}.
+update_active(ActiveId, #?NKOBJ{data=Data}=Session) ->
+    Session#?NKOBJ{data = Data#?MODULE{active_id=ActiveId}}.
 
 
 %% @private
-update_convs(Convs, SessConvs, #obj_session{data=Data}=Session) ->
-    Session#obj_session{
+update_convs(Convs, SessConvs, #?NKOBJ{data=Data}=Session) ->
+    Session#?NKOBJ{
         data = Data#?MODULE{obj_convs=Convs, sess_convs=SessConvs},
         is_dirty = true
     }.
@@ -724,7 +724,7 @@ do_event(Event, Session) ->
 
 
 %% @private
-find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
+find_unread(Conv, #?NKOBJ{srv_id=SrvId}=Session) ->
     #{obj_id:=ConvId, last_seen_message_time:=Time} = Conv,
     Search = #{
         filters => #{
@@ -744,7 +744,7 @@ find_unread(Conv, #obj_session{srv_id=SrvId}=Session) ->
 
 
 %% @private
-find_last_message(ConvId, #obj_session{srv_id=SrvId}=Session) ->
+find_last_message(ConvId, #?NKOBJ{srv_id=SrvId}=Session) ->
     Search = #{
         filters => #{
             type => ?CHAT_MESSAGE,

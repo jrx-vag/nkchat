@@ -114,7 +114,7 @@ object_api_cmd(Cmd, Req, State) ->
 
 
 %% @private
-object_event(Event, #obj_session{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
+object_event(Event, #?NKOBJ{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
     case Event of
         created ->
             Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),

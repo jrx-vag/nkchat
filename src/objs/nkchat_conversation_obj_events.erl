@@ -44,13 +44,13 @@ event({message_deleted, MsgId}, Session) ->
 event({member_added, MemberId}, Session) ->
     {event, member_added, #{member_id=>MemberId}, Session};
 
-event({added_to_conversation, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
+event({added_to_conversation, MemberId}, #?NKOBJ{obj_id=ConvId}=Session) ->
     {event, added_to_conversation, MemberId, #{conversation_id=>ConvId}, Session};
 
 event({member_removed, MemberId}, Session) ->
     {event, member_removed, #{member_id=>MemberId}, Session};
 
-event({removed_from_conversation, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
+event({removed_from_conversation, MemberId}, #?NKOBJ{obj_id=ConvId}=Session) ->
     {event, removed_from_conversation, MemberId, #{conversation_id=>ConvId}, Session};
 
 event({session_added, UserId, SessId}, Session) ->
