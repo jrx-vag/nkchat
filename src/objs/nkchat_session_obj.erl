@@ -121,16 +121,11 @@ find(Srv, User) ->
 
 %% @doc Starts a new session, connected to the Caller
 start(Srv, Id, ApiServerPid) ->
-    case nkdomain_obj_lib:find(Srv, Id) of
-        #obj_id_ext{pid=Pid} when is_pid(Pid) ->
-            {error, session_already_present};
-        _ ->
-            case nkdomain_obj_lib:load(Srv, Id, #{}) of
-                #obj_id_ext{pid=Pid} ->
-                    nkdomain_obj:sync_op(Pid, {?MODULE, start, ApiServerPid});
-                {error, Error} ->
-                    {error, Error}
-            end
+    case nkdomain_obj_lib:load(Srv, Id, #{}) of
+        #obj_id_ext{pid=Pid} ->
+            nkdomain_obj:sync_op(Pid, {?MODULE, start, ApiServerPid});
+        {error, Error} ->
+            {error, Error}
     end.
 
 
@@ -205,7 +200,7 @@ conversation_event(_SrvId, SessId, MemberId, ConvId, Event, Meta) ->
     obj_convs :: #{nkdomain:obj_id() => map()},             % Conversation cache
     sess_convs :: #{nkdomain:obj_id() => sess_conv()},      % Internal data
     active_id :: undefined | nkdomain:obj_id(),
-    %% api_pids = [] :: [pid()],
+    api_pid :: pid(),
     meta = #{} :: map()
 }).
 
@@ -313,8 +308,14 @@ object_restore(#?NKOBJ{obj = Obj, data = #?MODULE{} = Data} = State) ->
 
 %% @private
 object_sync_op({?MODULE, start, ApiPid}, From, State) ->
-    State2 = nkdomain_obj_util:link_server_api(?MODULE, ApiPid, State),
-    object_sync_op({?MODULE, get_all_conversations}, From, State2);
+    #?NKOBJ{data=#?MODULE{api_pid=OldPid}} = State,
+    case OldPid /= undefined andalso ApiPid /= OldPid of
+        true ->
+            {reply, {error, session_already_present}, State};
+        false ->
+            State2 = nkdomain_obj_util:link_server_api(?MODULE, ApiPid, State),
+            object_sync_op({?MODULE, get_all_conversations}, From, State2)
+    end;
 
 object_sync_op({?MODULE, get_all_conversations}, _From, #?NKOBJ{obj_id=ObjId}=State) ->
     ConvIds = get_conv_ids(State),
