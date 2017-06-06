@@ -58,11 +58,11 @@ event({message_updated, #{obj_id:=MsgId}}, Session) ->
 event({message_deleted, MsgId}, Session) ->
     {event, message_deleted, #{message_id=>MsgId}, Session};
 
-event({added_member, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
+event({added_member, MemberId}, #?NKOBJ{obj_id=ConvId}=Session) ->
     nkdomain_obj_lib:send_event(added_to_conversation, MemberId, #{conversation_id=>ConvId}, Session),
     {event, added_member, #{member_id=>MemberId}, Session};
 
-event({removed_member, MemberId}, #obj_session{obj_id=ConvId}=Session) ->
+event({removed_member, MemberId}, #?NKOBJ{obj_id=ConvId}=Session) ->
     nkdomain_obj_lib:send_event(removed_from_conversation, MemberId, #{conversation_id=>ConvId}, Session),
     {event, removed_member, #{member_id=>MemberId}, Session};
 
