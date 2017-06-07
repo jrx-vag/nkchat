@@ -32,7 +32,7 @@ table(Srv, Domain) ->
         filters => #{
             type => ?CHAT_MESSAGE
         },
-        fields => [<<"path">>, <<"parent_id">>, <<"created_by">>, <<"created_time">>, <<"message">>],
+        fields => [<<"path">>, <<"parent_id">>, <<"created_by">>, <<"created_time">>, <<"message">>, <<"enabled">>],
         sort => [<<"path">>],
         size => 100
     },
@@ -50,14 +50,22 @@ table(Srv, Domain) ->
                     CreatedBy = maps:get(<<"created_by">>, Entry, <<>>),
                     Text = maps:get(<<"text">>, Msg, <<>>),
                     HasFile = maps:is_key(<<"file_id">>, Msg),
+                    Enabled = maps:get(<<"enabled">>, Entry, true),
+                    case Enabled of
+                        true ->
+                            EnabledIcon = <<"fa-times">>;
+                        false ->
+                            EnabledIcon = <<"fa-check">>
+                    end,
                     #{
                         id => ObjId,
                         path => Path,
                         conversation => ConvId,
                         text => Text,
-                        hasFile => HasFile,
-                        createdBy => CreatedBy,
-                        createdTime => CreatedTime
+                        has_file => HasFile,
+                        created_by => CreatedBy,
+                        created_time => CreatedTime,
+                        enabled_icon => EnabledIcon
                     }
                 end,
                 List),
@@ -86,7 +94,6 @@ make_table(Data) ->
 
 objects_table(Data) ->
     #{
-        id => <<"objectsTable">>,
         type => <<"space">>,
         minHeight => 300,
         minWidth => 400,
@@ -147,6 +154,7 @@ objects_table(Data) ->
                                 align => <<"right">>
                             },
         					#{
+                                id => <<"objectsDataShowSubdomains">>,
                                 view => <<"checkbox">>,
                                 name => <<"show_subdomains_checkbox">>,
                                 width => 20,
@@ -196,6 +204,7 @@ create_default_objects_table_data(Data) ->
         select => true,
         dragColumn => true,
         editable => true,
+        nkFilters => [<<"objectsDataShowSubdomains">>],
         columns => [
             #{
                 id => <<"path">>,
@@ -204,31 +213,31 @@ create_default_objects_table_data(Data) ->
                 sort => <<"server">>
             },
             #{
-                id => <<"conversation">>,
+                id => <<"parent_id">>,
                 header => [<<"Conversation">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
                 sort => <<"server">>
             },
             #{
-                id => <<"text">>,
+                id => <<"message.text">>,
                 header => [<<"Text">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
                 sort => <<"server">>
             },
             #{
-                id => <<"hasFile">>,
+                id => <<"file_id">>,
                 header => [<<"Attachment">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
                 sort => <<"server">>
             },
             #{
-                id => <<"createdBy">>,
+                id => <<"created_by">>,
                 header => [<<"Created By">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
                 sort => <<"server">>
             },
             #{
-                id => <<"createdTime">>,
+                id => <<"created_time">>,
                 header => [<<"Created Time">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
                 sort => <<"server">>,
@@ -236,6 +245,11 @@ create_default_objects_table_data(Data) ->
                     //                                     'en-US', 'es-ES', etc.
                     return (new Date(value)).toLocaleString();
                 }">>
+            },
+            #{
+                header => <<"&nbsp;">>,
+                width => 60,
+                template => <<"<span  style='cursor:pointer;' class='webix_icon #enabled_icon#'></span><span style='cursor:pointer;' class='webix_icon fa-trash'></span>">>
             }
             %%
             %%            #{
@@ -260,8 +274,17 @@ create_default_objects_table_data(Data) ->
         url => <<"wsProxy->">>,
         save => <<"wsProxy->">>,
         onClick => #{
-            <<"fa-eye">> => <<"function(e, id, node) {
-                console.log('Redirect user to the object selected: ' + id);
+            <<"fa-trash">> => <<"function(e, id, node) {
+                webix.confirm({
+                    \"text\": \"This object will be deleted. <br/> Are you sure?\",
+                    \"ok\": \"Yes\",
+                    \"cancel\": \"Cancel\",
+                    \"callback\": function(res) {
+                        if(res) {
+                            webix.$$(\"objectsData\").remove(id);
+                        }
+                    }
+                });
             }">>,
             <<"fa-check">> => <<"function(e, id, node) {
                 webix.confirm({
@@ -272,7 +295,7 @@ create_default_objects_table_data(Data) ->
                         if (res) {
                             var item = webix.$$(\"objectsData\").getItem(id);
                             item.enabled = false;
-                            item.enabledIcon = \"fa-times\";
+                            item.enabled_icon = \"fa-times\";
                             webix.$$(\"objectsData\").refresh(id);
                         }
                     }
@@ -287,7 +310,7 @@ create_default_objects_table_data(Data) ->
                         if (res) {
                             var item = webix.$$(\"objectsData\").getItem(id);
                             item.enabled = true;
-                            item.enabledIcon = \"fa-check\";
+                            item.enabled_icon = \"fa-check\";
                             webix.$$(\"objectsData\").refresh(id);
                         }
                     }
