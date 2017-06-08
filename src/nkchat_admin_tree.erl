@@ -42,7 +42,8 @@ element_action(<<"domain_tree_resources_chat_messages">>, selected, Value, Updat
         id => detail,
         value => #{
             id => <<"domain_detail_chat_messages_table">>,
-            webix_ui => Table
+            class => webix_ui,
+            value => Table
         }
     },
     {continue, [<<"domain_tree_resources_chat_messages">>, selected, Value, [Item|Updates2], State]};
