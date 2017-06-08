@@ -172,7 +172,7 @@ objects_table(Data) ->
                         autowidth => true,
                         label => <<"Refresh">>,
                         click => <<"function() {
-                                    var grid = $$(\"objectsData\");
+                                    var grid = $$(\"domain_detail_chat_messages_table\");
                                     grid.showProgress();
                                     webix.delay(function() {
                                         grid.hideProgress();
@@ -186,7 +186,7 @@ objects_table(Data) ->
                         autowidth => true,
                         label => <<"Pause">>,
                         click => <<"function() {
-                                    var grid = $$(\"objectsData\");
+                                    var grid = $$(\"domain_detail_chat_messages_table\");
                                     grid.showProgress();
                                     webix.delay(function() {
                                         grid.hideProgress();
@@ -200,7 +200,7 @@ objects_table(Data) ->
                         autowidth => true,
                         label => <<"New">>,
                         click => <<"function() {
-                                    var grid = $$(\"objectsData\");
+                                    var grid = $$(\"domain_detail_chat_messages_table\");
                                     grid.showProgress();
                                     webix.delay(function() {
                                         grid.hideProgress();
@@ -218,14 +218,14 @@ objects_table(Data) ->
                                 align => <<"right">>
                             },
         					#{
-                                id => <<"objectsDataShowSubdomains">>,
+                                id => <<"domain_detail_chat_messages_tableShowSubdomains">>,
                                 view => <<"checkbox">>,
                                 name => <<"show_subdomains_checkbox">>,
                                 width => 20,
                                 value => 1,
                                 on => #{
                                     onChange => <<"function() {
-                                                    var grid = $$(\"objectsData\");
+                                                    var grid = $$(\"domain_detail_chat_messages_table\");
                                                     var pager = grid.getPager();
                                                     var page = pager.config.page;
                                                     var start = page * pager.config.size;
@@ -270,7 +270,7 @@ objects_table(Data) ->
 
 create_default_objects_table_data(_Data) ->
     #{
-        id => <<"objectsData">>,
+        id => <<"domain_detail_chat_messages_table">>,
         view => <<"datatable">>,
         css => <<"nk_datatable">>,
         dragColumn => true,
@@ -281,7 +281,7 @@ create_default_objects_table_data(_Data) ->
         scrollX => true,
         rightSplit => 2,
         navigation => true,
-        nkFilters => [<<"objectsDataShowSubdomains">>],
+        nkFilters => [<<"domain_detail_chat_messages_tableShowSubdomains">>],
         export => true,
         columns => [
     		#{
@@ -381,7 +381,7 @@ create_default_objects_table_data(_Data) ->
                     \"cancel\": \"Cancel\",
                     \"callback\": function(res) {
                         if(res) {
-                            webix.$$(\"objectsData\").remove(id);
+                            webix.$$(\"domain_detail_chat_messages_table\").remove(id);
                         }
                     }
                 });
@@ -393,10 +393,10 @@ create_default_objects_table_data(_Data) ->
                     \"cancel\": \"Cancel\",
                     \"callback\": function(res) {
                         if (res) {
-                            var item = webix.$$(\"objectsData\").getItem(id);
+                            var item = webix.$$(\"domain_detail_chat_messages_table\").getItem(id);
                             item.enabled = false;
                             item.enabled_icon = \"fa-times\";
-                            webix.$$(\"objectsData\").refresh(id);
+                            webix.$$(\"domain_detail_chat_messages_table\").refresh(id);
                         }
                     }
                 });
@@ -408,10 +408,10 @@ create_default_objects_table_data(_Data) ->
                     cancel: \"Cancel\",
                     callback: function(res) {
                         if (res) {
-                            var item = webix.$$(\"objectsData\").getItem(id);
+                            var item = webix.$$(\"domain_detail_chat_messages_table\").getItem(id);
                             item.enabled = true;
                             item.enabled_icon = \"fa-check\";
-                            webix.$$(\"objectsData\").refresh(id);
+                            webix.$$(\"domain_detail_chat_messages_table\").refresh(id);
                         }
                     }
                 });
