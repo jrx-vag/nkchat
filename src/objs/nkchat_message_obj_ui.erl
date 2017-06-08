@@ -161,7 +161,14 @@ objects_table(Data) ->
                                 value => 1,
                                 on => #{
                                     onChange => <<"function() {
-                                                    console.log('Checkbox value: ' + this.getValue());
+                                                    var grid = $$(\"objectsData\");
+                                                    var pager = grid.getPager();
+                                                    var page = pager.config.page;
+                                                    var start = page * pager.config.size;
+                                                    console.log('grid', grid);
+                                                    //grid.loadNext(number count,number start,function callback,string url,boolean now);
+                                                    grid.clearAll();
+                                                    grid.loadNext(grid.config.datafetch, 0, null, grid.config.url, true);
                                                     }">>
                                 }
                             }
@@ -201,45 +208,65 @@ create_default_objects_table_data(Data) ->
     #{
         id => <<"objectsData">>,
         view => <<"datatable">>,
-        select => true,
+        css => <<"nk_datatable">>,
         dragColumn => true,
+        resizeColumn => true,
+        select => true,
         editable => true,
+        editaction => <<"dblclick">>,
+        scrollX => true,
+        rightSplit => 2,
+        navigation => true,
         nkFilters => [<<"objectsDataShowSubdomains">>],
+        export => true,
         columns => [
+    		#{
+                id => <<"pos">>,
+                header => <<"#">>,
+                width => 50
+            },
             #{
                 id => <<"path">>,
                 header => [<<"Path">>, #{ content => <<"serverFilter">> }],
-                fillspace => <<"1">>,
+                fillspace => <<"2">>,
+                minWidth => <<"100">>,
                 sort => <<"server">>
             },
             #{
                 id => <<"parent_id">>,
                 header => [<<"Conversation">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
+                minWidth => <<"100">>,
                 sort => <<"server">>
             },
             #{
                 id => <<"message.text">>,
                 header => [<<"Text">>, #{ content => <<"serverFilter">> }],
-                fillspace => <<"1">>,
+                fillspace => <<"2">>,
+                minWidth => <<"100">>,
+                editor => <<"text">>,
                 sort => <<"server">>
             },
             #{
                 id => <<"file_id">>,
                 header => [<<"Attachment">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
+                minWidth => <<"100">>,
                 sort => <<"server">>
             },
             #{
                 id => <<"created_by">>,
                 header => [<<"Created By">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
+                minWidth => <<"100">>,
                 sort => <<"server">>
             },
             #{
                 id => <<"created_time">>,
                 header => [<<"Created Time">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
+                minWidth => <<"100">>,
+                editor => <<"text">>,
                 sort => <<"server">>,
                 format => <<"function(value) {
                     //                                     'en-US', 'es-ES', etc.
@@ -247,9 +274,19 @@ create_default_objects_table_data(Data) ->
                 }">>
             },
             #{
+                id => <<"enabled_icon">>,
                 header => <<"&nbsp;">>,
-                width => 60,
-                template => <<"<span  style='cursor:pointer;' class='webix_icon #enabled_icon#'></span><span style='cursor:pointer;' class='webix_icon fa-trash'></span>">>
+                width => 30,
+                css => <<"nk_cell_checkbox">>,
+                checkValue => true,
+                uncheckValue => false,
+                template => <<"{common.checkbox()}">>
+            },
+    		#{
+                id => <<"delete">>,
+                header => <<"&nbsp;">>,
+                width => 30,
+                template => <<"<span style='cursor:pointer;' class='webix_icon fa-trash'></span>">>
             }
             %%
             %%            #{
@@ -269,7 +306,6 @@ create_default_objects_table_data(Data) ->
             %%            }
         ],
         pager => <<"pagerA">>,
-        export => true,
 %        data => Data,
         url => <<"wsProxy->">>,
         save => <<"wsProxy->">>,
