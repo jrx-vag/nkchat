@@ -10,7 +10,7 @@
 -include_lib("nkevent/include/nkevent.hrl").
 
 
--define(WS, "ws://127.0.0.1:9202/api/ws").
+-define(WS, "ws://127.0.0.1:9202/_api/ws").
 -define(ADMIN_PASS, "1234").
 -define(DOM, <<"/chattest">>).
 
