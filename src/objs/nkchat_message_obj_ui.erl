@@ -23,9 +23,68 @@
 -module(nkchat_message_obj_ui).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([table/2, make_table/1]).
+-export([table_data/5, table/2, make_table/1]).
 
 -include("nkchat.hrl").
+
+
+
+
+
+table_data(Start, Size, _Filter, _Sort, #{srv_id:=SrvId, domain_id:=DomainId}) ->
+    Spec = #{
+        filters => #{
+            type => message
+        },
+        fields => [<<"path">>, <<"parent_id">>, <<"created_by">>, <<"created_time">>, <<"message">>, <<"enabled">>],
+        sort => [<<"path">>],
+        start => Start,
+        size => Size,
+        size => 100
+    },
+    case nkdomain_domain_obj:find_all(SrvId, DomainId, Spec) of
+        {ok, Total, List, _Meta} ->
+            Data = lists:map(
+                fun(Entry) ->
+                    #{
+                        <<"obj_id">> := ObjId,
+                        <<"path">> := Path,
+                        <<"parent_id">> := ConvId,
+                        <<"created_time">> := CreatedTime,
+                        <<"message">> := Msg
+                    } = Entry,
+                    CreatedBy = maps:get(<<"created_by">>, Entry, <<>>),
+                    Text = maps:get(<<"text">>, Msg, <<>>),
+                    HasFile = maps:is_key(<<"file_id">>, Msg),
+                    Enabled = maps:get(<<"enabled">>, Entry, true),
+                    case Enabled of
+                        true ->
+                            EnabledIcon = <<"fa-times">>;
+                        false ->
+                            EnabledIcon = <<"fa-check">>
+                    end,
+                    #{
+                        id => ObjId,
+                        path => Path,
+                        conversation => ConvId,
+                        text => Text,
+                        has_file => HasFile,
+                        created_by => CreatedBy,
+                        created_time => CreatedTime,
+                        enabled_icon => EnabledIcon
+                    }
+                end,
+                List),
+            {ok, Total, Data};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+
+
+
+
 
 table(Srv, Domain) ->
     Spec = #{
@@ -87,6 +146,11 @@ make_table(Data) ->
             rows => [objects_table(Data)]
         }
     }.
+
+
+
+
+
 
 
 
@@ -204,7 +268,7 @@ objects_table(Data) ->
 
 
 
-create_default_objects_table_data(Data) ->
+create_default_objects_table_data(_Data) ->
     #{
         id => <<"objectsData">>,
         view => <<"datatable">>,

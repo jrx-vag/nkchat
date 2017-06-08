@@ -21,7 +21,7 @@
 -module(nkchat_callbacks).
 
 -export([plugin_deps/0, error/1]).
--export([admin_element_action/5]).
+-export([admin_element_action/5, admin_get_data/3]).
 -export([chat_mm_proxy_init/2,
          chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
          chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
@@ -71,6 +71,10 @@ error(_)   		                        -> continue.
 admin_element_action(ElementId, Action, Value, Updates, State) ->
     nkchat_admin_tree:element_action(ElementId, Action, Value, Updates, State).
 
+
+%% @doc
+admin_get_data(ElementId, Spec, State) ->
+    nkchat_admin_detail:get_data(ElementId, Spec, State).
 
 
 %% ===================================================================
