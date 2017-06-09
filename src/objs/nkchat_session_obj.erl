@@ -617,7 +617,7 @@ get_conv_info(ConvId, GetUnread, State) ->
             case nkchat_conversation_obj:get_sess_info(ConvObjId) of
                 {ok, Data1} ->
                     Data2 = case Data1 of
-                        #{subtype:=<<"one2one">>, member_ids:=MemberIds} ->
+                        #{subtype:=[<<"one2one">>], member_ids:=MemberIds} ->
                             #?NKOBJ{parent_id=UserId, srv_id=SrvId} = State,
                             case MemberIds -- [UserId] of
                                 [PeerId] ->
