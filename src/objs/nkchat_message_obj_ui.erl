@@ -297,14 +297,14 @@ create_default_objects_table_data(_Data) ->
                 sort => <<"server">>
             },
             #{
-                id => <<"parent_id">>,
+                id => <<"conversation">>,
                 header => [<<"Conversation">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
                 minWidth => <<"100">>,
                 sort => <<"server">>
             },
             #{
-                id => <<"message.text">>,
+                id => <<"text">>,
                 header => [<<"Text">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"2">>,
                 minWidth => <<"100">>,
@@ -312,7 +312,7 @@ create_default_objects_table_data(_Data) ->
                 sort => <<"server">>
             },
             #{
-                id => <<"file_id">>,
+                id => <<"has_file">>,
                 header => [<<"Attachment">>, #{ content => <<"serverFilter">> }],
                 fillspace => <<"1">>,
                 minWidth => <<"100">>,
