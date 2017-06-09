@@ -22,7 +22,7 @@
 -module(nkchat_session_obj_api).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([cmd/3]).
+-export([cmd/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -49,36 +49,35 @@
 
 
 %% @doc
-cmd(<<"find">>, #nkreq{data=Data, srv_id=SrvId}=Req, State) ->
-    case get_user_id(Data, Req, State) of
+cmd(<<"find">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+    case get_user_id(Data, Req) of
         {ok, UserId} ->
             case nkchat_session_obj:find(SrvId, UserId) of
                 {ok, List} ->
-                    {ok, #{sessions=>List}, State};
+                    {ok, #{sessions=>List}};
                 {error, Error} ->
-                    {error, Error, State}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(<<"create">>, #nkreq{data=Data, srv_id=SrvId}=Req, State) ->
-    case get_user_id(Data, Req, State) of
+cmd(<<"create">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+    case get_user_id(Data, Req) of
         {ok, UserId} ->
             case nkchat_session_obj:create(SrvId, UserId) of
                 {ok, #{obj_id:=ObjId}, _Pid} ->
-                    cmd(<<"start">>, Req#nkreq{data=Data#{id=>ObjId}}, State);
+                    cmd(<<"start">>, Req#nkreq{data=Data#{id=>ObjId}});
                 {error, Error} ->
-                    {error, Error, State}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(<<"start">>, #nkreq{data=#{id:=Id}=Data, srv_id=SrvId}, State) ->
+cmd(<<"start">>, #nkreq{data=#{id:=Id}=Data, srv_id=SrvId}=Req) ->
     case nkchat_session_obj:start(SrvId, Id, self()) of
         {ok, ObjId, Reply} ->
-            State2 = nkdomain_api_util:add_id(?CHAT_SESSION, ObjId, State),
             Types = maps:get(events, Data, ?SESSION_DEF_EVENT_TYPES),
             Subs = #{
                 srv_id => SrvId,
@@ -88,26 +87,27 @@ cmd(<<"start">>, #nkreq{data=#{id:=Id}=Data, srv_id=SrvId}, State) ->
                 obj_id => ObjId
             },
             ok = nkapi_server:subscribe(self(), Subs),
-            State3 = State2#{nkchat_session_types=>Types},
-            {ok, Reply#{obj_id=>ObjId}, State3};
+            UserMeta1 = nkdomain_api_util:add_id(?CHAT_SESSION, ObjId, Req),
+            UserMeta2 = UserMeta1#{nkchat_session_types=>Types},
+            {ok, Reply#{obj_id=>ObjId}, UserMeta2};
         {error, Error} ->
-            {error, Error, State}
+            {error, Error}
     end;
 
-cmd(<<"start">>, #nkreq{data=Data}=Req, State) ->
-    case cmd(<<"find">>, Req, State) of
-        {ok, #{sessions:=[#{<<"obj_id">>:=SessId}|_]}, State2} ->
-            cmd(<<"start">>, Req#nkreq{data=Data#{id=>SessId}}, State2);
-        {ok, #{sessions:=[]}, State2} ->
-            {error, session_not_found, State2};
-        {error, Error, State2} ->
-            {error, Error, State2 }
+cmd(<<"start">>, #nkreq{data=Data}=Req) ->
+    case cmd(<<"find">>, Req) of
+        {ok, #{sessions:=[#{<<"obj_id">>:=SessId}|_]}} ->
+            cmd(<<"start">>, Req#nkreq{data=Data#{id=>SessId}});
+        {ok, #{sessions:=[]}} ->
+            {error, session_not_found};
+        {error, Error2} ->
+            {error, Error2 }
     end;
 
-cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId}, State) ->
-    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
+cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId, user_meta=UserMeta}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
-            State2 = case State of
+            UserMeta2 = case UserMeta of
                 #{nkchat_session_types:=Types} ->
                     Subs = #{
                         srv_id => SrvId,
@@ -117,87 +117,87 @@ cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId}, State) ->
                         obj_id => Id
                     },
                     nkapi_server:unsubscribe(self(), Subs),
-                    maps:remove(nkchat_session_types, State);
+                    maps:remove(nkchat_session_types, UserMeta);
                 _ ->
-                    State
+                    UserMeta
             end,
             case nkchat_session_obj:stop(SrvId, Id) of
                 ok ->
-                    {ok, #{}, State2};
+                    {ok, #{}, UserMeta2};
                 {error, Error} ->
-                    {error, Error, State2}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(<<"get_all_conversations">>, #nkreq{data=Data, srv_id=SrvId}, State) ->
-    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
+cmd(<<"get_all_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             case nkchat_session_obj:get_all_conversations(SrvId, Id) of
                 {ok, ObjId, Data2} ->
-                    {ok, Data2#{obj_id=>ObjId}, State};
+                    {ok, Data2#{obj_id=>ObjId}};
                 {error, Error} ->
-                    {error, Error, State}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(<<"get_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}, State) ->
-    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
+cmd(<<"get_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             case nkchat_session_obj:get_conversation(SrvId, Id, ConvId) of
                 {ok, Reply} ->
-                    {ok, Reply, State};
+                    {ok, Reply};
                 {error, Error} ->
-                    {error, Error, State}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(<<"set_active_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}, State) ->
-    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
+cmd(<<"set_active_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             case nkchat_session_obj:set_active_conversation(SrvId, Id, ConvId) of
                 {ok, Reply} ->
-                    {ok, Reply, State};
+                    {ok, Reply};
                 {error, Error} ->
-                    {error, Error, State}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(<<"add_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}, State) ->
-    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
+cmd(<<"add_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             case nkchat_session_obj:add_conversation(SrvId, Id, ConvId) of
                 {ok, ObjId} ->
-                    {ok, #{conversation_id=>ObjId}, State};
+                    {ok, #{conversation_id=>ObjId}};
                 {error, Error} ->
-                    {error, Error, State}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(<<"remove_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}, State) ->
-    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, State) of
+cmd(<<"remove_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             case nkchat_session_obj:remove_conversation(SrvId, Id, ConvId) of
                 ok ->
-                    {ok, #{}, State};
+                    {ok, #{}};
                 {error, Error} ->
-                    {error, Error, State}
+                    {error, Error}
             end;
-        Error ->
-            Error
+        {error, Error} ->
+            {error, Error}
     end;
 
-cmd(Cmd, State, State) ->
-    nkdomain_obj_api:api(Cmd, ?CHAT_SESSION, State, State).
+cmd(Cmd, Req) ->
+    nkdomain_obj_api:api(Cmd, ?CHAT_SESSION, Req).
 
 
 
@@ -206,9 +206,9 @@ cmd(Cmd, State, State) ->
 %% ===================================================================
 
 %% @private
-get_user_id(#{user_id:=UserId}, _Req, _State) ->
+get_user_id(#{user_id:=UserId}, _Req) ->
     {ok, UserId};
-get_user_id(_, #nkreq{user_id=UserId}, _State) when UserId /= <<>> ->
+get_user_id(_, #nkreq{user_id=UserId}) when UserId /= <<>> ->
     {ok, UserId};
-get_user_id(_Data, _Req, State) ->
-    {error, missing_user_id, State}.
+get_user_id(_Data, _Req) ->
+    {error, missing_user_id}.

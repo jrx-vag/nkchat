@@ -22,7 +22,7 @@
 -module(nkchat_message_obj_api).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([cmd/3]).
+-export([cmd/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -32,6 +32,6 @@
 %% API
 %% ===================================================================
 
-cmd(Cmd, Req, State) ->
-    nkdomain_obj_api:api(Cmd, ?CHAT_MESSAGE, Req, State).
+cmd(Cmd, Req) ->
+    nkdomain_obj_api:api(Cmd, ?CHAT_MESSAGE, Req).
 

@@ -63,7 +63,5 @@ get_data(<<"domain_detail_chat_messages_table">>, Spec, State) ->
     end;
 
 get_data(_ElementId, _Data, _State) ->
-    lager:error("NKLOG PPPP ~p", [_ElementId]),
-
     continue.
 
