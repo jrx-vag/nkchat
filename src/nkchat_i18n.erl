@@ -26,16 +26,16 @@
 
 i18n() -> #{
     en => #{
-        domain_tree_resources_chat_conversations => "Conversations",
-        domain_tree_resources_chat_messages => "Chat Messages",
+        domain_tree_resources_conversations => "Conversations",
+        domain_tree_resources_messages => "Chat Messages",
 
-        domain_tree_sessions_chat_sessions => "Chat"
+        'domain_tree_sessions_chat.sessions' => "Chat"
     },
     es => #{
-        domain_tree_resources_chat_conversations => "Conversaciones",
-        domain_tree_resources_chat_messages => "Mensajes de chat",
+        domain_tree_resources_conversations => "Conversaciones",
+        domain_tree_resources_messages => "Mensajes de chat",
 
-        domain_tree_sessions_chat_sessions => "Chat"
+        'domain_tree_sessions_chat.sessions' => "Chat"
     }
 }.
 

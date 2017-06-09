@@ -222,7 +222,7 @@ object_admin_info() ->
     #{
         class => resource,
         weight => 2000,
-        tree_id => <<"domain_tree_resources_chat_conversations">>
+        tree_id => <<"domain_tree_resources_conversations">>
     }.
 
 

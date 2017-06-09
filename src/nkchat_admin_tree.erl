@@ -30,25 +30,18 @@
 %% ===================================================================
 
 %% @doc
-element_action(<<"url">>, updated, <<"/chat_messages">>, Updates, State) ->
-    element_action(<<"domain_tree_resources_chat_messages">>, selected, <<>>, Updates, State);
-
-element_action(<<"domain_tree_resources_chat_messages">>, selected, Value, Updates, State) ->
-    #{domain_id:=DomainId} = State,
+element_action(<<"domain_tree_resources_messages">>=Key, selected, Value, Updates, Session) ->
+    #{domain_id:=DomainId} = Session,
     Table = nkchat_message_obj_ui:table(root, DomainId),
-    Updates2 = nkadmin_util:append_path(<<"messages">>, Updates, State),
-    Item = #{
-        class => detail,
-        id => detail,
-        value => #{
-            id => <<"domain_detail_chat_messages_table">>,
-            class => webix_ui,
-            value => Table
-        }
+    Detail = #{
+        id => <<"domain_detail_chat_messages_table">>,
+        class => webix_ui,
+        value => Table
     },
-    {continue, [<<"domain_tree_resources_chat_messages">>, selected, Value, [Item|Updates2], State]};
+    {Updates2, Session2} = nkadmin_util:update_detail(<<"messages">>, Detail, Updates, Session),
+    {continue, [Key, selected, Value, Updates2, Session2]};
 
-element_action(_Id, _Action, _Value, _Updates, _State) ->
+element_action(_Id, _Action, _Value, _Updates, _Session) ->
     continue.
 
 
