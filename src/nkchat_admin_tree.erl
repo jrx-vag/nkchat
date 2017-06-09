@@ -30,7 +30,7 @@
 %% ===================================================================
 
 %% @doc
-element_action(<<"domain_tree_resources_messages">>=Key, selected, Value, Updates, Session) ->
+element_action(<<"domain_tree_resources_message">>=Key, selected, Value, Updates, Session) ->
     #{domain_id:=DomainId} = Session,
     Table = nkchat_message_obj_ui:table(root, DomainId),
     Detail = #{
