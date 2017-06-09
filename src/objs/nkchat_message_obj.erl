@@ -25,7 +25,7 @@
 
 -export([create/3]).
 -export([object_get_info/0, object_mapping/0, object_parse/3,
-         object_api_syntax/2, object_api_allow/3, object_api_cmd/3, object_event/2]).
+         object_api_syntax/2, object_api_allow/3, object_api_cmd/2, object_event/2]).
 -export([object_admin_info/0]).
 
 -include("nkchat.hrl").
@@ -109,8 +109,8 @@ object_api_allow(_Cmd, _Req, State) ->
 
 
 %% @private
-object_api_cmd(Cmd, Req, State) ->
-    nkchat_message_obj_api:cmd(Cmd, Req, State).
+object_api_cmd(Cmd, Req) ->
+    nkchat_message_obj_api:cmd(Cmd, Req).
 
 
 %% @private
