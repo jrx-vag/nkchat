@@ -74,7 +74,8 @@ object_get_info() ->
 object_admin_info() ->
     #{
         class => resource,
-        weight => 2001
+        weight => 2001,
+        get_tree_detail => fun nkchat_message_obj_ui:table/1
     }.
 
 

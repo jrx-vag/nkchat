@@ -29,13 +29,19 @@ i18n() -> #{
         domain_tree_resources_conversation => "Conversations",
         domain_tree_resources_message => "Chat Messages",
 
-        'domain_tree_sessions_chat.session' => "Chat"
+        'domain_tree_sessions_chat.session' => "Chat",
+
+        domain_column_conversation => "Conversation",
+        domain_column_text => "Message"
     },
     es => #{
         domain_tree_resources_conversation => "Conversaciones",
         domain_tree_resources_message => "Mensajes de chat",
 
-        'domain_tree_sessions_chat.session' => "Chat"
+        'domain_tree_sessions_chat.session' => "Chat",
+        
+        domain_column_conversation => <<"Conversación"/utf8>>,
+        domain_column_text => "Mensaje"
     }
 }.
 

@@ -30,16 +30,16 @@
 %% ===================================================================
 
 %% @doc
-element_action(<<"domain_tree_resources_message">>=Key, selected, Value, Updates, Session) ->
-    #{domain_id:=DomainId} = Session,
-    Table = nkchat_message_obj_ui:table(root, DomainId),
-    Detail = #{
-        id => <<"domain_detail_chat_messages_table">>,
-        class => webix_ui,
-        value => Table
-    },
-    {Updates2, Session2} = nkadmin_util:update_detail(<<"messages">>, Detail, Updates, Session),
-    {continue, [Key, selected, Value, Updates2, Session2]};
+%element_action(<<"domain_tree_resources_message">>=Key, selected, Value, Updates, Session) ->
+%    #{domain_id:=DomainId} = Session,
+%    Table = nkchat_message_obj_ui:table(root, DomainId),
+%    Detail = #{
+%        id => <<"domain_detail_chat_messages_table">>,
+%        class => webix_ui,
+%        value => Table
+%    },
+%    {Updates2, Session2} = nkadmin_util:update_detail(<<"messages">>, Detail, Updates, Session),
+%    {continue, [Key, selected, Value, Updates2, Session2]};
 
 element_action(_Id, _Action, _Value, _Updates, _Session) ->
     continue.
