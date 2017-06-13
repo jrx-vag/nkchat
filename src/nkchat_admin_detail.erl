@@ -21,7 +21,9 @@
 %% @doc
 -module(nkchat_admin_detail).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
--export([get_data/3]).
+-export([get_data/3, search_spec/1]).
+
+-include_lib("nkevent/include/nkevent.hrl").
 
 -define(LLOG(Type, Txt, Args), lager:Type("NkDOMAN Chat Admin " ++ Txt, Args)).
 
@@ -33,35 +35,52 @@
 
 
 %% @doc
-get_data(<<"domain_detail_chat_messages_table">>, Spec, State) ->
-    Start = maps:get(start, Spec, 0),
-    Size = case maps:find('end', Spec) of
-        {ok, End} when End > Start -> End-Start;
-        _ -> 100
-    end,
-    Filter = maps:get(filter, Spec, #{}),
-    Sort = case maps:get(sort, Spec, #{}) of
-        #{
-            id := SortId,
-            dir := SortDir
-        } ->
-            {SortId, SortDir};
-        _ ->
-            undefined
-    end,
-    case nkchat_message_obj_ui:table_data(Start, Size, Filter, Sort, State) of
-        {ok, Total, Data} ->
-            Reply = #{
-                total_count => Total,
-                pos => Start,
-                data => Data
+get_data(Key, Spec, Session) ->
+    % lager:warning("NKLOG Spec ~p", [Spec]),
+    case nkadmin_util:get_key_data(Key, Session) of
+        #{data_fun:=Fun} ->
+            Start = maps:get(start, Spec, 0),
+            Size = case maps:find('end', Spec) of
+                {ok, End} when End > Start -> End-Start;
+                _ -> 100
+            end,
+            Filter = maps:get(filter, Spec, #{}),
+            Sort = case maps:get(sort, Spec, undefined) of
+                #{
+                    id := SortId,
+                    dir := SortDir
+                } ->
+                    {SortId, to_bin(SortDir)};
+                undefined ->
+                    undefined
+            end,
+            FunSpec = #{
+                start => Start,
+                size => Size,
+                filter => Filter,
+                sort => Sort
             },
-            {ok, Reply, State};
-        {error, Error} ->
-            ?LLOG(warning, "error getting query: ~p", [Error]),
-            {ok, #{total_count=>0, pos=>0, data=>[]}, State}
-    end;
+            case Fun(FunSpec, Session) of
+                {ok, Total, Data} ->
+                    Reply = #{
+                        total_count => Total,
+                        pos => Start,
+                        data => Data
+                    },
+                    {ok, Reply, Session};
+                {error, Error} ->
+                    ?LLOG(warning, "error getting query: ~p", [Error]),
+                    {ok, #{total_count=>0, pos=>0, data=>[]}, Session}
+            end;
+        _ ->
+            {error, element_not_found, Session}
+    end.
 
-get_data(_ElementId, _Data, _State) ->
-    continue.
+%% @private
+search_spec(<<">", _/binary>>=Data) -> Data;
+search_spec(<<"<", _/binary>>=Data) -> Data;
+search_spec(<<"!", _/binary>>=Data) -> Data;
+search_spec(Data) -> <<"prefix:", Data/binary>>.
 
+%% @private
+to_bin(K) -> nklib_util:to_binary(K).
