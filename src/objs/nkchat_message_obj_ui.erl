@@ -35,18 +35,13 @@
 table(Session) ->
     Spec = Session#{
         table_id => ?ID,
+        subdomains_id => ?ID_SUBDOMAINS,
         filters => [?ID_SUBDOMAINS],
         columns => [
             #{
                 id => pos,
                 type => pos,
                 name => domain_column_pos
-            },
-            #{
-                id => domain,
-                type => text,
-                name => domain_column_domain,
-                sort => true
             },
             #{
                 id => conversation,
@@ -58,7 +53,8 @@ table(Session) ->
                 id => text,
                 type => text,
                 name => domain_column_text,
-                editor => text
+                editor => text,
+                fillspace => 2
             },
             #{
                 id => created_by,
@@ -75,8 +71,14 @@ table(Session) ->
             #{
                 id => enabled_icon,
                 type => {icon, <<"enabled_icon">>}
+            },
+            #{
+                id => delete,
+                type => {fixed_icon, <<"fa-trash">>}
             }
         ],
+        left_split => 1,
+        right_split => 2,
         on_click => [
             #{
                 id => <<"fa-times">>,
@@ -105,12 +107,8 @@ table(Session) ->
 %% @doc
 table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, #{srv_id:=SrvId, domain_id:=DomainId}) ->
     SortSpec = case Sort of
-        {<<"domain">>, Order} ->
-            <<Order/binary, ":path">>;
         {<<"conversation">>, Order} ->
-            <<Order/binary, ":parent_id">>;
-        {<<"text">>, Order} ->
-            <<Order/binary, ":message.text">>;
+            <<Order/binary, ":path">>;
         {Field, Order} when Field==<<"created_by">>; Field==<<"created_time">> ->
             <<Order/binary, $:, Field/binary>>;
         _ ->
@@ -145,12 +143,8 @@ table_filter([], Acc) ->
 table_filter([{_, <<>>}|Rest], Acc) ->
     table_filter(Rest, Acc);
 
-table_filter([{<<"domain">>, Data}|Rest], Acc) ->
-    Acc2 = Acc#{<<"path">> => nkdomain_admin_detail:search_spec(Data)},
-    table_filter(Rest, Acc2);
-
 table_filter([{<<"conversation">>, Data}|Rest], Acc) ->
-    Acc2 = Acc#{<<"parent_id">> => nkdomain_admin_detail:search_spec(Data)},
+    Acc2 = Acc#{<<"path">> => nkdomain_admin_detail:search_spec(<<"/conversations/",Data/binary>>)},
     table_filter(Rest, Acc2);
 
 table_filter([{<<"text">>, Data}|Rest], Acc) ->
@@ -174,7 +168,6 @@ table_iter([Entry|Rest], Pos, Acc) ->
     #{
         <<"obj_id">> := ObjId,
         <<"path">> := Path,
-        <<"parent_id">> := Conversation,
         <<"created_time">> := CreatedTime,
         <<"message">> := #{
             <<"text">> := Text
@@ -185,12 +178,12 @@ table_iter([Entry|Rest], Pos, Acc) ->
         true -> <<"fa-times">>;
         false -> <<"fa-check">>
     end,
-    {ok, Domain, _ShortName} = nkdomain_util:get_parts(<<"message">>, Path),
+    {ok, Path2, _MessageName} = nkdomain_util:get_parts(<<"message">>, Path),
+    {ok, _Domain, ConversationName} = nkdomain_util:get_parts(<<"conversation">>, Path2),
     Data = #{
         pos => Pos,
         id => ObjId,
-        domain => Domain,
-        conversation => Conversation,
+        conversation => ConversationName,
         text => Text,
         created_by => CreatedBy,
         created_time => CreatedTime,
