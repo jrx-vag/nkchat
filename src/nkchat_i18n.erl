@@ -31,8 +31,8 @@ i18n() -> #{
 
         'domain_tree_sessions_chat.session' => "Chat",
 
-        domain_column_conversation => "Conversation",
-        domain_column_text => "Message"
+        domain_column_conversation => "CONVERSATION",
+        domain_column_text => "MESSAGE"
     },
     es => #{
         domain_tree_resources_conversation => "Conversaciones",
@@ -40,8 +40,8 @@ i18n() -> #{
 
         'domain_tree_sessions_chat.session' => "Chat",
         
-        domain_column_conversation => <<"Conversación"/utf8>>,
-        domain_column_text => "Mensaje"
+        domain_column_conversation => <<"CONVERSACIÓN"/utf8>>,
+        domain_column_text => "MENSAJE"
     }
 }.
 
