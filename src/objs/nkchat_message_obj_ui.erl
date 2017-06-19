@@ -215,9 +215,6 @@ table_iter([Entry|Rest], Pos, Acc) ->
         <<"obj_id">> := ObjId,
         <<"path">> := Path,
         <<"created_time">> := CreatedTime
-%        <<"message">> := #{
-%            <<"text">> := Text
-%        } = _Message
     } = Entry,
     Message = maps:get(<<"message">>, Entry, #{}),
     MessageText = maps:get(<<"text">>, Message, <<>>),
