@@ -57,6 +57,11 @@ table(Session) ->
                 fillspace => 2
             },
             #{
+                id => file_id,
+                type => text,
+                name => domain_column_file_id
+            },
+            #{
                 id => created_by,
                 type => text,
                 name => domain_column_created_by,
@@ -121,7 +126,7 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, #{srv_id:=Sr
             FindSpec = #{
                 filters => Filters,
                 fields => [<<"path">>, <<"created_by">>, <<"created_time">>,
-                           <<"parent_id">>, <<"message.text">>],
+                           <<"parent_id">>, <<"message.text">>, <<"message.file_id">>],
                 sort => SortSpec,
                 from => Start,
                 size => Size
@@ -155,6 +160,10 @@ table_filter([{<<"conversation">>, Data}|Rest], Acc, Info) ->
 
 table_filter([{<<"text">>, Data}|Rest], Acc, Info) ->
     Acc2 = Acc#{<<"message.text">> => Data},
+    table_filter(Rest, Acc2, Info);
+
+table_filter([{<<"file_id">>, Data}|Rest], Acc, Info) ->
+    Acc2 = Acc#{<<"message.file_id">> => Data},
     table_filter(Rest, Acc2, Info);
 
 table_filter([{<<"created_by">>, Data}|Rest], Acc, Info) ->
@@ -205,11 +214,14 @@ table_iter([Entry|Rest], Pos, Acc) ->
     #{
         <<"obj_id">> := ObjId,
         <<"path">> := Path,
-        <<"created_time">> := CreatedTime,
-        <<"message">> := #{
-            <<"text">> := Text
-        } = _Message
+        <<"created_time">> := CreatedTime
+%        <<"message">> := #{
+%            <<"text">> := Text
+%        } = _Message
     } = Entry,
+    Message = maps:get(<<"message">>, Entry, #{}),
+    MessageText = maps:get(<<"text">>, Message, <<>>),
+    MessageFileId = maps:get(<<"file_id">>, Message, <<>>),
     CreatedBy = maps:get(<<"created_by">>, Entry, <<>>),
     Enabled = case maps:get(<<"enabled">>, Entry, true) of
         true -> <<"fa-times">>;
@@ -221,7 +233,8 @@ table_iter([Entry|Rest], Pos, Acc) ->
         pos => Pos,
         id => ObjId,
         conversation => ConversationName,
-        text => Text,
+        text => MessageText,
+        file_id => MessageFileId,
         created_by => CreatedBy,
         created_time => CreatedTime,
         enabled_icon => Enabled

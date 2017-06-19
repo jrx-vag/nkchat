@@ -32,7 +32,8 @@ i18n() -> #{
         'domain_tree_sessions_chat.session' => "Chat",
 
         domain_column_conversation => "CONVERSATION",
-        domain_column_text => "MESSAGE"
+        domain_column_text => "MESSAGE",
+        domain_column_file_id => "FILE"
     },
     es => #{
         domain_tree_resources_conversation => "Conversaciones",
@@ -41,7 +42,8 @@ i18n() -> #{
         'domain_tree_sessions_chat.session' => "Chat",
         
         domain_column_conversation => <<"CONVERSACIÓN"/utf8>>,
-        domain_column_text => "MENSAJE"
+        domain_column_text => "MENSAJE",
+        domain_column_file_id => "FICHERO"
     }
 }.
 
