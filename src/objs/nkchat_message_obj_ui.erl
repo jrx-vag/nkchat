@@ -205,11 +205,10 @@ table_iter([Entry|Rest], Pos, Acc) ->
     #{
         <<"obj_id">> := ObjId,
         <<"path">> := Path,
-        <<"created_time">> := CreatedTime,
-        <<"message">> := #{
-            <<"text">> := Text
-        } = _Message
+        <<"created_time">> := CreatedTime
     } = Entry,
+    Message = maps:get(<<"message">>, Entry, #{}),
+    Text = maps:get(<<"text">>, Message, <<>>),
     CreatedBy = maps:get(<<"created_by">>, Entry, <<>>),
     Enabled = case maps:get(<<"enabled">>, Entry, true) of
         true -> <<"fa-times">>;
