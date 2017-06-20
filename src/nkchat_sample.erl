@@ -25,7 +25,7 @@ domain_find_convs() ->
 
 %% f(C1), f(C2), f(C3), f(U1), f(U2), f(U3), {C1, C2, C3, U1, U2, U3} = nkchat_sample:init().
 init() ->
-    nkdomain_store:delete_all_childs(root, "/ct"),
+    nkdomain:delete_all_childs(root, "/ct"),
     {ok, _, Pid1} = nkdomain_sample:login(),
     C1 = <<"/ct/conversations/c1">>,
     C2 = <<"/ct/conversations/c2">>,

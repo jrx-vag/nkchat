@@ -24,7 +24,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/3]).
--export([object_get_info/0, object_mapping/0, object_parse/3,
+-export([object_info/0, object_es_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_allow/3, object_api_cmd/2, object_event/2]).
 -export([object_admin_info/0]).
 
@@ -44,7 +44,7 @@
 
 create(Srv, Name, Obj) ->
     #{conversation_id:=ConvId} = Obj,
-    case nkdomain_obj_lib:load(Srv, ConvId, #{}) of
+    case nkdomain_lib:load(Srv, ConvId) of
         #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvObjId} ->
             Obj2 = Obj#{parent_id=>ConvObjId},
             Obj3 = maps:remove(conversation_id, Obj2),
@@ -62,7 +62,7 @@ create(Srv, Name, Obj) ->
 
 
 %% @private
-object_get_info() ->
+object_info() ->
     #{
         type => ?CHAT_MESSAGE,
         dont_update_on_disabled => true,
@@ -80,7 +80,7 @@ object_admin_info() ->
 
 
 %% @private
-object_mapping() ->
+object_es_mapping() ->
     #{
         text => #{
             type => text,
@@ -114,7 +114,7 @@ object_api_cmd(Cmd, Req) ->
 
 
 %% @private
-object_event(Event, #?NKOBJ{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
+object_event(Event, #?STATE{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
     case Event of
         created ->
             Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),

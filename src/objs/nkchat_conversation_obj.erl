@@ -33,7 +33,7 @@
 -export([create/3, add_member/3, remove_member/3, add_session/4, remove_session/3]).
 -export([get_messages/3, get_member_conversations/3]).
 -export([message_event/2, get_sess_info/1]).
--export([object_get_info/0, object_mapping/0, object_parse/3,
+-export([object_info/0, object_es_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_allow/3, object_api_cmd/2, object_send_event/2,
          object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
          object_event/2]).
@@ -111,7 +111,7 @@ remove_session(ConvId, MemberId, SessId) ->
 
 %% @doc
 get_member_conversations(Srv, Domain, MemberId) ->
-    case nkdomain_obj_lib:find(Srv, Domain) of
+    case nkdomain_lib:find(Srv, Domain) of
         #obj_id_ext{srv_id=SrvId, path=DomainPath} ->
             Filters = #{
                 type => ?CHAT_CONVERSATION,
@@ -124,7 +124,7 @@ get_member_conversations(Srv, Domain, MemberId) ->
                 filters => Filters,
                 size => 9999
             },
-            case nkdomain_store:find(SrvId, Search2) of
+            case nkdomain:search(SrvId, Search2) of
                 {ok, N, List, _Meta} ->
                     {ok, #{total=>N, data=>List}};
                 {error, Error} ->
@@ -139,7 +139,7 @@ get_member_conversations(Srv, Domain, MemberId) ->
 
 %% @doc
 get_messages(Srv, Id, Spec) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{}) of
+    case nkdomain_lib:load(Srv, Id) of
         #obj_id_ext{srv_id=SrvId, obj_id=ConvId} ->
             Search1 = maps:with([from, size], Spec),
             Filters1 = #{
@@ -157,7 +157,7 @@ get_messages(Srv, Id, Spec) ->
                 fields => [created_time, ?CHAT_MESSAGE, created_by],
                 filters => Filters2
             },
-            case nkdomain_store:find(SrvId, Search2) of
+            case nkdomain:search(SrvId, Search2) of
                 {ok, N, List, _Meta} ->
                     List2 = lists:map(
                         fun(#{<<"created_by">>:=MemberId}=D) -> add_user(SrvId, MemberId, D) end,
@@ -209,7 +209,7 @@ get_sess_info(ConvId) ->
 
 
 %% @private
-object_get_info() ->
+object_info() ->
     #{
         type => ?CHAT_CONVERSATION,
         min_first_time => 5*60*1000,
@@ -226,7 +226,7 @@ object_admin_info() ->
 
 
 %% @private
-object_mapping() ->
+object_es_mapping() ->
     #{
         members => #{
             type => object,
@@ -282,7 +282,7 @@ object_send_event(Event, Session) ->
 
 
 %% @private Send events to my sessions
-object_event(Event, #?NKOBJ{srv_id=SrvId, obj_id=ConvId}=Session) ->
+object_event(Event, #?STATE{srv_id=SrvId, obj_id=ConvId}=Session) ->
     case session_event_filter(Event) of
         true ->
             lists:foreach(
@@ -336,23 +336,23 @@ object_api_cmd(Cmd, Req) ->
 %% @private
 %% We initialize soon in case of early terminate
 object_init(Session) ->
-    {ok, Session#?NKOBJ{data=#?MODULE{}}}.
+    {ok, Session#?STATE{data=#?MODULE{}}}.
 
 
 %% @private When the object is loaded, we make our cache
-object_start(#?NKOBJ{obj=Obj}=Session) ->
+object_start(#?STATE{obj=Obj}=Session) ->
     #{?CHAT_CONVERSATION := #{members := MemberList}} = Obj,
     % It should not take a lot of memory, it is a copy
     Members = maps:from_list([{Id, M} || #{member_id:=Id} = M <- MemberList]),
     Data = #?MODULE{members2 = Members},
-    {ok, Session#?NKOBJ{data=Data}}.
+    {ok, Session#?STATE{data=Data}}.
 
 
 %% @private Prepare the object for saving
-object_restore(#?NKOBJ{obj=Obj}=Session) ->
+object_restore(#?STATE{obj=Obj}=Session) ->
     Members = get_members(Session),
     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, #{members=>maps:values(Members)}, Obj),
-    {ok, Session#?NKOBJ{obj = Obj2}}.
+    {ok, Session#?STATE{obj = Obj2}}.
 
 
 %% @private
@@ -396,8 +396,8 @@ object_sync_op({?MODULE, remove_session, UserId, SessId}, _From, Session) ->
             {reply, {error, Error}, Session}
     end;
 
-object_sync_op({?MODULE, get_session_info}, _From, #?NKOBJ{obj_id=ObjId}=Session) ->
-    #?NKOBJ{is_enabled=Enabled, path=Path, obj=Obj} = Session,
+object_sync_op({?MODULE, get_session_info}, _From, #?STATE{obj_id=ObjId}=Session) ->
+    #?STATE{is_enabled=Enabled, path=Path, obj=Obj} = Session,
     Name = maps:get(name, Obj, <<>>),
     MemberIds = maps:keys(get_members(Session)),
     Reply = #{
@@ -438,13 +438,13 @@ sync_op(Srv, Id, Op) ->
 
 
 %% @private
-find_member(Id, #?NKOBJ{srv_id=SrvId}=Session) ->
+find_member(Id, #?STATE{srv_id=SrvId}=Session) ->
     Members = get_members(Session),
     case maps:find(Id, Members) of
         {ok, Member} ->
             {true, Id, Member, Members};
         error ->
-            case nkdomain_obj_lib:find(SrvId, Id) of
+            case nkdomain_lib:find(SrvId, Id) of
                 #obj_id_ext{obj_id=ObjId} ->
                     case maps:find(ObjId, Members) of
                         {ok, Member} ->
@@ -536,13 +536,13 @@ do_rm_session(Id, SessionId, Session) ->
 
 
 %% @private
-get_members(#?NKOBJ{data=#?MODULE{members2=Members}}) ->
+get_members(#?STATE{data=#?MODULE{members2=Members}}) ->
     Members.
 
 %% @private
-set_members(Members, #?NKOBJ{data=Data}=Session) ->
+set_members(Members, #?STATE{data=Data}=Session) ->
     Data2 = Data#?MODULE{members2=Members},
-    Session#?NKOBJ{data=Data2, is_dirty=true}.
+    Session#?STATE{data=Data2, is_dirty=true}.
 
 
 %% @private

@@ -49,7 +49,7 @@ test() ->
 
 
 clear() ->
-    nkdomain_store:delete_all_childs(root, ?DOM),
+    nkdomain:delete_all_childs(root, ?DOM),
     nkdomain_domain_obj:create(root, "/", "chattest", "Chat test"),
     ok.
 

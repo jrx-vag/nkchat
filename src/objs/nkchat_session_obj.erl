@@ -26,7 +26,7 @@
 -export([create/2, find/2, start/3, stop/2, get_all_conversations/2, get_conversation/3]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_event/6]).
--export([object_get_info/0, object_mapping/0, object_parse/3,
+-export([object_info/0, object_es_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_allow/3, object_api_cmd/2]).
 -export([object_init/1, object_start/1, object_stop/2, object_restore/1, object_send_event/2,
          object_sync_op/3, object_async_op/2, object_handle_info/2]).
@@ -78,7 +78,7 @@
     {ok, nkdomain_obj_lib:make_and_create_reply(), pid()} | {error, term()}.
 
 create(Srv, User) ->
-    case nkdomain_obj_lib:find(Srv, User) of
+    case nkdomain_lib:find(Srv, User) of
         #obj_id_ext{obj_id = UserId} ->
             Obj = #{
                 type => ?CHAT_SESSION,
@@ -96,7 +96,7 @@ create(Srv, User) ->
     {ok, [map()]} | {error, term()}.
 
 find(Srv, User) ->
-    case nkdomain_obj_lib:find(Srv, User) of
+    case nkdomain_lib:find(Srv, User) of
         #obj_id_ext{obj_id=UserId} ->
             Search = #{
                 filters => #{
@@ -106,7 +106,7 @@ find(Srv, User) ->
                 sort => [#{created_time => #{order => desc}}],
                 fields => [created_time]
             },
-            case nkdomain_store:find(Srv, Search) of
+            case nkdomain:search(Srv, Search) of
                 {ok, _, [], _Meta} ->
                     {error, session_not_found};
                 {ok, _, List, _Meta} ->
@@ -121,7 +121,7 @@ find(Srv, User) ->
 
 %% @doc Starts a new session, connected to the Caller
 start(Srv, Id, ApiServerPid) ->
-    case nkdomain_obj_lib:load(Srv, Id, #{}) of
+    case nkdomain_lib:load(Srv, Id) of
         #obj_id_ext{pid=Pid} ->
             nkdomain_obj:sync_op(Pid, {?MODULE, start, ApiServerPid});
         {error, Error} ->
@@ -136,7 +136,7 @@ stop(Srv, Id) ->
 
 %% @doc
 add_conversation(Srv, Id, ConvId) ->
-    case nkdomain_obj_lib:load(Srv, ConvId, #{}) of
+    case nkdomain_lib:load(Srv, ConvId) of
         #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvId2} ->
             sync_op(Srv, Id, {?MODULE, add_conv, ConvId2});
         {error, object_not_found} ->
@@ -175,7 +175,7 @@ set_active_conversation(Srv, Id, ConvId) ->
     ok.
 
 conversation_event(_SrvId, SessId, MemberId, ConvId, Event, Meta) ->
-    case nkdomain_obj_lib:find_loaded(SessId) of
+    case nkdomain_lib:find_loaded(SessId) of
         #obj_id_ext{pid = Pid} ->
             parse_online_event(Pid, ConvId, Event);
         not_found ->
@@ -207,7 +207,7 @@ conversation_event(_SrvId, SessId, MemberId, ConvId, Event, Meta) ->
 
 
 %% @private
-object_get_info() ->
+object_info() ->
     #{
         type => ?CHAT_SESSION
 
@@ -224,7 +224,7 @@ object_admin_info() ->
 
 
 %% @private
-object_mapping() ->
+object_es_mapping() ->
     #{
         conversations => #{
             type => object,
@@ -276,11 +276,11 @@ object_send_event(Event, State) ->
 %% @private
 %% We initialize soon in case of early terminate
 object_init(State) ->
-    {ok, State#?NKOBJ{data=#?MODULE{}}}.
+    {ok, State#?STATE{data=#?MODULE{}}}.
 
 
 %% @private When the object is loaded, we make our cache
-object_start(#?NKOBJ{obj=Obj}=State) ->
+object_start(#?STATE{obj=Obj}=State) ->
     #{?CHAT_SESSION := #{conversations := ConvsList}} = Obj,
     ObjConvs = maps:from_list([{Id, C} || #{obj_id:=Id}=C <- ConvsList]),
     SessConvs = lists:foldl(
@@ -291,7 +291,7 @@ object_start(#?NKOBJ{obj=Obj}=State) ->
         obj_convs = ObjConvs,
         sess_convs = SessConvs
     },
-    {ok, State#?NKOBJ{data=Data}}.
+    {ok, State#?STATE{data=Data}}.
 
 
 %% @private
@@ -300,15 +300,15 @@ object_stop(_Reason, State) ->
 
 
 %% @private Prepare the object for saving
-object_restore(#?NKOBJ{obj = Obj, data = #?MODULE{} = Data} = State) ->
+object_restore(#?STATE{obj = Obj, data = #?MODULE{} = Data} = State) ->
     #?MODULE{obj_convs = Convs} = Data,
     Obj2 = ?ADD_TO_OBJ(?CHAT_SESSION, #{conversations=>maps:values(Convs)}, Obj),
-    {ok, State#?NKOBJ{obj = Obj2}}.
+    {ok, State#?STATE{obj = Obj2}}.
 
 
 %% @private
 object_sync_op({?MODULE, start, ApiPid}, From, State) ->
-    #?NKOBJ{data=#?MODULE{api_pid=OldPid}} = State,
+    #?STATE{data=#?MODULE{api_pid=OldPid}} = State,
     case OldPid /= undefined andalso ApiPid /= OldPid of
         true ->
             {reply, {error, session_already_present}, State};
@@ -317,7 +317,7 @@ object_sync_op({?MODULE, start, ApiPid}, From, State) ->
             object_sync_op({?MODULE, get_all_conversations}, From, State2)
     end;
 
-object_sync_op({?MODULE, get_all_conversations}, _From, #?NKOBJ{obj_id=ObjId}=State) ->
+object_sync_op({?MODULE, get_all_conversations}, _From, #?STATE{obj_id=ObjId}=State) ->
     ConvIds = get_conv_ids(State),
     {Reply, State2} = get_convs_info(ConvIds, [], State),
     {reply, {ok, ObjId, #{conversations=>Reply}}, State2};
@@ -498,11 +498,11 @@ make_sess_conv(ConvId, State) ->
 
 
 %% @private
-link_conv(ConvId, #?NKOBJ{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
-    Opts = #{
-        usage_link => {SessId, {?MODULE, SessId}}
-    },
-    case nkdomain_obj_lib:load(SrvId, ConvId, Opts) of
+link_conv(ConvId, #?STATE{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
+%%    _Opts = #{
+%%        usage_link => {SessId, {?MODULE, SessId}}
+%%    },
+    case nkdomain_lib:load(SrvId, ConvId) of
         #obj_id_ext{obj_id=ConvObjId, pid=Pid} ->
             case nkchat_conversation_obj:add_session(Pid, UserId, SessId, #{}) of
                 ok ->
@@ -516,7 +516,7 @@ link_conv(ConvId, #?NKOBJ{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
 
 
 %% @private
-unlink_conv(ConvId, #?NKOBJ{obj_id=SessId, parent_id=UserId}) ->
+unlink_conv(ConvId, #?STATE{obj_id=SessId, parent_id=UserId}) ->
 %%    Opts = #{
 %%        usage_link => {SessId, {?MODULE, SessId}}
 %%    },
@@ -536,7 +536,7 @@ do_conversation_event({member_added, MemberId}, ConvId, IsActive, _Conv, _SessCo
 do_conversation_event({member_removed, MemberId}, ConvId, IsActive, _Conv, _SessConv, State) ->
     State2 = do_event({member_removed, ConvId, IsActive, MemberId}, State),
     case State of
-        #?NKOBJ{parent_id=MemberId} ->
+        #?STATE{parent_id=MemberId} ->
             case get_conv(ConvId, State2) of
                 {ok, ConvObjId, Conv, SessConv} ->
                     {ok, _Reply, State3} = do_rm_conv(ConvObjId, Conv, SessConv, State),
@@ -618,7 +618,7 @@ get_conv_info(ConvId, GetUnread, State) ->
                 {ok, Data1} ->
                     Data2 = case Data1 of
                         #{subtype:=[<<"one2one">>], member_ids:=MemberIds} ->
-                            #?NKOBJ{parent_id=UserId, srv_id=SrvId} = State,
+                            #?STATE{parent_id=UserId, srv_id=SrvId} = State,
                             case MemberIds -- [UserId] of
                                 [PeerId] ->
                                     case nkdomain_user_obj:get_name(SrvId, PeerId) of
@@ -647,7 +647,7 @@ get_conv_info(ConvId, GetUnread, State) ->
 
 
 %% @private
-get_conv_extra_info(ConvId, GetUnread, #?NKOBJ{srv_id=SrvId}=State) ->
+get_conv_extra_info(ConvId, GetUnread, #?STATE{srv_id=SrvId}=State) ->
     case get_conv_info(ConvId, GetUnread, State) of
         {ok, #{member_ids:=MemberIds}=Data, State2} ->
             Data2 = maps:remove(member_ids, Data),
@@ -669,7 +669,7 @@ get_conv_extra_info(ConvId, GetUnread, #?NKOBJ{srv_id=SrvId}=State) ->
 
 
 %% @private
-is_active(ConvId, #?NKOBJ{data=#?MODULE{active_id=Active}}) ->
+is_active(ConvId, #?STATE{data=#?MODULE{active_id=Active}}) ->
     ConvId == Active.
 
 
@@ -680,7 +680,7 @@ get_conv(ConvId, State) ->
         {ok, Conv} ->
             {ok, ConvId, Conv, maps:get(ConvId, SessConvs)};
         error ->
-            case nkdomain_obj_lib:find_loaded(ConvId) of
+            case nkdomain_lib:find_loaded(ConvId) of
                 #obj_id_ext{obj_id=ConvObjId} ->
                     case maps:find(ConvObjId, Convs) of
                         {ok, Conv} ->
@@ -695,17 +695,17 @@ get_conv(ConvId, State) ->
 
 
 %% @private
-get_conv_ids(#?NKOBJ{data=#?MODULE{obj_convs=Convs}}) ->
+get_conv_ids(#?STATE{data=#?MODULE{obj_convs=Convs}}) ->
     maps:keys(Convs).
 
 
 %% @private
-get_convs(#?NKOBJ{data=#?MODULE{obj_convs=Convs, sess_convs=SessConvs}}) ->
+get_convs(#?STATE{data=#?MODULE{obj_convs=Convs, sess_convs=SessConvs}}) ->
     {Convs, SessConvs}.
 
 
 %% @private
-update_conv(ConvId, Conv, SessConv, #?NKOBJ{data=Data}=State) ->
+update_conv(ConvId, Conv, SessConv, #?STATE{data=Data}=State) ->
     #?MODULE{obj_convs=Convs, sess_convs=SessConvs} = Data,
     Convs2 = Convs#{ConvId => Conv},
     SessConvs2 = SessConvs#{ConvId => SessConv},
@@ -713,13 +713,13 @@ update_conv(ConvId, Conv, SessConv, #?NKOBJ{data=Data}=State) ->
 
 
 %% @private
-update_active(ActiveId, #?NKOBJ{data=Data}=State) ->
-    State#?NKOBJ{data = Data#?MODULE{active_id=ActiveId}}.
+update_active(ActiveId, #?STATE{data=Data}=State) ->
+    State#?STATE{data = Data#?MODULE{active_id=ActiveId}}.
 
 
 %% @private
-update_convs(Convs, SessConvs, #?NKOBJ{data=Data}=State) ->
-    State#?NKOBJ{
+update_convs(Convs, SessConvs, #?STATE{data=Data}=State) ->
+    State#?STATE{
         data = Data#?MODULE{obj_convs=Convs, sess_convs=SessConvs},
         is_dirty = true
     }.
@@ -731,7 +731,7 @@ do_event(Event, State) ->
 
 
 %% @private
-find_unread(Conv, #?NKOBJ{srv_id=SrvId}=State) ->
+find_unread(Conv, #?STATE{srv_id=SrvId}=State) ->
     #{obj_id:=ConvId, last_seen_message_time:=Time} = Conv,
     Search = #{
         filters => #{
@@ -741,7 +741,7 @@ find_unread(Conv, #?NKOBJ{srv_id=SrvId}=State) ->
         },
         size => 0
     },
-    case nkdomain_store:find(SrvId, Search) of
+    case nkdomain:search(SrvId, Search) of
         {ok, Num, [], _Meta} ->
             Num;
         {error, Error} ->
@@ -751,7 +751,7 @@ find_unread(Conv, #?NKOBJ{srv_id=SrvId}=State) ->
 
 
 %% @private
-find_last_message(ConvId, #?NKOBJ{srv_id=SrvId}=State) ->
+find_last_message(ConvId, #?STATE{srv_id=SrvId}=State) ->
     Search = #{
         filters => #{
             type => ?CHAT_MESSAGE,
@@ -761,7 +761,7 @@ find_last_message(ConvId, #?NKOBJ{srv_id=SrvId}=State) ->
         sort => <<"desc:created_time">>,
         size => 1
     },
-    case nkdomain_store:find(SrvId, Search) of
+    case nkdomain:search(SrvId, Search) of
         {ok, 0, [], _Meta} ->
             #{};
         {ok, _Num, [Obj], _Meta} ->
