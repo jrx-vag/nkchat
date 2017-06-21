@@ -27,7 +27,7 @@
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_event/6]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
-         object_api_syntax/2, object_api_allow/3, object_api_cmd/2]).
+         object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_start/1, object_stop/2, object_restore/1, object_send_event/2,
          object_sync_op/3, object_async_op/2, object_handle_info/2]).
 -export([object_admin_info/0]).
@@ -258,9 +258,6 @@ object_api_syntax(Cmd, Syntax) ->
     nkchat_session_obj_syntax:api(Cmd, Syntax).
 
 
-%% @private
-object_api_allow(_Cmd, _Req, State) ->
-    {true, State}.
 
 
 %% @private
@@ -317,7 +314,7 @@ object_sync_op({?MODULE, start, ApiPid}, From, State) ->
             object_sync_op({?MODULE, get_all_conversations}, From, State2)
     end;
 
-object_sync_op({?MODULE, get_all_conversations}, _From, #?STATE{obj_id=ObjId}=State) ->
+object_sync_op({?MODULE, get_all_conversations}, _From, #?STATE{id=#obj_id_ext{obj_id=ObjId}}=State) ->
     ConvIds = get_conv_ids(State),
     {Reply, State2} = get_convs_info(ConvIds, [], State),
     {reply, {ok, ObjId, #{conversations=>Reply}}, State2};
@@ -498,7 +495,7 @@ make_sess_conv(ConvId, State) ->
 
 
 %% @private
-link_conv(ConvId, #?STATE{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
+link_conv(ConvId, #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=SessId}, parent_id=UserId}) ->
 %%    _Opts = #{
 %%        usage_link => {SessId, {?MODULE, SessId}}
 %%    },
@@ -516,7 +513,7 @@ link_conv(ConvId, #?STATE{srv_id=SrvId, obj_id=SessId, parent_id=UserId}) ->
 
 
 %% @private
-unlink_conv(ConvId, #?STATE{obj_id=SessId, parent_id=UserId}) ->
+unlink_conv(ConvId, #?STATE{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId}) ->
 %%    Opts = #{
 %%        usage_link => {SessId, {?MODULE, SessId}}
 %%    },

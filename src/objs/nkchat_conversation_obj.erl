@@ -34,7 +34,7 @@
 -export([get_messages/3, get_member_conversations/3]).
 -export([message_event/2, get_sess_info/1]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
-         object_api_syntax/2, object_api_allow/3, object_api_cmd/2, object_send_event/2,
+         object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_start/1,  object_restore/1, object_sync_op/3, object_async_op/2,
          object_event/2]).
 -export([object_admin_info/0]).
@@ -282,7 +282,7 @@ object_send_event(Event, Session) ->
 
 
 %% @private Send events to my sessions
-object_event(Event, #?STATE{srv_id=SrvId, obj_id=ConvId}=Session) ->
+object_event(Event, #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=ConvId}}=Session) ->
     case session_event_filter(Event) of
         true ->
             lists:foreach(
@@ -324,9 +324,6 @@ object_api_syntax(Cmd, Syntax) ->
     nkchat_conversation_obj_syntax:api(Cmd, Syntax).
 
 
-%% @private
-object_api_allow(_Cmd, _Req, State) ->
-    {true, State}.
 
 %% @private
 object_api_cmd(Cmd, Req) ->
@@ -396,8 +393,8 @@ object_sync_op({?MODULE, remove_session, UserId, SessId}, _From, Session) ->
             {reply, {error, Error}, Session}
     end;
 
-object_sync_op({?MODULE, get_session_info}, _From, #?STATE{obj_id=ObjId}=Session) ->
-    #?STATE{is_enabled=Enabled, path=Path, obj=Obj} = Session,
+object_sync_op({?MODULE, get_session_info}, _From, #?STATE{id=#obj_id_ext{obj_id=ObjId}}=Session) ->
+    #?STATE{is_enabled=Enabled, id=#obj_id_ext{path=Path}, obj=Obj} = Session,
     Name = maps:get(name, Obj, <<>>),
     MemberIds = maps:keys(get_members(Session)),
     Reply = #{

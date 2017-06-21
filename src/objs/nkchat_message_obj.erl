@@ -25,7 +25,7 @@
 
 -export([create/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
-         object_api_syntax/2, object_api_allow/3, object_api_cmd/2, object_event/2]).
+         object_api_syntax/2, object_api_cmd/2, object_event/2]).
 -export([object_admin_info/0]).
 
 -include("nkchat.hrl").
@@ -103,9 +103,6 @@ object_api_syntax(Cmd, Syntax) ->
     nkchat_message_obj_syntax:api(Cmd, Syntax).
 
 
-%% @private
-object_api_allow(_Cmd, _Req, State) ->
-    {true, State}.
 
 
 %% @private
@@ -114,7 +111,7 @@ object_api_cmd(Cmd, Req) ->
 
 
 %% @private
-object_event(Event, #?STATE{parent_id=ParentId, obj_id=ObjId, obj=Obj}=Session) ->
+object_event(Event, #?STATE{parent_id=ParentId, id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=Session) ->
     case Event of
         created ->
             Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),
