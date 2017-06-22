@@ -225,6 +225,10 @@ table_iter([Entry|Rest], Pos, Acc) ->
         true -> <<"fa-times">>;
         false -> <<"fa-check">>
     end,
+    Css = case maps:get(<<"enabled">>, Entry, true) of
+        true -> <<"">>;
+        false -> <<"webix_cell_disabled">>
+    end,
     {ok, Path2, _MessageName} = nkdomain_util:get_parts(<<"message">>, Path),
     {ok, _Domain, ConversationName} = nkdomain_util:get_parts(<<"conversation">>, Path2),
     Data = #{
@@ -235,6 +239,7 @@ table_iter([Entry|Rest], Pos, Acc) ->
         file_id => MessageFileId,
         created_by => CreatedBy,
         created_time => CreatedTime,
-        enabled_icon => Enabled
+        enabled_icon => Enabled,
+        <<"$css">> => Css
     },
     table_iter(Rest, Pos+1, [Data|Acc]).
