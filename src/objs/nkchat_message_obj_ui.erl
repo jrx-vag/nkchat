@@ -87,11 +87,11 @@ table(Session) ->
         on_click => [
             #{
                 id => <<"fa-times">>,
-                type => enable
+                type => disable
             },
             #{
                 id => <<"fa-check">>,
-                type => disable
+                type => enable
             },
             #{
                 id => <<"fa-trash">>,
