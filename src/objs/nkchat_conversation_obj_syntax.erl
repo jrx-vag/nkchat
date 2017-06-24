@@ -32,28 +32,19 @@
 %% ===================================================================
 
 
-%% @doc
-api(<<"create">>, Syntax) ->
-    Base = nkdomain_obj_syntax:syntax(<<"create">>, ?CHAT_CONVERSATION, Syntax),
-    Base#{
-        subtype => {atom, [private, channel, one2one]},
-        ?CHAT_CONVERSATION => #{},
-        '__defaults' => #{subtype => private},
-        '__mandatory' => [obj_name]
-    };
-
+%%%% @doc
 api(<<"add_member">>, Syntax) ->
     Syntax#{
         id => binary,
         member_id => binary,
-        '__mandatory' => [member_id]
+        '__mandatory' => [id, member_id]
     };
 
 api(<<"remove_member">>, Syntax) ->
     Syntax#{
         id => binary,
         member_id => binary,
-        '__mandatory' => [member_id]
+        '__mandatory' => [id, member_id]
     };
 
 api(<<"get_member_conversations">>, Syntax) ->
@@ -66,7 +57,8 @@ api(<<"get_messages">>, Syntax) ->
         id => binary,
         size => integer,
         from => integer,
-        start_date => integer
+        start_date => integer,
+        '__mandatory' => [id]
     };
 
 api(Cmd, Syntax) ->

@@ -98,6 +98,7 @@ get_body(#state{ct=CT, req=Req}, Opts) ->
     case cowboy_req:body_length(Req) of
         BL when is_integer(BL), BL =< MaxBody ->
             {ok, Body, _} = cowboy_req:body(Req),
+
             case maps:get(parse, Opts, false) of
                 true ->
                     case CT of

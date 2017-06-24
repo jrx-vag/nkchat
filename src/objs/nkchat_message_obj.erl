@@ -23,9 +23,8 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/3]).
--export([object_info/0, object_es_mapping/0, object_parse/3,
-         object_api_syntax/2, object_api_cmd/2, object_event/2]).
+-export([create/4, update/3]).
+-export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2, object_event/2]).
 -export([object_admin_info/0]).
 
 -include("nkchat.hrl").
@@ -37,23 +36,22 @@
 %% Public
 %% ===================================================================
 
+create(SrvId, DomainId, ConvId, Text) ->
+    Obj = #{
+        type => ?CHAT_MESSAGE,
+        parent_id => DomainId,
+        created_by => <<"admin">>,
+        ?CHAT_MESSAGE => #{
+            conversation_id => ConvId,
+            text => Text
+        }
+    },
+    object_create(SrvId, Obj).
 
-%% @doc
--spec create(nkservice:id(), nkdomain:name(), nkdomain:obj()) ->
-    {ok, nkdomain_obj_lib:make_and_create_reply(), pid()} | {error, term()}.
 
-create(Srv, Name, Obj) ->
-    #{conversation_id:=ConvId} = Obj,
-    case nkdomain_lib:load(Srv, ConvId) of
-        #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvObjId} ->
-            Obj2 = Obj#{parent_id=>ConvObjId},
-            Obj3 = maps:remove(conversation_id, Obj2),
-            nkdomain_obj_lib:make_and_create(Srv, Name, Obj3, #{});
-        {error, object_not_found} ->
-            {error, conversation_not_found};
-        {error, Error} ->
-            {error, Error}
-    end.
+update(SrvId, MsgId, Text) ->
+    nkdomain:update(SrvId, MsgId, #{?CHAT_MESSAGE => #{text => Text}}).
+
 
 
 %% ===================================================================
@@ -82,45 +80,55 @@ object_admin_info() ->
 %% @private
 object_es_mapping() ->
     #{
-        text => #{
-            type => text,
-            fields => #{keyword => #{type=>keyword}}
-        },
+        conversation_id => #{type => keyword},
+        text => #{type => text},
         file_id => #{type => keyword}
     }.
 
 
+
 %% @private
-object_parse(_SrvId, _Mode, _Obj) ->
+object_parse(_SrvId, update, _Obj) ->
     #{
         text => binary,
         file_id => binary
+    };
+
+object_parse(_SrvId, load, _Obj) ->
+    #{
+        conversation_id => binary,
+        text => binary,
+        file_id => binary,
+        '__mandatory' => [text, conversation_id]
     }.
 
 
+%% @doc
+object_create(SrvId, Obj) ->
+    #{?CHAT_MESSAGE:=#{conversation_id := ConvId}} = Obj,
+    Obj2 = Obj#{referred_id=>ConvId},
+    case nkdomain_obj_make:create(SrvId, Obj2) of
+        {ok, ObjIdExt, Unknown} ->
+            {ok, ObjIdExt, Unknown};
+        {error, referred_not_found} ->
+            {error, conversation_not_found};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
 %% @private
-object_api_syntax(Cmd, Syntax) ->
-    nkchat_message_obj_syntax:api(Cmd, Syntax).
-
-
-
-
-%% @private
-object_api_cmd(Cmd, Req) ->
-    nkchat_message_obj_api:cmd(Cmd, Req).
-
-
-%% @private
-object_event(Event, #?STATE{parent_id=ParentId, id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=Session) ->
+object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}=Session) ->
+    #{referred_id:=ConvId} = Obj,
     case Event of
         created ->
             Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),
-            ok = nkchat_conversation_obj:message_event(ParentId, {created, Msg});
+            ok = nkchat_conversation_obj:message_event(SrvId, ConvId, {created, Msg});
         deleted ->
-            ok = nkchat_conversation_obj:message_event(ParentId, {deleted, ObjId});
+            ok = nkchat_conversation_obj:message_event(SrvId, ConvId, {deleted, ObjId});
         {updated, _} ->
-            Msg = maps:with([obj_id, updated_time, ?CHAT_MESSAGE], Obj),
-            ok = nkchat_conversation_obj:message_event(ParentId, {updated, Msg});
+            Msg = maps:with([obj_id, created_by, created_time, updated_time, ?CHAT_MESSAGE], Obj),
+            ok = nkchat_conversation_obj:message_event(SrvId, ConvId, {updated, Msg});
         _ ->
             ok
     end,

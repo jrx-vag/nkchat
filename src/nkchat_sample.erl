@@ -12,6 +12,7 @@ nkchat_sample).
 -include_lib("nkchat.hrl").
 -include_lib("nkapi/include/nkapi.hrl").
 
+-define(SRV, sipstorm_v01).
 
 
 login() ->
@@ -25,7 +26,7 @@ domain_find_convs() ->
 
 %% f(C1), f(C2), f(C3), f(U1), f(U2), f(U3), {C1, C2, C3, U1, U2, U3} = nkchat_sample:init().
 init() ->
-    nkdomain:delete_all_childs(root, "/ct"),
+    nkdomain:delete_all_childs(?SRV, "/ct"),
     {ok, _, Pid1} = nkdomain_sample:login(),
     C1 = <<"/ct/conversations/c1">>,
     C2 = <<"/ct/conversations/c2">>,
@@ -33,18 +34,13 @@ init() ->
     U1 = <<"/ct/users/u1">>,
     U2 = <<"/ct/users/u2">>,
     U3 = <<"/ct/users/u3">>,
-    _ = nkdomain_sample:domain_create("/", ct, "ChatTest"),
-    {ok, _} = cmd(<<"objects/domain/wait_for_save">>, #{id => "/"}),
+    _ = nkdomain_sample:domain_create("/", ct, ct, "ChatTest"),
     {ok, _} = nkdomain_sample:user_create("/ct", u1, s1),
     {ok, _} = nkdomain_sample:user_create("/ct", u2, s2),
     {ok, _} = nkdomain_sample:user_create("/ct", u3, s3),
     {ok, _} = conv_create("/ct", c1, "C1", private),
     {ok, _} = conv_create("/ct", c2, "C2", private),
     {ok, _} = conv_create("/ct", c3, "C3", private),
-    {ok, _} = cmd(<<"objects/conversation/wait_for_save">>, #{id=> C1}),
-    {ok, _} = cmd(<<"objects/conversation/wait_for_save">>, #{id=> C2}),
-    {ok, _} = cmd(<<"objects/conversation/wait_for_save">>, #{id=> C3}),
-
     {ok, _} = conv_add_member(C1, U1),
     {ok, _} = conv_add_member(C1, U2),
     {ok, _} = conv_add_member(C2, U1),
@@ -52,9 +48,9 @@ init() ->
     exit(Pid1, kill),
     login(),
     timer:sleep(500),
-    {ok, _} = session_create(),
-    session_add_conversation(C1),
-    session_add_conversation(C2),
+%%    {ok, _} = session_create(),
+%%    session_add_conversation(C1),
+%%    session_add_conversation(C2),
     {C1, C2, C3, U1, U2, U3}.
 
 
@@ -63,13 +59,14 @@ conv_user_subs(UserId) ->
 
 
 conv_subs() ->
-    {ok, _, UserId, _, _} = nkdomain:find("/chattest/users/u1"),
+    {ok, _, UserId, _, _} = nkdomain:find(?SRV, "/chattest/users/u1"),
     cmd(<<"event/subscribe">>, #{class=>domain, subclass=>conversation, obj_id=>UserId}).
 
 
-conv_create(Domain, Name, Desc, Type) ->
+conv_create(Domain, Name, Desc, Class) ->
     ObjName = nkdomain_util:name(Name),
-    cmd(<<"objects/conversation/create">>, #{obj_name=>ObjName, name=>Name, subtype=>Type, description=>Desc, parent_id=>Domain}).
+    cmd(<<"objects/conversation/create">>, #{obj_name=>ObjName, name=>Name, description=>Desc,
+                                             parent_id=>Domain, conversation => #{class=>Class}}).
 
 conv_get() ->
     cmd(<<"objects/conversation/get">>, #{}).
@@ -101,23 +98,10 @@ conv_get_messages(Id, Spec) ->
 
 
 message_create(ConvId, Msg) ->
-    cmd(<<"objects/message/create">>, #{conversation_id=>ConvId, ?CHAT_MESSAGE=>#{text=>Msg}}).
+    cmd(<<"objects/message/create">>, #{?CHAT_MESSAGE=>#{conversation_id=>ConvId, text=>Msg}}).
 
-message_create_file(ConvId, Name) ->
-    case cmd(<<"objects/file/create">>, #{parent_id=>ConvId, file=>#{}}) of
-        {ok, #{<<"obj_id">>:=FileId}} ->
-            {ok, File} = file:read_file("/etc/hosts"),
-            case nkdomain_sample:upload(FileId, "text/plain", File) of
-                ok ->
-                    cmd(<<"objects/message/create">>,
-                        #{conversation_id=>ConvId, name=>Name, ?CHAT_MESSAGE=>#{file_id=>FileId}});
-                error ->
-                    error
-            end;
-        {error, Error} ->
-            {error, Error}
-    end.
-
+message_create_file(ConvId, Text, FileId) ->
+    cmd(<<"objects/message/create">>, #{?CHAT_MESSAGE=>#{conversation_id=>ConvId, text=>Text, file_id=>FileId}}).
 
 message_get(MsgId) ->
      cmd(<<"objects/message/get">>, #{id=>MsgId}).
@@ -130,23 +114,8 @@ message_delete(MsgId) ->
 
 
 
-session_find() ->
-    cmd(<<"objects/chat.session/find">>, #{}).
-
-session_find(UserId) ->
-    cmd(<<"objects/chat.session/find">>, #{user_id=>UserId}).
-
-session_create() ->
-    cmd(<<"objects/chat.session/create">>, #{}).
-
-session_create(UserId) ->
-    cmd(<<"objects/chat.session/create">>, #{user_id=>UserId}).
-
 session_start() ->
     cmd(<<"objects/chat.session/start">>, #{}).
-
-session_start(SessId) ->
-    cmd(<<"objects/chat.session/start">>, #{id=>SessId}).
 
 session_get() ->
     cmd(<<"objects/chat.session/get">>, #{}).

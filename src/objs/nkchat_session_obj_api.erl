@@ -49,64 +49,41 @@
 
 
 %% @doc
-cmd(<<"find">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
-    case get_user_id(Data, Req) of
-        {ok, UserId} ->
-            case nkchat_session_obj:find(SrvId, UserId) of
-                {ok, List} ->
-                    {ok, #{sessions=>List}};
+cmd(<<"find">>, _Req) ->
+    {error, session_not_found};
+
+cmd(<<"create">>, Req) ->
+    cmd(<<"start">>, Req);
+
+cmd(<<"start">>, #nkreq{session_module=nkapi_server} = Req) ->
+    #nkreq{conn_id=ConnPid, data=Data, user_id=UserId, srv_id=SrvId} = Req,
+    case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
+        {ok, DomainId} ->
+            Opts = #{api_server_pid=>ConnPid},
+            case nkchat_session_obj:start(SrvId, DomainId, UserId, Opts) of
+                {ok, #{session_id:=SessId}=Reply} ->
+                    Types = maps:get(events, Data, ?SESSION_DEF_EVENT_TYPES),
+                    Subs = #{
+                        srv_id => SrvId,
+                        class => ?DOMAIN_EVENT_CLASS,
+                        subclass => ?CHAT_SESSION,
+                        type => Types,
+                        obj_id => SessId
+                    },
+                    ok = nkapi_server:subscribe(ConnPid, Subs),
+                    UserMeta1 = nkdomain_api_util:add_id(?CHAT_SESSION, SessId, Req),
+                    UserMeta2 = UserMeta1#{nkchat_session_types=>Types},
+                    {ok, Reply, UserMeta2};
                 {error, Error} ->
                     {error, Error}
             end;
         {error, Error} ->
             {error, Error}
-    end;
-
-cmd(<<"create">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
-    case get_user_id(Data, Req) of
-        {ok, UserId} ->
-            case nkchat_session_obj:create(SrvId, UserId) of
-                {ok, #{obj_id:=ObjId}, _Pid} ->
-                    cmd(<<"start">>, Req#nkreq{data=Data#{id=>ObjId}});
-                {error, Error} ->
-                    {error, Error}
-            end;
-        {error, Error} ->
-            {error, Error}
-    end;
-
-cmd(<<"start">>, #nkreq{conn_id=Pid, data=#{id:=Id}=Data, srv_id=SrvId}=Req) ->
-    case nkchat_session_obj:start(SrvId, Id, Pid) of
-        {ok, ObjId, Reply} ->
-            Types = maps:get(events, Data, ?SESSION_DEF_EVENT_TYPES),
-            Subs = #{
-                srv_id => SrvId,
-                class => ?DOMAIN_EVENT_CLASS,
-                subclass => ?CHAT_SESSION,
-                type => Types,
-                obj_id => ObjId
-            },
-            ok = nkapi_server:subscribe(Pid, Subs),
-            UserMeta1 = nkdomain_api_util:add_id(?CHAT_SESSION, ObjId, Req),
-            UserMeta2 = UserMeta1#{nkchat_session_types=>Types},
-            {ok, Reply#{obj_id=>ObjId}, UserMeta2};
-        {error, Error} ->
-            {error, Error}
-    end;
-
-cmd(<<"start">>, #nkreq{data=Data}=Req) ->
-    case cmd(<<"find">>, Req) of
-        {ok, #{sessions:=[#{<<"obj_id">>:=SessId}|_]}} ->
-            cmd(<<"start">>, Req#nkreq{data=Data#{id=>SessId}});
-        {ok, #{sessions:=[]}} ->
-            {error, session_not_found};
-        {error, Error2} ->
-            {error, Error2 }
     end;
 
 cmd(<<"stop">>, #nkreq{conn_id=Pid, data=Data, srv_id=SrvId, user_meta=UserMeta}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
-        {ok, Id} ->
+        {ok, SessId} ->
             UserMeta2 = case UserMeta of
                 #{nkchat_session_types:=Types} ->
                     Subs = #{
@@ -114,14 +91,14 @@ cmd(<<"stop">>, #nkreq{conn_id=Pid, data=Data, srv_id=SrvId, user_meta=UserMeta}
                         class => ?DOMAIN_EVENT_CLASS,
                         subclass => ?CHAT_SESSION,
                         type => Types,
-                        obj_id => Id
+                        obj_id => SessId
                     },
                     nkapi_server:unsubscribe(Pid, Subs),
                     maps:remove(nkchat_session_types, UserMeta);
                 _ ->
                     UserMeta
             end,
-            case nkchat_session_obj:stop(SrvId, Id) of
+            case nkdomain:unload(SrvId, SessId, user_stop) of
                 ok ->
                     {ok, #{}, UserMeta2};
                 {error, Error} ->
@@ -204,11 +181,3 @@ cmd(Cmd, Req) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
-
-%% @private
-get_user_id(#{user_id:=UserId}, _Req) ->
-    {ok, UserId};
-get_user_id(_, #nkreq{user_id=UserId}) when UserId /= <<>> ->
-    {ok, UserId};
-get_user_id(_Data, _Req) ->
-    {error, missing_user_id}.

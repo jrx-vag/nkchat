@@ -33,11 +33,7 @@
 
 
 %% @doc
-api(<<"find">>, Syntax) ->
-    Syntax#{
-        user_id => binary
-    };
-
+%% TODO: To REMOVE
 api(<<"create">>, Syntax) ->
     Syntax#{
         user_id => binary,
@@ -48,12 +44,6 @@ api(<<"start">>, Syntax) ->
     Syntax#{
         id => binary,
         events => {list, binary}
-    };
-
-api(<<"stop">>, Syntax) ->
-    Syntax#{
-        id => binary,
-        reason => binary
     };
 
 api(<<"get_all_conversations">>, Syntax) ->

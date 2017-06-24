@@ -55,7 +55,7 @@ plugin_deps() ->
 
 %% @doc
 error(conversation_not_found)           -> "Conversation not found";
-error(conversation_is_already_member)   -> "Conversation is already a member";
+error(conversation_is_already_present)   -> "Conversation is already a member";
 error(conversation_is_disabled)         -> "Conversation is currently disabled";
 error(_)   		                        -> continue.
 

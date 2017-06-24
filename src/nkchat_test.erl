@@ -344,7 +344,7 @@ session1(Pid, _Ref) ->
 %%    % Lets add and remove conversations
 %%    % Start C1 and C3
 %%    {ok, #{<<"conversation_id">>:=C2}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
-%%    {error, {<<"conversation_is_already_member">>, _}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
+%%    {error, {<<"conversation_is_already_present">>, _}} = cmd_session(Pid, add_conversation, #{conversation_id=>C2}),
 %%    {conversation_added, S, C2} = wait_session(Ref),
 %%    {ok, #{}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
 %%    {error, {<<"conversation_not_found">>, _}} = cmd_session(Pid, remove_conversation, #{conversation_id=>C2}),
