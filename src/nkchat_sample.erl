@@ -66,7 +66,7 @@ conv_subs() ->
 conv_create(Domain, Name, Desc, Class) ->
     ObjName = nkdomain_util:name(Name),
     cmd(<<"objects/conversation/create">>, #{obj_name=>ObjName, name=>Name, description=>Desc,
-                                             parent_id=>Domain, conversation => #{class=>Class}}).
+                                             domain_id=>Domain, conversation => #{class=>Class}}).
 
 conv_get() ->
     cmd(<<"objects/conversation/get">>, #{}).

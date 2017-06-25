@@ -83,7 +83,8 @@
 start(SrvId, DomainId, UserId, Opts) ->
     Obj = #{
         type => ?CHAT_SESSION,
-        parent_id => DomainId,
+        domain_id => DomainId,
+        parent_id => UserId,
         created_by => UserId,
         active => true,
         ?CHAT_SESSION => #{}
@@ -424,7 +425,7 @@ do_conversation_event(_Event, _ConvId, State) ->
 %%                {ok, Data1} ->
 %%                    Data2 = case Data1 of
 %%                        #{type:=one2one, member_ids:=MemberIds} ->
-%%                            #?STATE{parent_id=UserId, srv_id=SrvId} = State,
+%%                            #?STATE{domain_id=UserId, srv_id=SrvId} = State,
 %%                            case MemberIds -- [UserId] of
 %%                                [PeerId] ->
 %%                                    case nkdomain_user_obj:get_name(SrvId, PeerId) of

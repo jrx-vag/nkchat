@@ -126,7 +126,7 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, #{srv_id:=Sr
             FindSpec = #{
                 filters => Filters,
                 fields => [<<"path">>, <<"created_by">>, <<"created_time">>,
-                           <<"parent_id">>, <<"message.text">>, <<"message.file_id">>],
+                           <<"domain_id">>, <<"message.text">>, <<"message.file_id">>],
                 sort => SortSpec,
                 from => Start,
                 size => Size

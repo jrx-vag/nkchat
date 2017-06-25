@@ -77,8 +77,8 @@
 create(SrvId, Domain, Name) ->
     Obj = #{
         type => ?CHAT_CONVERSATION,
-        parent_id => Domain,
-        created_by => admin,
+        domain_id => Domain,
+        created_by => <<"admin">>,
         obj_name => Name
     },
     nkdomain_obj_make:create(SrvId, Obj).
@@ -187,7 +187,7 @@ get_messages(SrvId, Id, Spec) ->
             Search1 = maps:with([from, size], Spec),
             Filters1 = #{
                 type => ?CHAT_MESSAGE,
-                parent_id => ConvId
+                domain_id => ConvId
             },
             Filters2 = case Spec of
                 #{start_date:=Date} ->
@@ -721,8 +721,9 @@ do_new_msg_event(Time, Msg, State) ->
 do_new_msg_event([], _Time, _Msg, Acc, State) ->
     set_members(Acc, State);
 
-do_new_msg_event([{MemberId, Member}|Rest], Time, Msg, Acc, State) ->
+do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
     #member{
+        member_id = MemberId,
         unread_count = Count,
         sessions = Sessions
     } = Member,
@@ -730,7 +731,7 @@ do_new_msg_event([{MemberId, Member}|Rest], Time, Msg, Acc, State) ->
     Acc2 = case Sessions of
         [] ->
             lager:error("NKLOG SEND PUSH TO  ~p", [MemberId]),
-            [{MemberId, Member}|Acc];
+            [Member|Acc];
         _ when IsActive ->
             Member2 = Member#member{
                 last_seen_msg_time = Time,
@@ -738,7 +739,7 @@ do_new_msg_event([{MemberId, Member}|Rest], Time, Msg, Acc, State) ->
             },
             send_to_sessions(Member2, {message_created, Msg}, State),
             send_to_sessions(Member2, {counter_updated, 0}, State),
-            [{MemberId, Member2}|Acc];
+            [Member2|Acc];
         _ ->
             Count2 = Count + 1,
             Member2 = Member#member{
@@ -746,7 +747,7 @@ do_new_msg_event([{MemberId, Member}|Rest], Time, Msg, Acc, State) ->
             },
             send_to_sessions(Member2, {message_created, Msg}, State),
             send_to_sessions(Member2, {counter_updated, Count2}, State),
-            [{MemberId, Member2}|Acc]
+            [Member2|Acc]
     end,
     do_new_msg_event(Rest, Time, Msg, Acc2, State).
 
@@ -779,7 +780,7 @@ find_unread(Time, #?STATE{srv_id=SrvId, id=Id}=State) ->
     Search = #{
         filters => #{
             type => ?CHAT_MESSAGE,
-            parent_id => ConvId,
+            domain_id => ConvId,
             created_time => <<">", (integer_to_binary(Time))/binary>>
         },
         size => 0

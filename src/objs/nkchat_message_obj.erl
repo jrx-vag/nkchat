@@ -39,7 +39,8 @@
 create(SrvId, DomainId, ConvId, Text) ->
     Obj = #{
         type => ?CHAT_MESSAGE,
-        parent_id => DomainId,
+        domain_id => DomainId,
+        parent_id => ConvId,
         created_by => <<"admin">>,
         ?CHAT_MESSAGE => #{
             conversation_id => ConvId,
@@ -80,7 +81,6 @@ object_admin_info() ->
 %% @private
 object_es_mapping() ->
     #{
-        conversation_id => #{type => keyword},
         text => #{type => text},
         file_id => #{type => keyword}
     }.
@@ -88,38 +88,25 @@ object_es_mapping() ->
 
 
 %% @private
-object_parse(_SrvId, update, _Obj) ->
+object_parse(_SrvId, _, _Obj) ->
     #{
-        text => binary,
-        file_id => binary
-    };
-
-object_parse(_SrvId, load, _Obj) ->
-    #{
-        conversation_id => binary,
         text => binary,
         file_id => binary,
-        '__mandatory' => [text, conversation_id]
+        '__mandatory' => [text]
     }.
 
 
 %% @doc
-object_create(SrvId, Obj) ->
-    #{?CHAT_MESSAGE:=#{conversation_id := ConvId}} = Obj,
-    Obj2 = Obj#{referred_id=>ConvId},
-    case nkdomain_obj_make:create(SrvId, Obj2) of
-        {ok, ObjIdExt, Unknown} ->
-            {ok, ObjIdExt, Unknown};
-        {error, referred_not_found} ->
-            {error, conversation_not_found};
-        {error, Error} ->
-            {error, Error}
-    end.
+object_create(SrvId, #{parent_id:=_ConvId}=Obj) ->
+    nkdomain_obj_make:create(SrvId, Obj);
+
+object_create(_SrvId, _Obj) ->
+    {error, {missing_field, <<"parent_id">>}}.
 
 
 %% @private
 object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}=Session) ->
-    #{referred_id:=ConvId} = Obj,
+    #{parent_id:=ConvId} = Obj,
     case Event of
         created ->
             Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),

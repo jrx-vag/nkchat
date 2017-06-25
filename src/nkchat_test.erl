@@ -113,7 +113,7 @@ create(Pid) ->
         ?CHAT_CONVERSATION := #{<<"members">> := [#{<<"member_id">>:=C3U1}, #{<<"member_id">>:=C3U2}]},
         <<"description">> := <<"Conv 3">>,
         <<"obj_id">> := C3,
-        <<"parent_id">> := D,
+        <<"domain_id">> := D,
         <<"path">> := <<"/chattest/conversations/conv3">>,
         <<"type">> := ?CHAT_CONVERSATION
     }} =
@@ -125,7 +125,7 @@ create(Pid) ->
         ?CHAT_CONVERSATION := #{<<"members">> := [#{<<"member_id">>:=C1U1}, #{<<"member_id">>:=C1U2}, #{<<"member_id">>:=C1U3}]},
         <<"description">> := <<"Conv 1">>,
         <<"obj_id">> := C1,
-        <<"parent_id">> := D,
+        <<"domain_id">> := D,
         <<"path">> := <<"/chattest/conversations/conv1">>,
         <<"type">> := ?CHAT_CONVERSATION
     }} =
@@ -137,7 +137,7 @@ create(Pid) ->
         ?CHAT_CONVERSATION := #{<<"members">> := [#{<<"member_id">>:=C2U1}, #{<<"member_id">>:=C2U2}]},
         <<"description">> := <<"Conv 2">>,
         <<"obj_id">> := C2,
-        <<"parent_id">> := D,
+        <<"domain_id">> := D,
         <<"path">> := <<"/chattest/conversations/conv2">>,
         <<"type">> := ?CHAT_CONVERSATION
     }} =
