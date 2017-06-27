@@ -54,13 +54,13 @@ init() ->
     {C1, C2, C3, U1, U2, U3}.
 
 
-conv_user_subs(UserId) ->
-    cmd(<<"event/subscribe">>, #{class=>domain, subclass=>conversation, type=>added_to_conversation, obj_id=>UserId}).
-
-
-conv_subs() ->
-    {ok, _, UserId, _, _} = nkdomain:find(?SRV, "/chattest/users/u1"),
-    cmd(<<"event/subscribe">>, #{class=>domain, subclass=>conversation, obj_id=>UserId}).
+%%conv_user_subs(UserId) ->
+%%    cmd(<<"event/subscribe">>, #{class=>domain, subclass=>conversation, type=>added_to_conversation, obj_id=>UserId}).
+%%
+%%
+%%conv_subs() ->
+%%    {ok, _, UserId, _, _} = nkdomain:find(?SRV, "/chattest/users/u1"),
+%%    cmd(<<"event/subscribe">>, #{class=>domain, subclass=>conversation, obj_id=>UserId}).
 
 
 conv_create(Domain, Name, Desc, Class) ->
@@ -68,17 +68,14 @@ conv_create(Domain, Name, Desc, Class) ->
     cmd(<<"objects/conversation/create">>, #{obj_name=>ObjName, name=>Name, description=>Desc,
                                              domain_id=>Domain, conversation => #{class=>Class}}).
 
-conv_get() ->
-    cmd(<<"objects/conversation/get">>, #{}).
-
 conv_get(Id) ->
     cmd(<<"objects/conversation/get">>, #{id=>Id}).
 
-conv_get_member_conversations() ->
-    cmd(<<"objects/conversation/get_member_conversations">>, #{}).
+conv_find_member_conversations() ->
+    cmd(<<"objects/conversation/find_member_conversations">>, #{}).
 
-conv_get_member_conversations(MemberId) ->
-    cmd(<<"objects/conversation/get_member_conversations">>, #{member_id=>MemberId}).
+conv_find_member_conversations(MemberId) ->
+    cmd(<<"objects/conversation/find_member_conversations">>, #{member_id=>MemberId}).
 
 conv_add_member(Id, Member) ->
     cmd(<<"objects/conversation/add_member">>, #{id=>Id, member_id=>Member}).
@@ -89,8 +86,8 @@ conv_remove_member(Id, Member) ->
 conv_delete(Id) ->
     cmd(<<"objects/conversation/delete">>, #{id=>Id}).
 
-conv_get_messages(Id) ->
-    conv_get_messages(Id, #{}).
+conv_get_last_messages(Id) ->
+    cmd(<<"objects/conversation/get_last_messages">>, #{id=>Id}).
 
 conv_get_messages(Id, Spec) ->
     cmd(<<"objects/conversation/get_messages">>, Spec#{id=>Id}).
@@ -98,10 +95,10 @@ conv_get_messages(Id, Spec) ->
 
 
 message_create(ConvId, Msg) ->
-    cmd(<<"objects/message/create">>, #{?CHAT_MESSAGE=>#{conversation_id=>ConvId, text=>Msg}}).
+    cmd(<<"objects/message/create">>, #{parent_id=>ConvId, ?CHAT_MESSAGE=>#{text=>Msg}}).
 
 message_create_file(ConvId, Text, FileId) ->
-    cmd(<<"objects/message/create">>, #{?CHAT_MESSAGE=>#{conversation_id=>ConvId, text=>Text, file_id=>FileId}}).
+    cmd(<<"objects/message/create">>, #{parent_id=>ConvId, ?CHAT_MESSAGE=>#{text=>Text, file_id=>FileId}}).
 
 message_get(MsgId) ->
      cmd(<<"objects/message/get">>, #{id=>MsgId}).

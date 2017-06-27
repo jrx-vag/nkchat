@@ -32,15 +32,6 @@
 %% API
 %% ===================================================================
 
-%%cmd(<<"create">>, Req) ->
-%%    case nkdomain_obj_api:api(<<"create">>, ?CHAT_CONVERSATION, Req) of
-%%        {ok, #{obj_id:=ObjId}=Reply} ->
-%%            UserMeta = nkdomain_api_util:add_id(?CHAT_CONVERSATION, ObjId, Req),
-%%            {ok, Reply, UserMeta};
-%%        {error, Error2} ->
-%%            {error, Error2}
-%%    end;
-
 cmd(<<"add_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
     case nkchat_conversation_obj:add_member(SrvId, ConvId, MemberId) of
         {ok, MemberObjId} ->
@@ -57,6 +48,25 @@ cmd(<<"remove_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=
             {error, Error}
     end;
 
+cmd(<<"find_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
+        {ok, DomainId} ->
+            case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, Req) of
+                {ok, MemberId} ->
+                    case nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, MemberId) of
+                        {ok, List} ->
+                            List2 = [#{obj_id=>ConvId, type=>Type} || {ConvId, Type}<-List],
+                            {ok, #{data=>List2}};
+                        {error, Error} ->
+                            {error, Error}
+                    end;
+                _ ->
+                    {error, user_unknown}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(<<"get_messages">>, #nkreq{data=#{id:=ConvId}=Data, srv_id=SrvId}) ->
     case nkchat_conversation_obj:get_messages(SrvId, ConvId, Data) of
         {ok, Reply} ->
@@ -65,20 +75,10 @@ cmd(<<"get_messages">>, #nkreq{data=#{id:=ConvId}=Data, srv_id=SrvId}) ->
             {error, Error}
     end;
 
-cmd(<<"get_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
-    case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
-        {ok, DomainId} ->
-            case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, Req) of
-                {ok, MemberId} ->
-                    case nkchat_conversation_obj:get_member_conversations(SrvId, DomainId, MemberId, false) of
-                        {ok, Reply} ->
-                            {ok, Reply};
-                        {error, Error} ->
-                            {error, Error}
-                    end;
-                _ ->
-                    {error, user_unknown}
-            end;
+cmd(<<"get_last_messages">>, #nkreq{data=#{id:=ConvId}, srv_id=SrvId}) ->
+    case nkchat_conversation_obj:get_last_messages(SrvId, ConvId) of
+        {ok, Reply} ->
+            {ok, Reply};
         {error, Error} ->
             {error, Error}
     end;

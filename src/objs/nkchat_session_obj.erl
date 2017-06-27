@@ -23,7 +23,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([start/4, get_all_conversations/2, get_conversation/3]).
+-export([start/4, get_conversations/2]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_event/4]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
@@ -37,10 +37,6 @@
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
 -include_lib("nkevent/include/nkevent.hrl").
-
-
-%% Period to find for inactive conversations
--define(CHECK_TIME, 5*60*1000).
 
 
 %% ===================================================================
@@ -67,7 +63,7 @@
 
 
 -type start_opts() :: #{
-    api_server_pid => pid()
+    monitor => {module(), pid()}
 }.
 
 
@@ -91,13 +87,7 @@ start(SrvId, DomainId, UserId, Opts) ->
     },
     case nkdomain_obj_make:create(SrvId, Obj, #{meta=>Opts}) of
         {ok, #obj_id_ext{obj_id=SessId, pid=Pid}, _} ->
-            case get_all_conversations(any, Pid) of
-                {ok, Reply} ->
-                  {ok, Reply#{session_id=>SessId}};
-                {error, Error} ->
-                    nkdomain:unload(any, Pid, start_error),
-                    {error, Error}
-            end;
+            {ok, SessId, Pid};
         {error, Error} ->
             {error, Error}
     end.
@@ -121,13 +111,8 @@ remove_conversation(SrvId, Id, ConvId) ->
 
 
 %% @doc
-get_all_conversations(SrvId, Id) ->
-    nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_all_conversations}).
-
-
-%% @doc
-get_conversation(SrvId, Id, ConvId) ->
-    nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_conversation, ConvId}).
+get_conversations(SrvId, Id) ->
+    nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_conversations}).
 
 
 %% @doc
@@ -143,6 +128,7 @@ set_active_conversation(SrvId, Id, ConvId) ->
     ok.
 
 conversation_event(Pid, ConvId, _Meta, Event) ->
+    lager:warning("NKLOG CONV EVENT ~p", [Event]),
     nkdomain_obj:async_op(any, Pid, {?MODULE, conversation_event, ConvId, Event}).
 
 
@@ -151,15 +137,21 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
 %% nkdomain_obj behaviour
 %% ===================================================================
 
--record(conv, {
-    pid :: pid()
-}).
+-type conv() :: #{
+    name => binary(),
+    description => binary(),
+    type => binary(),
+    last_active_time => nklib_util:m_timestamp(),
+    member_ids => [binary()],
+    pid => pid()
+}.
+
 
 -record(session, {
     user_id :: nkdomain:obj_id(),
-    convs :: #{nkdomain:obj_id() => #conv{}},
+    convs :: #{nkdomain:obj_id() => conv()},
     active_id :: undefined | nkdomain:obj_id(),
-    api_pid :: pid()
+    api :: {module(), pid()}
 }).
 
 
@@ -208,36 +200,32 @@ object_send_event(Event, State) ->
 
 
 %% @private When the object is loaded, we make our cache
-object_init(#?STATE{id=Id, obj=Obj, meta=Meta}=State) ->
-    #obj_id_ext{srv_id=SrvId, obj_id=SessId, path=Path} = Id,
-    #{created_by := UserId} = Obj,
-    #{api_server_pid:=ApiPid} = Meta,
+object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId, meta=Meta}=State) ->
+    #obj_id_ext{srv_id=SrvId, obj_id=SessId} = Id,
+    #{parent_id := UserId} = Obj,
+    #{monitor:={ApiMod, ApiPid}} = Meta,
     Session = #session{
         user_id = UserId,
         convs = #{},
-        api_pid = ApiPid
+        api = {ApiMod, ApiPid}
     },
     State2 = State#?STATE{session=Session},
-    case nkchat_conversation_obj:get_member_conversations(SrvId, Path, UserId, false) of
-        {ok, #{data:=List}} ->
-            State3 = lists:foldl(
-                fun(#{<<"obj_id">>:=ConvId}, Acc) ->
-                    case do_add_conv(ConvId, Acc) of
-                        {ok, Acc2} ->
-                            Acc2;
-                        {error, Error} ->
-                            ?LLOG(warning, "could not load conversation ~s: ~p", [ConvId, Error], State),
-                            Acc
-                    end
-                end,
-                State2,
-                List),
-            ok = nkdomain_user_obj:register_session(SrvId, UserId, ?CHAT_SESSION, SessId, #{}),
-            State4 = nkdomain_obj_util:link_to_api_server(?MODULE, ApiPid, State3),
-            {ok, State4};
-        {error, Error} ->
-            {error, Error}
-    end.
+    {ok, Convs1} = nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, UserId),
+    State3 = lists:foldl(
+        fun({ConvId, _Type}, Acc) ->
+            case do_add_conv(ConvId, Acc) of
+                {ok, Acc2} ->
+                    Acc2;
+                {error, Error} ->
+                    ?LLOG(warning, "could not load conversation ~s: ~p", [ConvId, Error], State),
+                    Acc
+            end
+        end,
+        State2,
+        Convs1),
+    ok = nkdomain_user_obj:register_session(SrvId, UserId, ?CHAT_SESSION, SessId, #{}),
+        State4 = nkdomain_obj_util:link_to_api_server(?MODULE, ApiMod, ApiPid, State3),
+    {ok, State4}.
 
 
 %% @private
@@ -261,12 +249,7 @@ object_stop(_Reason, State) ->
 object_sync_op({?MODULE, set_active_conv, ConvId}, _From, State) ->
     case get_conv(ConvId, State) of
         {ok, _} ->
-            case do_set_active_conv(ConvId, State) of
-                {ok, State2} ->
-                    {reply, ok, State2};
-                {error, Error} ->
-                    {reply, {error, Error}, State}
-            end;
+            {reply, ok, do_set_active_conv(ConvId, State)};
         not_found ->
             {reply, {error, conversation_not_found}, State}
     end;
@@ -328,7 +311,10 @@ do_set_active_conv(ConvId, #?STATE{session=Session, id=#obj_id_ext{obj_id=SessId
 
 
 %% @private
-do_set_active_conv([{ConvId, #conv{pid=Pid}}|Rest], ActiveId, UserId, SessId) ->
+do_set_active_conv([], _ActiveId, _UserId, _SessId) ->
+    ok;
+
+do_set_active_conv([{ConvId, #{pid:=Pid}}|Rest], ActiveId, UserId, SessId) ->
     Active = ActiveId == ConvId,
     nkchat_conversation_obj:set_session_active(any, Pid, UserId, SessId, Active),
     do_set_active_conv(Rest, ActiveId, UserId, SessId).
@@ -340,9 +326,9 @@ do_add_conv(ConvId, State) ->
     #?STATE{session=Session} = State,
     #session{user_id=UserId, convs=Convs1} = Session,
     case nkchat_conversation_obj:add_session(SrvId, ConvId, UserId, SessId, #{}) of
-        {ok, Pid} ->
+        {ok, ConvData, Pid} ->
             monitor(process, Pid),
-            Convs2 = Convs1#{ConvId => #conv{pid=Pid}},
+            Convs2 = Convs1#{ConvId => ConvData#{pid=>Pid}},
             Session2 = Session#session{convs=Convs2},
             {ok, State#?STATE{session=Session2}};
         {error, Error} ->
@@ -353,7 +339,7 @@ do_add_conv(ConvId, State) ->
 %% @private
 do_rm_conv(ConvId, State) ->
     case get_conv(ConvId, State) of
-        {ok, #conv{pid=Pid}} ->
+        {ok, #{pid:=Pid}} ->
             #?STATE{id=#obj_id_ext{obj_id=SessId}} = State,
             #?STATE{session=Session} = State,
             #session{user_id=UserId, convs=Convs1, active_id=ActiveId} = Session,

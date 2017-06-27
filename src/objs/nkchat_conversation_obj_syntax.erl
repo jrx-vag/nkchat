@@ -47,7 +47,7 @@ api(<<"remove_member">>, Syntax) ->
         '__mandatory' => [id, member_id]
     };
 
-api(<<"get_member_conversations">>, Syntax) ->
+api(<<"find_member_conversations">>, Syntax) ->
     Syntax#{
         member_id => binary
     };
@@ -58,6 +58,12 @@ api(<<"get_messages">>, Syntax) ->
         size => integer,
         from => integer,
         start_date => integer,
+        '__mandatory' => [id]
+    };
+
+api(<<"get_last_messages">>, Syntax) ->
+    Syntax#{
+        id => binary,
         '__mandatory' => [id]
     };
 

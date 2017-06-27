@@ -26,6 +26,7 @@
 -export([create/4, update/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2, object_event/2]).
 -export([object_admin_info/0]).
+-export([syntax_check_file/3]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -43,7 +44,6 @@ create(SrvId, DomainId, ConvId, Text) ->
         parent_id => ConvId,
         created_by => <<"admin">>,
         ?CHAT_MESSAGE => #{
-            conversation_id => ConvId,
             text => Text
         }
     },
@@ -91,9 +91,10 @@ object_es_mapping() ->
 object_parse(_SrvId, _, _Obj) ->
     #{
         text => binary,
-        file_id => binary,
+        file_id => fun ?MODULE:syntax_check_file/3,
         '__mandatory' => [text]
     }.
+
 
 
 %% @doc
@@ -128,3 +129,12 @@ object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}
 %% ===================================================================
 %% Internal
 %% ===================================================================
+
+syntax_check_file(file_id, File, Ctx) ->
+    #{domain_srv_id:=SrvId} = Ctx,
+    case nkdomain_lib:find(SrvId, File) of
+        #obj_id_ext{type=?DOMAIN_FILE, obj_id=FileId} ->
+            {ok, FileId};
+        _ ->
+            {error, {file_not_found, File}}
+    end.

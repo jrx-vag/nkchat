@@ -33,29 +33,12 @@
 
 
 %% @doc
-%% TODO: To REMOVE
-api(<<"create">>, Syntax) ->
-    Syntax#{
-        user_id => binary,
-        events => {list, binary}
-    };
-
 api(<<"start">>, Syntax) ->
-    Syntax#{
-        id => binary,
-        events => {list, binary}
-    };
+    Syntax;
 
-api(<<"get_all_conversations">>, Syntax) ->
+api(<<"get_conversations">>, Syntax) ->
     Syntax#{
         id => binary
-    };
-
-api(<<"get_conversation">>, Syntax) ->
-    Syntax#{
-        id => binary,
-        conversation_id => binary,
-        '__mandatory' => [conversation_id]
     };
 
 api(<<"set_active_conversation">>, Syntax) ->
