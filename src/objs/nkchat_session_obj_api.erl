@@ -67,9 +67,9 @@ cmd(<<"start">>, Req) ->
         %%                        obj_id => SessId
         %%                    },
         %%                    ok = nkapi_server:subscribe(ConnPid, Subs),
-                            UserMeta1 = nkdomain_api_util:add_id(?CHAT_SESSION, SessId, Req),
+                            Req2 = nkdomain_api_util:add_id(?CHAT_SESSION, SessId, Req),
         %%                    UserMeta2 = UserMeta1#{nkchat_session_types=>Types},
-                            {ok, #{session_id=>SessId}, UserMeta1};
+                            {ok, #{session_id=>SessId}, Req2};
                         {error, Error} ->
                             {error, Error}
                     end;
@@ -80,10 +80,10 @@ cmd(<<"start">>, Req) ->
             {error, session_type_unsupported}
     end;
 
-cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId, user_meta=UserMeta}=Req) ->
+cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId, user_state=UserState}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, SessId} ->
-%%            UserMeta2 = case UserMeta of
+%%            UserState2 = case UserState of
 %%                #{nkchat_session_types:=Types} ->
 %%                    Subs = #{
 %%                        srv_id => SrvId,
@@ -93,13 +93,13 @@ cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId, user_meta=UserMeta}=Req) ->
 %%                        obj_id => SessId
 %%                    },
 %%                    nkapi_server:unsubscribe(Pid, Subs),
-%%                    maps:remove(nkchat_session_types, UserMeta);
+%%                    maps:remove(nkchat_session_types, UserState);
 %%                _ ->
-%%                    UserMeta
+%%                    UserState
 %%            end,
             case nkdomain:unload(SrvId, SessId, user_stop) of
                 ok ->
-                    {ok, #{}, UserMeta};
+                    {ok, #{}, UserState};
                 {error, Error} ->
                     {error, Error}
             end;
