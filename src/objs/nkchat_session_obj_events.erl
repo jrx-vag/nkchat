@@ -26,42 +26,39 @@
 
 -include_lib("nkdomain/include/nkdomain.hrl").
 
+
 %% ===================================================================
 %% Public
 %% ===================================================================
 
 
 %% @private
-event({conversation_added, ConvId}, Session) ->
-    {event, conversation_added, #{conversation_id=>ConvId}, Session};
+event({conversation_added, ConvId}, State) ->
+    {event, conversation_added, #{conversation_id=>ConvId}, State};
 
-event({conversation_removed, ConvId}, Session) ->
-    {event, conversation_removed, #{conversation_id=>ConvId}, Session};
+event({conversation_removed, ConvId}, State) ->
+    {event, conversation_removed, #{conversation_id=>ConvId}, State};
 
-event({conversation_activated, ConvId}, Session) ->
-    {event, conversation_activated, #{conversation_id=>ConvId}, Session};
+event({member_added, ConvId, MemberId}, State) ->
+    {event, member_added, #{conversation_id=>ConvId, member_id=>MemberId}, State};
 
-event({member_added, ConvId, true, MemberId}, Session) ->
-    {event, member_added, #{conversation_id=>ConvId, member_id=>MemberId}, Session};
+event({member_removed, ConvId, MemberId}, State) ->
+    {event, member_removed, #{conversation_id=>ConvId, member_id=>MemberId}, State};
 
-event({member_removed, ConvId, true, MemberId}, Session) ->
-    {event, member_removed, #{conversation_id=>ConvId, member_id=>MemberId}, Session};
+event({message_created, ConvId, Msg}, State) ->
+    {event, message_created, #{conversation_id=>ConvId, message=>Msg}, State};
 
-event({message_created, ConvId, Msg}, Session) ->
-    {event, message_created, #{conversation_id=>ConvId, message=>Msg}, Session};
+event({message_updated, ConvId, Msg}, State) ->
+    {event, message_updated, #{conversation_id=>ConvId, message=>Msg}, State};
 
-event({message_updated, ConvId, Msg}, Session) ->
-    {event, message_updated, #{conversation_id=>ConvId, message=>Msg}, Session};
+event({message_deleted, ConvId, MsgId}, State) ->
+    {event, message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}, State};
 
-event({message_deleted, ConvId, MsgId}, Session) ->
-    {event, message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}, Session};
+event({unread_counter_updated, ConvId, Counter}, State) ->
+    {event, unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}, State};
 
-event({unread_counter_updated, ConvId, Counter, Msg}, Session) ->
-    {event, unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter, message=>Msg}, Session};
-
-event(_Event, Session) ->
-    {ok, Session}.
-
+event(_Event, State) ->
+    {ok, State}.
 
 
 

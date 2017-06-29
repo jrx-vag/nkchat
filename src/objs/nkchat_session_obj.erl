@@ -63,7 +63,9 @@
 
 
 -type start_opts() :: #{
-    monitor => {module(), pid()}
+    monitor => {module(), pid()},
+    session_events => [binary()],
+    session_id => term()
 }.
 
 
@@ -85,7 +87,14 @@ start(SrvId, DomainId, UserId, Opts) ->
         active => true,
         ?CHAT_SESSION => #{}
     },
-    case nkdomain_obj_make:create(SrvId, Obj, #{meta=>Opts}) of
+    Opts1 = maps:with([session_events, session_id], Opts),
+    Opts2 = case Opts of
+        #{monitor:=Monitor} ->
+            Opts1#{meta=>#{monitor=>Monitor}};
+        _ ->
+            Opts1
+    end,
+    case nkdomain_obj_make:create(SrvId, Obj, Opts2) of
         {ok, #obj_id_ext{obj_id=SessId, pid=Pid}, _} ->
             {ok, SessId, Pid};
         {error, Error} ->
@@ -128,7 +137,7 @@ set_active_conversation(SrvId, Id, ConvId) ->
     ok.
 
 conversation_event(Pid, ConvId, _Meta, Event) ->
-    lager:warning("NKLOG CONV EVENT ~p", [Event]),
+    lager:warning("NKLOG CONV EVENT ~p ~p", [Event, Pid]),
     nkdomain_obj:async_op(any, Pid, {?MODULE, conversation_event, ConvId, Event}).
 
 
@@ -224,7 +233,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId, meta=Meta}=State) ->
         State2,
         Convs1),
     ok = nkdomain_user_obj:register_session(SrvId, UserId, ?CHAT_SESSION, SessId, #{}),
-        State4 = nkdomain_obj_util:link_to_api_server(?MODULE, ApiMod, ApiPid, State3),
+    State4 = nkdomain_obj_util:link_to_api_server(?MODULE, ApiMod, ApiPid, State3),
     {ok, State4}.
 
 
@@ -373,6 +382,9 @@ do_conversation_event({message_updated, Msg}, ConvId, State) ->
 
 do_conversation_event({message_deleted, MsgId}, ConvId, State) ->
     {noreply, do_event({message_deleted, ConvId, MsgId}, State)};
+
+do_conversation_event({counter_updated, Counter}, ConvId, State) ->
+    {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
 
 do_conversation_event(_Event, _ConvId, State) ->
     {noreply, State}.

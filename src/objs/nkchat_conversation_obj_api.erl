@@ -35,7 +35,7 @@
 cmd(<<"add_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
     case nkchat_conversation_obj:add_member(SrvId, ConvId, MemberId) of
         {ok, MemberObjId} ->
-            {ok, #{member_obj_id=>MemberObjId}};
+            {ok, #{<<"member_id">>=>MemberObjId}};
         {error, Error} ->
             {error, Error}
     end;
@@ -55,8 +55,8 @@ cmd(<<"find_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
                 {ok, MemberId} ->
                     case nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, MemberId) of
                         {ok, List} ->
-                            List2 = [#{obj_id=>ConvId, type=>Type} || {ConvId, Type}<-List],
-                            {ok, #{data=>List2}};
+                            List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type}<-List],
+                            {ok, #{<<"data">>=>List2}};
                         {error, Error} ->
                             {error, Error}
                     end;

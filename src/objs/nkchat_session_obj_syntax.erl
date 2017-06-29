@@ -34,7 +34,10 @@
 
 %% @doc
 api(<<"start">>, Syntax) ->
-    Syntax;
+    Syntax#{
+        domain_id => binary,
+        session_events => {list, binary}
+    };
 
 api(<<"get_conversations">>, Syntax) ->
     Syntax#{
