@@ -32,7 +32,7 @@
 
 -export([create/3]).
 -export([add_member/3, remove_member/3, add_session/5, set_session_active/5, remove_session/4]).
--export([get_messages/3, find_member_conversations/3, get_last_messages/2]).
+-export([get_info/1, get_messages/3, find_member_conversations/3, get_last_messages/2]).
 -export([message_event/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
@@ -117,7 +117,7 @@ remove_member(SrvId, Id, Member) ->
 %% @private Called from nkchat_session_obj
 %% Sessions receive notifications for every message, calling
 -spec add_session(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id(), nkdomain:obj_id(), map()) ->
-    {ok, pid()} | {error, term()}.
+    {ok, map(), pid()} | {error, term()}.
 
 add_session(SrvId, ConvId, MemberId, SessId, Meta) ->
     nkdomain_obj:sync_op(SrvId, ConvId, {?MODULE, add_session, MemberId, SessId, Meta, self()}).
@@ -132,6 +132,11 @@ set_session_active(SrvId, ConvId, MemberId, SessId, Bool) when is_boolean(Bool)-
 %% Sessions receive notifications for every message, calling
 remove_session(SrvId, ConvId, MemberId, SessId) ->
     nkdomain_obj:sync_op(SrvId, ConvId, {?MODULE, remove_session, MemberId, SessId}).
+
+
+%% @private
+get_info(Pid) ->
+    nkdomain_obj:sync_op(any, Pid, {?MODULE, get_info}).
 
 
 %% @doc
@@ -214,7 +219,6 @@ message_event(SrvId, ConvId, Event) ->
         ignore ->
             ok;
         _ ->
-
             nkdomain_obj:async_op(SrvId, ConvId, {send_event, Event2})
     end.
 
@@ -400,6 +404,17 @@ object_save(#?STATE{obj=Obj, session=Session}=State) ->
 
 
 %% @private
+object_sync_op({?MODULE, get_info}, _From, State) ->
+    #?STATE{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
+    #{type:=Type, members:=Members} = ChatConv,
+    Data = #{
+        name => maps:get(name, Obj, <<>>),
+        description => maps:get(description, Obj, <<>>),
+        type => Type,
+        members => Members
+    },
+    {reply, {ok, Data}, State};
+
 object_sync_op({?MODULE, add_member, MemberId}, _From, State) ->
     case add_member(MemberId, State) of
         {ok, State2} ->
@@ -412,12 +427,12 @@ object_sync_op({?MODULE, add_member, MemberId}, _From, State) ->
 
 object_sync_op({?MODULE, remove_member, MemberId}, _From, State) ->
     case find_member(MemberId, State) of
-        {true, #member{sessions=_Sessions}} ->
-            % TODO: stop sessions
+        {true, #member{sessions=Sessions}} ->
             State2 = do_event({member_removed, MemberId}, State),              % Using old state
-            {ok, State3} = rm_member(MemberId, State2),
-            State4 = do_event({removed_from_conversation, MemberId}, State3),
-            {reply_and_save, ok, State4};
+            State3 = do_rm_sessions(MemberId, Sessions, State2),
+            {ok, State4} = rm_member(MemberId, State3),
+            State5 = do_event({removed_from_conversation, MemberId}, State4),
+            {reply_and_save, ok, State5};
         false ->
             {reply, {error, member_not_found}, State}
     end;
@@ -426,23 +441,17 @@ object_sync_op({?MODULE, add_session, MemberId, SessId, Meta, Pid}, _From, State
     case do_add_session(MemberId, SessId, Meta, Pid, State) of
         {ok, State2} ->
             State3 = do_event({session_added, MemberId, SessId}, State2),
-            #?STATE{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
-            #{type:=Type} = ChatConv,
-            Data = #{
-                name => maps:get(name, Obj, <<>>),
-                description => maps:get(description, Obj, <<>>),
-                type => Type
-            },
-            {reply, {ok, Data, self()}, State3};
+            #?STATE{obj=Obj} = State,
+            #{path:=Path, ?CHAT_CONVERSATION:=#{type:=Type}} = Obj,
+            {reply, {ok, #{path=>Path, type=>Type}, self()}, State3};
         {error, Error} ->
             {reply, {error, Error}, State}
     end;
 
 object_sync_op({?MODULE, remove_session, UserId, SessId}, _From, State) ->
     case do_rm_session(UserId, SessId, State) of
-        {ok, MemberId, State2} ->
-            State3 = do_event({session_removed, MemberId, SessId}, State2),
-            {reply, ok, State3};
+        {ok, State2} ->
+            {reply, ok, State2};
         {error, Error} ->
             {reply, {error, Error}, State}
     end;
@@ -555,7 +564,13 @@ object_event({member_added, MemberId}, State) ->
     {ok, do_event_sessions({member_added, MemberId}, State)};
 
 object_event({member_removed, MemberId}, State) ->
+
+    lager:warning("NKLOG MEMBER REMOVED"),
+
     {ok, do_event_sessions({member_removed, MemberId}, State)};
+
+object_event({session_removed, MemberId, SessId}, State) ->
+    {ok, do_event_sessions({session_removed, MemberId, SessId}, State)};
 
 object_event(_Event, State) ->
     {ok, State}.
@@ -614,10 +629,12 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
             Member2 = Member#member{sessions=Sessions2},
             Member3 = case Member2 of
                 #member{last_seen_msg_time=Last, unread_count=-1} ->
+                    lager:warning("NKLOG CONV -1"),
                     Count = find_unread(Last, State),
                     send_to_sessions(Member2, {counter_updated, Count}, State),
                     Member2#member{unread_count=Count};
-                _ ->
+                #member{unread_count=Count} ->
+                    send_to_sessions(Member2, {counter_updated, Count}, State),
                     Member2
             end,
             State3 = set_member(MemberId, Member3, State),
@@ -635,14 +652,24 @@ do_rm_session(MemberId, SessId, State) ->
             case lists:keytake(SessId, #chat_session.session_id, Sessions1) of
                 {value, #chat_session{pid=Pid}, Sessions2} ->
                     State2 = nkdomain_obj:links_remove(usage, {?MODULE, session, MemberId, SessId, Pid}, State),
+                    State3 = do_event({session_removed, MemberId, SessId}, State2),
                     Member2 = Member#member{sessions=Sessions2},
-                    {ok, set_member(MemberId, Member2, State2)};
+                    {ok, set_member(MemberId, Member2, State3)};
                 false ->
                     {error, session_not_found}
             end;
         false ->
             {error, session_not_found}
     end.
+
+
+%% @private
+do_rm_sessions(_MemberId, [], #?STATE{}=State) ->
+    State;
+
+do_rm_sessions(MemberId, [#chat_session{session_id=SessId}|Rest], State) ->
+    {ok, State2} = do_rm_session(MemberId, SessId, State),
+    do_rm_sessions(MemberId, Rest, State2).
 
 
 %% @private
@@ -724,7 +751,12 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
                 unread_count = 0
             },
             send_to_sessions(Member2, {message_created, Msg}, State),
-            send_to_sessions(Member2, {counter_updated, 0}, State),
+            case Count of
+                0 ->
+                    ok;
+                _ ->
+                    send_to_sessions(Member2, {counter_updated, 0}, State)
+            end,
             [Member2|Acc];
         _ ->
             Count2 = Count + 1,

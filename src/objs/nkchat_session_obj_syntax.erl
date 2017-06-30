@@ -44,6 +44,13 @@ api(<<"get_conversations">>, Syntax) ->
         id => binary
     };
 
+api(<<"get_conversation">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        conversation_id => binary,
+        '__mandatory' => [conversation_id]
+    };
+
 api(<<"set_active_conversation">>, Syntax) ->
     Syntax#{
         id => binary,

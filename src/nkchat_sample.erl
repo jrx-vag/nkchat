@@ -129,14 +129,17 @@ session_delete(Id) ->
 session_set_active(ConvId) ->
     cmd(<<"objects/chat.session/set_active_conversation">>, #{conversation_id=>ConvId}).
 
+session_set_active(SessId, ConvId) ->
+    cmd(<<"objects/chat.session/set_active_conversation">>, #{id=>SessId, conversation_id=>ConvId}).
+
 session_add_conversation(ConvId) ->
     cmd(<<"objects/chat.session/add_conversation">>, #{conversation_id=>ConvId}).
 
 session_remove_conversation(ConvId) ->
     cmd(<<"objects/chat.session/remove_conversation">>, #{conversation_id=>ConvId}).
 
-session_get_all_conversations() ->
-    cmd(<<"objects/chat.session/get_all_conversations">>, #{}).
+session_get_conversations() ->
+    cmd(<<"objects/chat.session/get_conversations">>, #{}).
 
 session_get_conversation(ConvId) ->
     cmd(<<"objects/chat.session/get_conversation">>, #{conversation_id=>ConvId}).

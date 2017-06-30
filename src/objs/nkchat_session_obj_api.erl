@@ -63,7 +63,7 @@ cmd(<<"start">>, Req) ->
                     case nkchat_session_obj:start(SrvId, DomainId, UserId, Opts) of
                         {ok, SessId, _Pid} ->
                             Req2 = nkdomain_api_util:add_id(?CHAT_SESSION, SessId, Req),
-                            {ok, #{<<"obj_id">>=>SessId}, Req2};
+                            {ok, #{obj_id=>SessId}, Req2};
                         {error, Error} ->
                             {error, Error}
                     end;
@@ -91,7 +91,20 @@ cmd(<<"get_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             case nkchat_session_obj:get_conversations(SrvId, Id) of
-                {ok, _ObjId, Data2} ->
+                {ok, List} ->
+                    {ok, #{conversation_ids=>List}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end;
+
+cmd(<<"get_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
+        {ok, Id} ->
+            case nkchat_session_obj:get_conversation(SrvId, Id, ConvId) of
+                {ok, Data2} ->
                     {ok, Data2};
                 {error, Error} ->
                     {error, Error}
@@ -104,8 +117,8 @@ cmd(<<"set_active_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, 
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             case nkchat_session_obj:set_active_conversation(SrvId, Id, ConvId) of
-                {ok, Reply} ->
-                    {ok, Reply};
+                ok ->
+                    {ok, #{}};
                 {error, Error} ->
                     {error, Error}
             end;
