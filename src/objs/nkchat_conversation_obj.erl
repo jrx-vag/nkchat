@@ -305,7 +305,7 @@ object_es_mapping() ->
 object_parse(_SrvId, update, _Obj) ->
     #{};
 
-object_parse(_SrvId, load, _Obj) ->
+object_parse(_SrvId, _Mode, _Obj) ->
     #{
         type => binary,
         members =>
@@ -564,9 +564,6 @@ object_event({member_added, MemberId}, State) ->
     {ok, do_event_sessions({member_added, MemberId}, State)};
 
 object_event({member_removed, MemberId}, State) ->
-
-    lager:warning("NKLOG MEMBER REMOVED"),
-
     {ok, do_event_sessions({member_removed, MemberId}, State)};
 
 object_event({session_removed, MemberId, SessId}, State) ->
@@ -629,7 +626,6 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
             Member2 = Member#member{sessions=Sessions2},
             Member3 = case Member2 of
                 #member{last_seen_msg_time=Last, unread_count=-1} ->
-                    lager:warning("NKLOG CONV -1"),
                     Count = find_unread(Last, State),
                     send_to_sessions(Member2, {counter_updated, Count}, State),
                     Member2#member{unread_count=Count};

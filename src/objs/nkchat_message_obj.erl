@@ -88,7 +88,7 @@ object_es_mapping() ->
 
 
 %% @private
-object_parse(_SrvId, _, _Obj) ->
+object_parse(_SrvId, _Mode, _Obj) ->
     #{
         text => binary,
         file_id => fun ?MODULE:syntax_check_file/3,

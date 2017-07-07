@@ -379,10 +379,8 @@ do_conversation_event({member_removed, MemberId}, ConvId, #?STATE{session=Sessio
     State2 = case Session of
         #session{user_id=MemberId} ->
             {ok, S} = do_rm_conv(ConvId, State),
-            lager:error("NKLOG REMOVED IN SESSION2 A"),
             S;
         _ ->
-            lager:error("NKLOG REMOVED IN SESSION2 B"),
             State
     end,
     {noreply, do_event({member_removed, ConvId, MemberId}, State2)};
