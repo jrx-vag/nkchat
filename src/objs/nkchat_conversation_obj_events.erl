@@ -32,35 +32,35 @@
 
 
 %% @private
-event({message_created, #{obj_id:=MsgId}}, Session) ->
-    {event, message_created, #{message_id=>MsgId}, Session};
+event({message_created, #{obj_id:=MsgId}}, State) ->
+    {event, {message_created, #{message_id=>MsgId}}, State};
 
-event({message_updated, #{obj_id:=MsgId}}, Session) ->
-    {event, message_updated, #{message_id=>MsgId}, Session};
+event({message_updated, #{obj_id:=MsgId}}, State) ->
+    {event, {message_updated, #{message_id=>MsgId}}, State};
 
-event({message_deleted, MsgId}, Session) ->
-    {event, message_deleted, #{message_id=>MsgId}, Session};
+event({message_deleted, MsgId}, State) ->
+    {event, {message_deleted, #{message_id=>MsgId}}, State};
 
-event({member_added, MemberId}, Session) ->
-    {event, member_added, #{member_id=>MemberId}, Session};
+event({member_added, MemberId}, State) ->
+    {event, {member_added, #{member_id=>MemberId}}, State};
 
-event({added_to_conversation, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=Session) ->
-    {event, added_to_conversation, MemberId, #{conversation_id=>ConvId}, Session};
+event({added_to_conversation, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+    {event, {added_to_conversation, MemberId, #{conversation_id=>ConvId}}, State};
 
-event({member_removed, MemberId}, Session) ->
-    {event, member_removed, #{member_id=>MemberId}, Session};
+event({member_removed, MemberId}, State) ->
+    {event, {member_removed, #{member_id=>MemberId}}, State};
 
-event({removed_from_conversation, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=Session) ->
-    {event, removed_from_conversation, MemberId, #{conversation_id=>ConvId}, Session};
+event({removed_from_conversation, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+    {event, {removed_from_conversation, MemberId, #{conversation_id=>ConvId}}, State};
 
-event({session_added, UserId, SessId}, Session) ->
-    {event, session_added, #{member_id=>UserId, session_id=>SessId}, Session};
+event({session_added, UserId, SessId}, State) ->
+    {event, {session_added, #{member_id=>UserId, session_id=>SessId}}, State};
 
-event({session_removed, UserId, SessId}, Session) ->
-    {event, session_removed, #{member_id=>UserId, session_id=>SessId}, Session};
+event({session_removed, UserId, SessId}, State) ->
+    {event, {session_removed, #{member_id=>UserId, session_id=>SessId}}, State};
 
-event(_Event, Session) ->
-    {ok, Session}.
+event(_Event, State) ->
+    {ok, State}.
 
 
 

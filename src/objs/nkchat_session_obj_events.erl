@@ -34,28 +34,28 @@
 
 %% @private
 event({conversation_added, ConvId}, State) ->
-    {event, conversation_added, #{conversation_id=>ConvId}, State};
+    {event, {conversation_added, #{conversation_id=>ConvId}}, State};
 
 event({conversation_removed, ConvId}, State) ->
-    {event, conversation_removed, #{conversation_id=>ConvId}, State};
+    {event, {conversation_removed, #{conversation_id=>ConvId}}, State};
 
 event({member_added, ConvId, MemberId}, State) ->
-    {event, member_added, #{conversation_id=>ConvId, member_id=>MemberId}, State};
+    {event, {member_added, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
 event({member_removed, ConvId, MemberId}, State) ->
-    {event, member_removed, #{conversation_id=>ConvId, member_id=>MemberId}, State};
+    {event, {member_removed, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
 event({message_created, ConvId, Msg}, State) ->
-    {event, message_created, #{conversation_id=>ConvId, message=>Msg}, State};
+    {event, {message_created, #{conversation_id=>ConvId, message=>Msg}}, State};
 
 event({message_updated, ConvId, Msg}, State) ->
-    {event, message_updated, #{conversation_id=>ConvId, message=>Msg}, State};
+    {event, {message_updated, #{conversation_id=>ConvId, message=>Msg}}, State};
 
 event({message_deleted, ConvId, MsgId}, State) ->
-    {event, message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}, State};
+    {event, {message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}}, State};
 
 event({unread_counter_updated, ConvId, Counter}, State) ->
-    {event, unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}, State};
+    {event, {unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}}, State};
 
 event(_Event, State) ->
     {ok, State}.
