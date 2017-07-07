@@ -49,29 +49,24 @@
 
 
 %% @doc
-cmd(<<"start">>, Req) ->
-    #nkreq{data=Data, session_module=Mod, session_pid=Pid, user_id=UserId, srv_id=SrvId} = Req,
-    case catch Mod:type() of
-        session ->
-            case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
-                {ok, DomainId} ->
-                    Opts = #{
-                        monitor => {Mod, Pid},
-                        session_events => maps:get(session_events, Data, []),
-                        session_id => {nkdomain_session, Mod, Pid}
-                    },
-                    case nkchat_session_obj:start(SrvId, DomainId, UserId, Opts) of
-                        {ok, SessId, _Pid} ->
-                            Req2 = nkdomain_api_util:add_id(?CHAT_SESSION, SessId, Req),
-                            {ok, #{obj_id=>SessId}, Req2};
-                        {error, Error} ->
-                            {error, Error}
-                    end;
+cmd(<<"start">>, #nkreq{session_module=nkapi_server}=Req) ->
+    #nkreq{data=Data, session_pid=Pid, user_id=UserId, srv_id=SrvId} = Req,
+    case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
+        {ok, DomainId} ->
+            Opts = #{
+                nkapi_server_pid =>Pid,
+                session_events => maps:get(session_events, Data, []),
+                session_link => {nkapi_server, Pid}
+            },
+            case nkchat_session_obj:start(SrvId, DomainId, UserId, Opts) of
+                {ok, SessId, _Pid} ->
+                    Req2 = nkdomain_api_util:add_id(?CHAT_SESSION, SessId, Req),
+                    {ok, #{obj_id=>SessId}, Req2};
                 {error, Error} ->
                     {error, Error}
             end;
-        _ ->
-            {error, session_type_unsupported}
+        {error, Error} ->
+            {error, Error}
     end;
 
 cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId, user_state=UserState}=Req) ->

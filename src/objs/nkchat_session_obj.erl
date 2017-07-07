@@ -63,9 +63,8 @@
 
 
 -type start_opts() :: #{
-    monitor => {module(), pid()},
-    session_events => [binary()],
-    session_id => term()
+    session_link => {module(), pid()},
+    session_events => [binary()]
 }.
 
 
@@ -87,13 +86,7 @@ start(SrvId, DomainId, UserId, Opts) ->
         active => true,
         ?CHAT_SESSION => #{}
     },
-    Opts1 = maps:with([session_events, session_id], Opts),
-    Opts2 = case Opts of
-        #{monitor:=Monitor} ->
-            Opts1#{meta=>#{monitor=>Monitor}};
-        _ ->
-            Opts1
-    end,
+    Opts2 = maps:with([session_link, session_events], Opts),
     case nkdomain_obj_make:create(SrvId, Obj, Opts2) of
         {ok, #obj_id_ext{obj_id=SessId, pid=Pid}, _} ->
             {ok, SessId, Pid};
@@ -169,8 +162,8 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
 -record(session, {
     user_id :: nkdomain:obj_id(),
     convs :: #{nkdomain:obj_id() => {Data::map(), pid()}},
-    active_id :: undefined | nkdomain:obj_id(),
-    api :: {module(), pid()}
+    active_id :: undefined | nkdomain:obj_id()
+%%    nkapi_server :: pid()
 }).
 
 
@@ -219,14 +212,12 @@ object_send_event(Event, State) ->
 
 
 %% @private When the object is loaded, we make our cache
-object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId, meta=Meta}=State) ->
+object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     #obj_id_ext{srv_id=SrvId, obj_id=SessId} = Id,
     #{parent_id := UserId} = Obj,
-    #{monitor:={ApiMod, ApiPid}} = Meta,
     Session = #session{
         user_id = UserId,
-        convs = #{},
-        api = {ApiMod, ApiPid}
+        convs = #{}
     },
     State2 = State#?STATE{session=Session},
     {ok, Convs1} = nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, UserId),
@@ -243,7 +234,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId, meta=Meta}=State) ->
         State2,
         Convs1),
     ok = nkdomain_user_obj:register_session(SrvId, UserId, ?CHAT_SESSION, SessId, #{}),
-    State4 = nkdomain_obj_util:link_to_api_server(?MODULE, ApiMod, ApiPid, State3),
+    State4 = nkdomain_obj_util:link_to_api_server(?MODULE, State3),
     {ok, State4}.
 
 
