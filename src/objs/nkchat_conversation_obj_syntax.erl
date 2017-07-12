@@ -49,7 +49,15 @@ api(<<"remove_member">>, Syntax) ->
 
 api(<<"find_member_conversations">>, Syntax) ->
     Syntax#{
+        domain_id => binary,
         member_id => binary
+    };
+
+api(<<"find_conversations_with_members">>, Syntax) ->
+    Syntax#{
+        domain_id => binary,
+        member_ids => {list, binary},
+        '__mandatory' => [member_ids]
     };
 
 api(<<"get_messages">>, Syntax) ->

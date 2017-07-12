@@ -163,7 +163,6 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
     user_id :: nkdomain:obj_id(),
     convs :: #{nkdomain:obj_id() => {Data::map(), pid()}},
     active_id :: undefined | nkdomain:obj_id()
-%%    nkapi_server :: pid()
 }).
 
 

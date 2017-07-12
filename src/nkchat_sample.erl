@@ -77,6 +77,12 @@ conv_find_member_conversations() ->
 conv_find_member_conversations(MemberId) ->
     cmd(<<"objects/conversation/find_member_conversations">>, #{member_id=>MemberId}).
 
+conv_find_conversations_with_members(MemberIds) ->
+    cmd(<<"objects/conversation/find_conversations_with_members">>, #{member_ids=>MemberIds}).
+
+conv_find_conversations_with_members(Domain, MemberIds) ->
+    cmd(<<"objects/conversation/find_conversations_with_members">>, #{domain_id=>Domain, member_ids=>MemberIds}).
+
 conv_add_member(Id, Member) ->
     cmd(<<"objects/conversation/add_member">>, #{id=>Id, member_id=>Member}).
 
