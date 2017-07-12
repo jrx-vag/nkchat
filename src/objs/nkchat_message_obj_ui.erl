@@ -38,10 +38,14 @@ table(Session) ->
         subdomains_id => ?ID_SUBDOMAINS,
         filters => [?ID_SUBDOMAINS],
         columns => [
+%            #{
+%                id => pos,
+%                type => pos,
+%                name => domain_column_pos
+%            },
             #{
-                id => pos,
-                type => pos,
-                name => domain_column_pos
+                id => checkbox,
+                type => checkbox
             },
             #{
                 id => conversation,
@@ -72,31 +76,31 @@ table(Session) ->
                 type => date,
                 name => domain_column_created_time,
                 sort => true
-            },
-            #{
-                id => enabled_icon,
-                type => {icon, <<"enabled_icon">>}
-            },
-            #{
-                id => delete,
-                type => {fixed_icon, <<"fa-trash">>}
+%            },
+%            #{
+%                id => enabled_icon,
+%                type => {icon, <<"enabled_icon">>}
+%            },
+%            #{
+%                id => delete,
+%                type => {fixed_icon, <<"fa-trash">>}
             }
         ],
         left_split => 1,
-        right_split => 2,
+%        right_split => 2,
         on_click => [
-            #{
-                id => <<"fa-times">>,
-                type => disable
-            },
-            #{
-                id => <<"fa-check">>,
-                type => enable
-            },
-            #{
-                id => <<"fa-trash">>,
-                type => delete
-            }            
+%            #{
+%                id => <<"fa-times">>,
+%                type => disable
+%            },
+%            #{
+%                id => <<"fa-check">>,
+%                type => enable
+%            },
+%            #{
+%                id => <<"fa-trash">>,
+%                type => delete
+%            }            
         ]
     },
     Table = #{
@@ -232,6 +236,7 @@ table_iter([Entry|Rest], Pos, Acc) ->
     {ok, Path2, _MessageName} = nkdomain_util:get_parts(<<"message">>, Path),
     {ok, _Domain, ConversationName} = nkdomain_util:get_parts(<<"conversation">>, Path2),
     Data = #{
+        checkbox => <<"0">>,
         pos => Pos,
         id => ObjId,
         conversation => ConversationName,
