@@ -533,7 +533,7 @@ object_sync_op({?MODULE, get_session_info}, _From, #?STATE{id=#obj_id_ext{obj_id
 object_sync_op({?MODULE, get_last_messages}, _From, #?STATE{session=Session}=State) ->
     #session{total_messages=Total, messages=Messages} = Session,
     Messages2 = [M || {_Time, _Id, M} <- Messages],
-    {reply, {ok, #{total=>Total, data=>Messages2}, State}};
+    {reply, {ok, #{total=>Total, data=>Messages2}}, State};
 
 object_sync_op(_Op, _From, _State) ->
     continue.
