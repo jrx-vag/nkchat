@@ -74,7 +74,7 @@ cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId, user_state=UserState}=Req) ->
         {ok, SessId} ->
             case nkdomain:unload(SrvId, SessId, user_stop) of
                 ok ->
-                    {ok, #{}, UserState};
+                    {ok, #{}};
                 {error, Error} ->
                     {error, Error}
             end;
