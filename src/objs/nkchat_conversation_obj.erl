@@ -498,7 +498,7 @@ object_sync_op({?MODULE, add_session, MemberId, SessId, Meta, Pid}, _From, State
                 type => Type,
                 total_messages => Total,
                 unread_counter => Counter,
-                last_messge => LastMessage
+                last_message => LastMessage
             },
             {reply, {ok, Reply, self()}, State3};
         {error, Error} ->
