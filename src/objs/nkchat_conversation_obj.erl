@@ -290,9 +290,9 @@ message_event(SrvId, ConvId, Event) ->
 
 -record(member, {
     member_id :: nkdomain:obj_id(),
-    added_time :: nklib_util:m_timestamp(),
-    last_active_time = 0:: nklib_util:m_timestamp(),
-    last_seen_msg_time = 0 :: nklib_util:m_timestamp(),
+    added_time :: nkdomain:timestamp(),
+    last_active_time = 0:: nkdomain:timestamp(),
+    last_seen_msg_time = 0 :: nkdomain:timestamp(),
     unread_count = -1 :: integer(),
     sessions = [] :: [#chat_session{}]
 }).
@@ -669,7 +669,7 @@ add_member(MemberId, State) ->
         false ->
             Member = #member{
                 member_id = MemberId,
-                added_time = nklib_util:m_timestamp()
+                added_time = nkdomain_util:timestamp()
             },
             State2 = set_member(MemberId, Member, State),
             {ok, set_members_hash(State2)};
