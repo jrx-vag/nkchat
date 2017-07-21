@@ -31,6 +31,8 @@
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2]).
 -export([object_admin_info/0]).
+-export([notify_fun/4]).
+
 -export_type([meta/0, event/0]).
 
 -include("nkchat.hrl").
@@ -154,6 +156,11 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
     nkdomain_obj:async_op(any, Pid, {?MODULE, conversation_event, ConvId, Event}).
 
 
+%% @private To be called from nkdomain_user_obj
+notify_fun(SessId, Pid, NotifyId, Msg) ->
+    lager:error("NKLOG NOTIFY: ~s ~p ~s ~p", [SessId, Pid, NotifyId, Msg]).
+
+
 
 %% ===================================================================
 %% nkdomain_obj behaviour
@@ -232,7 +239,8 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         end,
         State2,
         Convs1),
-    ok = nkdomain_user_obj:register_session(SrvId, UserId, ?CHAT_SESSION, SessId, #{}),
+    Opts = #{notify_fun => fun ?MODULE:notify_fun/4},
+    ok = nkdomain_user_obj:register_session(SrvId, UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_api_server(?MODULE, State3),
     {ok, State4}.
 
