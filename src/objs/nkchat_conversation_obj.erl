@@ -34,6 +34,7 @@
 -export([add_member/3, remove_member/3, add_session/5, set_session_active/5, remove_session/4]).
 -export([get_info/1, get_messages/3, find_member_conversations/3,
          find_conversations_with_members/3, get_last_messages/2]).
+-export([make_invite_token/5, accept_token/2, reject_token/2]).
 -export([message_event/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
@@ -48,6 +49,7 @@
 -include_lib("nkservice/include/nkservice.hrl").
 
 -define(MSG_CACHE_SIZE, 25).
+-define(INVITE_TTL, 3*24*60*60).
 
 
 
@@ -259,6 +261,52 @@ message_event(SrvId, ConvId, Event) ->
         _ ->
             nkdomain_obj:async_op(SrvId, ConvId, {send_event, Event2})
     end.
+
+
+%% @doc
+-spec make_invite_token(nkservice:id(), nkdomain:id(), nkdomain:id(), nkdomain:id(), integer()) ->
+    {ok, ConvId::nkdomain:obj_id(), Token::nkdomain:obj_id(), TTL::integer()} | {error, term()}.
+
+make_invite_token(SrvId, Conv, UserId, MemberId, TTL) ->
+    nkdomain_obj:sync_op(SrvId, Conv, {?MODULE, make_invite_token, UserId, MemberId, TTL}).
+
+
+%% @doc
+accept_token(SrvId, TokenId) ->
+    case nkdomain:get_obj(SrvId, TokenId) of
+        {ok, #{type:=?DOMAIN_TOKEN, subtype:=[?CHAT_CONVERSATION], ?DOMAIN_TOKEN:=Data}} ->
+            case Data of
+                #{
+                    <<"op">> := <<"invite_member">>,
+                    <<"conversation_id">> := ConvId,
+                    <<"member_id">> := MemberId
+                } ->
+                    case add_member(SrvId, ConvId, MemberId) of
+                        {ok, _MemberId} ->
+                            nkdomain:delete(SrvId, TokenId),
+                            ok;
+                        {error, Error} ->
+                            {error, Error}
+                    end;
+                _ ->
+                    {error, invalid_token}
+            end;
+        _ ->
+            {error, invalid_token}
+    end.
+
+
+%% @doc
+reject_token(SrvId, TokenId) ->
+    case nkdomain:get_obj(SrvId, TokenId) of
+        {ok, #{type:=?DOMAIN_TOKEN, subtype:=[?CHAT_CONVERSATION]}} ->
+            nkdomain:delete(SrvId, TokenId),
+            ok;
+        _ ->
+            {error, invalid_token}
+    end.
+
+
 
 
 %%%% @private
@@ -534,6 +582,38 @@ object_sync_op({?MODULE, get_last_messages}, _From, #?STATE{session=Session}=Sta
     #session{total_messages=Total, messages=Messages} = Session,
     Messages2 = [M || {_Time, _Id, M} <- Messages],
     {reply, {ok, #{total=>Total, data=>Messages2}}, State};
+
+
+object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) ->
+    #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=ConvId}, domain_id=DomainId} = State,
+    TTL2 = case TTL of
+        0 -> ?INVITE_TTL;
+        _ -> TTL
+    end,
+    case nkdomain_lib:find(SrvId, Member) of
+        #obj_id_ext{type = ?DOMAIN_USER, obj_id=MemberId} ->
+            Data = #{
+                <<"op">> => <<"invite_member">>,
+                <<"conversation_id">> => ConvId,
+                <<"member_id">> => MemberId
+            },
+            Opts = #{ttl => TTL2},
+            % Since the parent is ours, it would block
+            spawn_link(
+                fun() ->
+                    Reply = case nkdomain_token_obj:create(SrvId, DomainId, ConvId, UserId, ?CHAT_CONVERSATION, Opts, Data) of
+                        {ok, TokenId, _Secs, _Unknown} ->
+                            {ok, ConvId, TokenId, TTL2};
+                        {error, Error} ->
+                            {error, Error}
+                    end,
+                    gen_server:reply(From, Reply)
+                end),
+            {noreply, State};
+        _ ->
+            {reply, {error, member_invalid}, State}
+    end;
+
 
 object_sync_op(_Op, _From, _State) ->
     continue.

@@ -72,5 +72,30 @@ api(<<"remove_conversation">>, Syntax) ->
         '__mandatory' => [conversation_id]
     };
 
+api(<<"send_invitation">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        member_id => binary,
+        conversation_id => binary,
+        ttl => {integer, 0, none},
+        '__mandatory' => [member_id, conversation_id]
+    };
+
+api(<<"accept_invitation">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        notification_id => binary,
+        token =>  binary,
+        '__mandatory' => [notification_id, token]
+    };
+
+api(<<"reject_invitation">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        notification_id => binary,
+        token =>  binary,
+        '__mandatory' => [notification_id, token]
+    };
+
 api(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_SESSION, Syntax).

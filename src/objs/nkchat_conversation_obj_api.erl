@@ -28,6 +28,7 @@
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkservice/include/nkservice.hrl").
 
+
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -47,6 +48,22 @@ cmd(<<"remove_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=
         {error, Error} ->
             {error, Error}
     end;
+
+cmd(<<"make_invite_token">>, #nkreq{data=#{id:=Conv, member_id:=MemberId}, srv_id=SrvId}=Req) ->
+    {ok, DomainId} = nkdomain_api_util:get_id(?DOMAIN_DOMAIN, none, #{}, Req),
+    {ok, UserId} = nkdomain_api_util:get_id(?DOMAIN_USER, none, #{}, Req),
+    case nkchat_conversation_obj:make_invite_token(SrvId, Conv, DomainId, UserId, MemberId) of
+        {ok, TokenId} ->
+            {ok, #{<<"token">> => TokenId}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
+cmd(<<"accept_invite_token">>, #nkreq{data=#{token:=Token}, srv_id=SrvId}) ->
+    nkchat_conversation_obj:accept_token(SrvId, Token);
+
+cmd(<<"reject_invite_token">>, #nkreq{data=#{token:=Token}, srv_id=SrvId}) ->
+    nkchat_conversation_obj:reject_token(SrvId, Token);
 
 cmd(<<"find_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
