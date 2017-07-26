@@ -152,8 +152,8 @@ cmd(<<"send_invitation">>, #nkreq{data=#{member_id:=MemberId, conversation_id:=C
         {ok, Id} ->
             TTL = maps:get(ttl, Data, 0),
             case nkchat_session_obj:send_invitation(SrvId, Id, MemberId, ConvId, TTL) of
-                {ok, NotifyId} ->
-                    {ok, #{<<"notification_id">> => NotifyId}};
+                {ok, TokenId} ->
+                    {ok, #{<<"token">> => TokenId}};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -161,18 +161,18 @@ cmd(<<"send_invitation">>, #nkreq{data=#{member_id:=MemberId, conversation_id:=C
             {error, Error}
     end;
 
-cmd(<<"accept_invitation">>, #nkreq{data=#{notification_id:=NotifyId, token:=Token}=Data, srv_id=SrvId}=Req) ->
+cmd(<<"accept_invitation">>, #nkreq{data=#{token:=TokenId}=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
-            nkchat_session_obj:accept_invitation(SrvId, Id, NotifyId, Token);
+            nkchat_session_obj:accept_invitation(SrvId, Id, TokenId);
         {error, Error} ->
             {error, Error}
     end;
 
-cmd(<<"reject_invitation">>, #nkreq{data=#{notification_id:=NotifyId, token:=Token}=Data, srv_id=SrvId}=Req) ->
+cmd(<<"reject_invitation">>, #nkreq{data=#{token:=TokenId}=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
-            nkchat_session_obj:reject_invitation(SrvId, Id, NotifyId, Token);
+            nkchat_session_obj:reject_invitation(SrvId, Id, TokenId);
         {error, Error} ->
             {error, Error}
     end;

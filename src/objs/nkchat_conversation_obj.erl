@@ -34,7 +34,7 @@
 -export([add_member/3, remove_member/3, add_session/5, set_session_active/5, remove_session/4]).
 -export([get_info/1, get_messages/3, find_member_conversations/3,
          find_conversations_with_members/3, get_last_messages/2]).
--export([make_invite_token/5, accept_token/2, reject_token/2]).
+-export([add_invite_op/5, perform_op/2]).
 -export([message_event/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
@@ -263,66 +263,30 @@ message_event(SrvId, ConvId, Event) ->
     end.
 
 
-%% @doc
--spec make_invite_token(nkservice:id(), nkdomain:id(), nkdomain:id(), nkdomain:id(), integer()) ->
-    {ok, ConvId::nkdomain:obj_id(), Token::nkdomain:obj_id(), TTL::integer()} | {error, term()}.
+%% @doc Adds info on a token to invite an user
+-spec add_invite_op(nkservice:id(), nkdomain:id(), nkdomain:id(), nkdomain:id(), map()) ->
+    {ok, ConvId::nkdomain:obj_id(), MemberId::nkdomain:obj_id(), UserId::nkdomain:obj_id(), map()} | {error, term()}.
 
-make_invite_token(SrvId, Conv, UserId, MemberId, TTL) ->
-    nkdomain_obj:sync_op(SrvId, Conv, {?MODULE, make_invite_token, UserId, MemberId, TTL}).
-
-
-%% @doc
-accept_token(SrvId, TokenId) ->
-    case nkdomain:get_obj(SrvId, TokenId) of
-        {ok, #{type:=?DOMAIN_TOKEN, subtype:=[?CHAT_CONVERSATION], ?DOMAIN_TOKEN:=Data}} ->
-            case Data of
-                #{
-                    <<"op">> := <<"invite_member">>,
-                    <<"conversation_id">> := ConvId,
-                    <<"member_id">> := MemberId
-                } ->
-                    case add_member(SrvId, ConvId, MemberId) of
-                        {ok, _MemberId} ->
-                            nkdomain:delete(SrvId, TokenId),
-                            ok;
-                        {error, Error} ->
-                            {error, Error}
-                    end;
-                _ ->
-                    {error, invalid_token}
-            end;
-        _ ->
-            {error, invalid_token}
-    end.
+add_invite_op(SrvId, Conv, UserId, Member, Base) ->
+    nkdomain_obj:sync_op(SrvId, Conv, {?MODULE, add_invite_op, UserId, Member, Base}).
 
 
 %% @doc
-reject_token(SrvId, TokenId) ->
-    case nkdomain:get_obj(SrvId, TokenId) of
-        {ok, #{type:=?DOMAIN_TOKEN, subtype:=[?CHAT_CONVERSATION]}} ->
-            nkdomain:delete(SrvId, TokenId),
+perform_op(SrvId, #{?CHAT_CONVERSATION:=#{<<"add_member_op">>:=Op}}) ->
+    #{
+        <<"conversation_id">> := ConvId,
+        <<"member_id">> := MemberId,
+        <<"user_id">> := _UserId
+    } = Op,
+    case add_member(SrvId, ConvId, MemberId) of
+        {ok, _MemberId} ->
             ok;
-        _ ->
-            {error, invalid_token}
-    end.
+        {error, Error} ->
+            {error, Error}
+    end;
 
-
-
-
-%%%% @private
-%%session_event_filter(Event) ->
-%%    case Event of
-%%        {message_created, Msg} -> {new, Msg};
-%%        {message_updated, Msg} -> {updated, Msg};
-%%        {message_deleted, MsgId} -> {deleted, MsgId};
-%%        {member_added, _} -> async;
-%%        {member_removed, _} -> async;
-%%        _ ->
-%%            %% lager:debug("EV Other: ~p", [Event]),
-%%            false
-%%    end.
-
-
+perform_op(_SrvId, _Data) ->
+    {error, operation_token_invalid}.
 
 
 %% =================================================================
@@ -614,6 +578,30 @@ object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) -
             {reply, {error, member_invalid}, State}
     end;
 
+object_sync_op({?MODULE, add_invite_op, User, Member, Base}, _From, State) ->
+    %% TODO check permission
+    #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=ConvId}} = State,
+    case nkdomain_lib:find(SrvId, Member) of
+        #obj_id_ext{obj_id=MemberId} ->
+            case nkdomain_lib:find(SrvId, User) of
+                #obj_id_ext{obj_id=UserId} ->
+                    ConvData1 = maps:get(?CHAT_CONVERSATION, Base, #{}),
+                    ConvData2 = ConvData1#{
+                        <<"add_member_op">> => #{
+                            <<"conversation_id">> => ConvId,
+                            <<"member_id">> => MemberId,
+                            <<"user_id">> => UserId,
+                            <<"date">> => nkdomain_util:timestamp()
+                        }
+                    },
+                    Base2 = Base#{?CHAT_CONVERSATION => ConvData2},
+                    {reply, {ok, ConvId, MemberId, UserId, Base2}, State};
+                _ ->
+                    {error, member_invalid}
+            end;
+        _ ->
+            {error, user_invalid}
+    end;
 
 object_sync_op(_Op, _From, _State) ->
     continue.

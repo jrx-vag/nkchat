@@ -47,25 +47,25 @@ api(<<"remove_member">>, Syntax) ->
         '__mandatory' => [id, member_id]
     };
 
-api(<<"make_invite_token">>, Syntax) ->
-    Syntax#{
-        id => binary,
-        member_id => binary,
-        ttl => {integer, 0, none},
-        '__mandatory' => [id, member_id]
-    };
-
-api(<<"accept_invite_token">>, Syntax) ->
-    Syntax#{
-        token => binary,
-        '__mandatory' => [token]
-    };
-
-api(<<"reject_invite_token">>, Syntax) ->
-    Syntax#{
-        token => binary,
-        '__mandatory' => [token]
-    };
+%%api(<<"make_invite_token">>, Syntax) ->
+%%    Syntax#{
+%%        id => binary,
+%%        member_id => binary,
+%%        ttl => {integer, 0, none},
+%%        '__mandatory' => [id, member_id]
+%%    };
+%%
+%%api(<<"accept_invite_token">>, Syntax) ->
+%%    Syntax#{
+%%        token => binary,
+%%        '__mandatory' => [token]
+%%    };
+%%
+%%api(<<"reject_invite_token">>, Syntax) ->
+%%    Syntax#{
+%%        token => binary,
+%%        '__mandatory' => [token]
+%%    };
 
 api(<<"find_member_conversations">>, Syntax) ->
     Syntax#{

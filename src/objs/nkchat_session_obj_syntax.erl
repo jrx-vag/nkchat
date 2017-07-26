@@ -84,17 +84,15 @@ api(<<"send_invitation">>, Syntax) ->
 api(<<"accept_invitation">>, Syntax) ->
     Syntax#{
         id => binary,
-        notification_id => binary,
         token =>  binary,
-        '__mandatory' => [notification_id, token]
+        '__mandatory' => [token]
     };
 
 api(<<"reject_invitation">>, Syntax) ->
     Syntax#{
         id => binary,
-        notification_id => binary,
         token =>  binary,
-        '__mandatory' => [notification_id, token]
+        '__mandatory' => [token]
     };
 
 api(Cmd, Syntax) ->

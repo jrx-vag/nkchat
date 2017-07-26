@@ -25,13 +25,13 @@
 
 -export([start/4, get_conversations/2, get_conversation/3]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
--export([conversation_event/4, send_invitation/5, accept_invitation/4, reject_invitation/4]).
+-export([conversation_event/4, send_invitation/5, accept_invitation/3, reject_invitation/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2]).
 -export([object_admin_info/0]).
--export([notify_fun/4]).
+-export([notify_fun/5]).
 
 -export_type([meta/0, event/0]).
 
@@ -62,8 +62,8 @@
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
     {unread_counter_updated, ConvId::nkdomain:obj_id(), integer()} |
-    {invited_to_conversation, NotifyId::binary(), UserId::binary(), ConvId::binary(), Token::binary()} |
-    {remove_notification, NotifyId::binary()}.
+    {invited_to_conversation, TokenId::binary(), UserId::binary(), ConvId::binary()} |
+    {remove_notification, TokenId::binary()}.
 
 
 -type start_opts() :: #{
@@ -150,26 +150,37 @@ set_active_conversation(SrvId, Id, Conv) ->
 
 %% @doc Sends a invitation notification
 -spec send_invitation(nkservice:id(), nkdomain:id(), nkdomain:id(), nkdomain:id(), integer()) ->
-    {ok, NotifyId::binary()} | {error, term()}.
+    {ok, TokenId::nkdomain:obj_id()} | {error, term()}.
 
 send_invitation(SrvId, SessId, MemberId, ConvId, TTL) ->
     nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, send_invitation, MemberId, ConvId, TTL}).
 
 
 %% @doc Accepts a invitation notification
--spec accept_invitation(nkservice:id(), nkdomain:id(), nkdomain:id(), nkdomain:id()) ->
+-spec accept_invitation(nkservice:id(), nkdomain:id(), nkdomain:id()) ->
     ok | {error, term()}.
 
-accept_invitation(SrvId, SessId, NotifyId, Token) ->
-    nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, accept_invitation, NotifyId, Token}).
+accept_invitation(SrvId, SessId, TokenId) ->
+    case nkdomain_token_obj:consume_token(SrvId, TokenId) of
+        {ok, #{data:=Data}} ->
+            nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, accept_invitation, Data});
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% @doc Rejects a invitation notification
--spec reject_invitation(nkservice:id(), nkdomain:id(), nkdomain:id(), nkdomain:id()) ->
+-spec reject_invitation(nkservice:id(), nkdomain:id(), nkdomain:id()) ->
     ok | {error, term()}.
 
-reject_invitation(SrvId, SessId, NotifyId, Token) ->
-    nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, reject_invitation, NotifyId, Token}).
+reject_invitation(SrvId, _SessId, TokenId) ->
+    case nkdomain_token_obj:consume_token(SrvId, TokenId) of
+        {ok, _Data} ->
+            lager:error("NKLOG Token consumed"),
+            ok;
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% @doc Called from nkchat_conversation_obj
@@ -182,9 +193,9 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
 
 
 %% @private To be called from nkdomain_user_obj
-notify_fun(_SessId, Pid, NotifyId, Msg) ->
-    lager:error("NKLOG SESS FUN ~p", [Msg]),
-    nkdomain_obj:async_op(any, Pid, {?MODULE, notify, NotifyId, Msg}).
+notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
+    % lager:error("NKLOG SESS FUN ~p ~p", [Op, Msg]),
+    nkdomain_obj:async_op(any, Pid, {?MODULE, notify, TokenId, Msg, Op}).
 
 
 
@@ -265,7 +276,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         end,
         State2,
         Convs1),
-    Opts = #{notify_fun => fun ?MODULE:notify_fun/4},
+    Opts = #{notify_fun => fun ?MODULE:notify_fun/5},
     ok = nkdomain_user_obj:register_session(SrvId, UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_api_server(?MODULE, State3),
     {ok, State4}.
@@ -323,37 +334,39 @@ object_sync_op({?MODULE, rm_conv, ConvId}, _From, State) ->
             {reply, {error, Error}, State}
     end;
 
-object_sync_op({?MODULE, send_invitation, MemberId, Conv, TTL}, _From, State) ->
-    #?STATE{srv_id=SrvId, domain_id=DomainId, parent_id=UserId} = State,
-    case nkchat_conversation_obj:make_invite_token(SrvId, Conv, UserId, MemberId, TTL) of
-        {ok, ConvId, Token, TTL2} ->
-            Msg = #{
-                <<"op">> => <<"invited_to_conversation">>,
-                <<"conversation_id">> => ConvId,
-                <<"user_id">> => UserId,
-                <<"token">> => Token
-            },
-            Opts = #{ttl => TTL2},
-            case nkdomain_user_obj:create_notification(SrvId, MemberId, DomainId, ?CHAT_SESSION, Msg, Opts) of
-                {ok, NotifyId} ->
-                    {reply, {ok, NotifyId}, State};
+object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
+    #?STATE{srv_id=SrvId, domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
+    Reply = case nkchat_conversation_obj:add_invite_op(SrvId, Conv, UserId, Member, #{}) of
+        {ok, ConvId, MemberId, UserId, Op1} ->
+            case nkdomain_user_obj:add_notification_op(SrvId, MemberId, ?CHAT_SESSION, #{}, Op1) of
+                {ok, MemberId, Op2} ->
+                    Op3 = Op2#{
+                        ?CHAT_SESSION => #{
+                            <<"invited_to_conversation_op">> => #{
+                                <<"session_id">> => SessId,
+                                <<"conversation_id">> => ConvId,
+                                <<"user_id">> => UserId,
+                                <<"member_id">> => MemberId
+                            }
+                        }
+                    },
+                    Opts = #{ttl => TTL},
+                    case nkdomain_token_obj:create(SrvId, DomainId, MemberId, UserId, <<"chat.invite">>, Opts, Op3) of
+                        {ok, TokenId, _Secs, _Unknown} ->
+                            {ok, TokenId};
+                        {error, Error} ->
+                            {error, Error}
+                    end;
                 {error, Error} ->
-                    {reply, {error, Error}, State}
+                    {error, Error}
             end;
         {error, Error} ->
-            {reply, {error, Error}, State}
-    end;
-
-object_sync_op({?MODULE, accept_invitation, NotifyId, Token}, _From, State) ->
-    #?STATE{srv_id=SrvId, parent_id=UserId} = State,
-    nkdomain_user_obj:remove_notification(SrvId, UserId, NotifyId),
-    Reply = nkchat_conversation_obj:accept_token(SrvId, Token),
+            {error, Error}
+    end,
     {reply, Reply, State};
 
-object_sync_op({?MODULE, reject_invitation, NotifyId, Token}, _From, State) ->
-    #?STATE{srv_id=SrvId, parent_id=UserId} = State,
-    nkdomain_user_obj:remove_notification(SrvId, UserId, NotifyId),
-    Reply = nkchat_conversation_obj:reject_token(SrvId, Token),
+object_sync_op({?MODULE, accept_invitation, Data}, _From, #?STATE{srv_id=SrvId}=State) ->
+    Reply = nkchat_conversation_obj:perform_op(SrvId, Data),
     {reply, Reply, State};
 
 object_sync_op(_Op, _From, _State) ->
@@ -370,19 +383,23 @@ object_async_op({?MODULE, conversation_event, ConvId, Event}, State) ->
             {noreply, State}
     end;
 
-object_async_op({?MODULE, notify, NotifyId, Msg}, State) ->
+object_async_op({?MODULE, notify, TokenId, Msg, Op}, State) ->
     case Msg of
         #{
-            <<"op">> := <<"invited_to_conversation">>,
-            <<"conversation_id">> := ConvId,
-            <<"user_id">> := UserId,
-            <<"token">> := Token
+            ?CHAT_SESSION := #{
+                <<"invited_to_conversation_op">> := #{
+                    <<"conversation_id">> := ConvId,
+                    <<"user_id">> := UserId,
+                    <<"member_id">> := _MemberId
+                }
+            }
         } ->
-            Event = {invited_to_conversation, NotifyId, UserId, ConvId, Token},
-            lager:error("NKLOG EVEN ~p", [Event]),
-            {noreply, do_event(Event, State)};
-        <<"removed">> ->
-            Event = {remove_notification, NotifyId},
+            Event = case Op of
+                created ->
+                    {invited_to_conversation, TokenId, UserId, ConvId};
+                removed ->
+                    {remove_notification, TokenId}
+            end,
             {noreply, do_event(Event, State)};
         _ ->
             ?LLOG(warning, "unxpected notify: ~p", [Msg], State),

@@ -57,12 +57,12 @@ event({message_deleted, ConvId, MsgId}, State) ->
 event({unread_counter_updated, ConvId, Counter}, State) ->
     {event, {unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}}, State};
 
-event({invited_to_conversation, NotifyId, UserId, ConvId, Token}, State) ->
-    Data = #{notification_id=>NotifyId, user_id=>UserId, conversation_id=>ConvId, token=>Token},
+event({invited_to_conversation, TokenId, UserId, ConvId}, State) ->
+    Data = #{token_id=>TokenId, user_id=>UserId, conversation_id=>ConvId},
     {event, {invited_to_conversation, Data}, State};
 
-event({remove_notification, NotifyId}, State) ->
-    {event, {remove_notification, #{notification_id=>NotifyId}}, State};
+event({remove_notification, TokenId}, State) ->
+    {event, {remove_notification, #{token_id=>TokenId}}, State};
 
 event(_Event, State) ->
     {ok, State}.

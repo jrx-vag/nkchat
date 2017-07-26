@@ -106,7 +106,7 @@ object_create(_SrvId, _Obj) ->
 
 
 %% @private
-object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}=Session) ->
+object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}=State) ->
     #{parent_id:=ConvId} = Obj,
     case Event of
         created ->
@@ -120,7 +120,7 @@ object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}
         _ ->
             ok
     end,
-    {ok, Session}.
+    {ok, State}.
 
 
 
