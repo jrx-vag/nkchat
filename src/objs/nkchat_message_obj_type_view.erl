@@ -20,20 +20,22 @@
 
 %% @doc User Object
 
--module(nkchat_message_obj_ui).
+-module(nkchat_message_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([table/1, table_data/2]).
+-export([view/1, table_data/2]).
 
 -include("nkchat.hrl").
+-include_lib("nkadmin/include/nkadmin.hrl").
+-include_lib("nkdomain/include/nkdomain.hrl").
 
 -define(ID, <<"domain_detail_chat_messages_table">>).
 -define(ID_SUBDOMAINS, <<"domain_detail_chat_messages_table_subdomains">>).
 
 
 %% @doc
-table(Session) ->
-    Spec = Session#{
+view(Session) ->
+    Spec = #{
         table_id => ?ID,
         subdomains_id => ?ID_SUBDOMAINS,
         filters => [?ID_SUBDOMAINS],
@@ -106,7 +108,7 @@ table(Session) ->
     Table = #{
         id => ?ID,
         class => webix_ui,
-        value => nkadmin_webix_datatable:datatable(Spec)
+        value => nkadmin_webix_datatable:datatable(Spec, Session)
     },
     KeyData = #{data_fun => fun ?MODULE:table_data/2},
     Session2 = nkadmin_util:set_key_data(?ID, KeyData, Session),
@@ -114,7 +116,8 @@ table(Session) ->
 
 
 %% @doc
-table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, #{srv_id:=SrvId, domain_id:=DomainId}) ->
+table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
+    #admin_session{srv_id=SrvId, domain_id=DomainId} = Session,
     SortSpec = case Sort of
         {<<"conversation">>, Order} ->
             <<Order/binary, ":path">>;
@@ -129,7 +132,7 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, #{srv_id:=Sr
         {ok, Filters} -> 
             FindSpec = #{
                 filters => Filters,
-                fields => [<<"path">>, <<"created_by">>, <<"created_time">>,
+                fields => [<<"created_by">>, <<"created_time">>, <<"parent_id">>,
                            <<"domain_id">>, <<"message.text">>, <<"message.file_id">>],
                 sort => SortSpec,
                 from => Start,
@@ -141,7 +144,7 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, #{srv_id:=Sr
             end,
             case nkdomain_domain_obj:Fun(SrvId, DomainId, FindSpec) of
                 {ok, Total, List, _Meta} ->
-                    Data = table_iter(List, Start+1, []),
+                    Data = table_iter(List, Start+1, [], Session),
                     {ok, Total, Data};
                 {error, Error} ->
                     {error, Error}
@@ -212,13 +215,13 @@ table_filter([_|Rest], Acc, Info) ->
 
 
 %% @private
-table_iter([], _Pos, Acc) ->
+table_iter([], _Pos, Acc, _Session) ->
     lists:reverse(Acc);
 
-table_iter([Entry|Rest], Pos, Acc) ->
+table_iter([Entry|Rest], Pos, Acc, #admin_session{srv_id=SrvId}=Session) ->
     #{
         <<"obj_id">> := ObjId,
-        <<"path">> := Path,
+        <<"parent_id">> := ParentId,
         <<"created_time">> := CreatedTime
     } = Entry,
     Message = maps:get(<<"message">>, Entry, #{}),
@@ -233,13 +236,15 @@ table_iter([Entry|Rest], Pos, Acc) ->
         true -> <<"">>;
         false -> <<"webix_cell_disabled">>
     end,
-    {ok, Path2, _MessageName} = nkdomain_util:get_parts(<<"message">>, Path),
-    {ok, _Domain, ConversationName} = nkdomain_util:get_parts(<<"conversation">>, Path2),
+    ConvName = case nkdomain_lib:find(SrvId, ParentId) of
+        #obj_id_ext{path=Path} -> Path;
+        _ -> <<"(", ParentId/binary, ")">>
+    end,
     Data = #{
         checkbox => <<"0">>,
         pos => Pos,
         id => ObjId,
-        conversation => ConversationName,
+        conversation => ConvName,
         text => MessageText,
         file_id => MessageFileId,
         created_by => CreatedBy,
@@ -247,4 +252,4 @@ table_iter([Entry|Rest], Pos, Acc) ->
         enabled_icon => Enabled,
         <<"$css">> => Css
     },
-    table_iter(Rest, Pos+1, [Data|Acc]).
+    table_iter(Rest, Pos+1, [Data|Acc], Session).

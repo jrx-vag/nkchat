@@ -278,13 +278,13 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         Convs1),
     Opts = #{notify_fun => fun ?MODULE:notify_fun/5},
     ok = nkdomain_user_obj:register_session(SrvId, UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
-    State4 = nkdomain_obj_util:link_to_api_server(?MODULE, State3),
+    State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State3),
     {ok, State4}.
 
 
 %% @private
 object_stop(_Reason, State) ->
-    {ok, nkdomain_obj_util:unlink_from_api_server(?MODULE, State)}.
+    {ok, nkdomain_obj_util:unlink_from_session_server(?MODULE, State)}.
 
 
 %% @private

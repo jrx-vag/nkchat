@@ -54,7 +54,7 @@ cmd(<<"start">>, #nkreq{session_module=nkapi_server}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
         {ok, DomainId} ->
             Opts = #{
-                nkapi_server_pid =>Pid,
+                %nkapi_server_pid =>Pid,
                 session_events => maps:get(session_events, Data, []),
                 session_link => {nkapi_server, Pid}
             },

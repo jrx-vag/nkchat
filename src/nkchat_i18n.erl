@@ -26,24 +26,24 @@
 
 i18n() -> #{
     en => #{
-        domain_tree_resources_conversation => "Conversations",
-        domain_tree_resources_message => "Chat Messages",
+        "domain_tree_resources__conversation" => "Conversations",
+        "domain_tree_resources__message" => "Chat Messages",
 
-        'domain_tree_sessions_chat.session' => "Chat",
+        "domain_tree_sessions__chat.session" => "Chat",
 
-        domain_column_conversation => "CONVERSATION",
-        domain_column_text => "MESSAGE",
-        domain_column_file_id => "FILE"
+        "domain_column_conversation" => "CONVERSATION",
+        "domain_column_text" => "MESSAGE",
+        "domain_column_file_id" => "FILE"
     },
     es => #{
-        domain_tree_resources_conversation => "Conversaciones",
-        domain_tree_resources_message => "Mensajes de chat",
+        "domain_tree_resources__conversation" => "Conversaciones",
+        "domain_tree_resources__message" => "Mensajes de chat",
 
-        'domain_tree_sessions_chat.session' => "Chat",
+        "domain_tree_sessions__chat.session" => "Chat",
         
-        domain_column_conversation => <<"CONVERSACIÓN"/utf8>>,
-        domain_column_text => "MENSAJE",
-        domain_column_file_id => "FICHERO"
+        "domain_column_conversation" => <<"CONVERSACIÓN"/utf8>>,
+        "domain_column_text" => "MENSAJE",
+        "domain_column_file_id" => "FICHERO"
     }
 }.
 
