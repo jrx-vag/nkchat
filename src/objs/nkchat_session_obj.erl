@@ -23,7 +23,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([start/4, get_conversations/2, get_conversation/3]).
+-export([start/4, get_conversations/2, get_conversation_info/3]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_event/4, send_invitation/5, accept_invitation/3, reject_invitation/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
@@ -122,15 +122,21 @@ remove_conversation(SrvId, Id, ConvId) ->
 
 
 %% @doc
+-spec get_conversations(nkservice:id(), nkdomain:id()) ->
+    {ok, [nkdomain:obj_id()]} | {error, term()}.
+
 get_conversations(SrvId, Id) ->
     nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_conversations}).
 
 
 %% @doc
-get_conversation(SrvId, Id, Conv) ->
+-spec get_conversation_info(nkservice:id(), nkdomain:id(), nkdomain:id()) ->
+    {ok, map()} | {error, term()}.
+
+get_conversation_info(SrvId, Id, Conv) ->
     case nkdomain_lib:find(SrvId, Conv) of
         #obj_id_ext{obj_id=ConvId} ->
-            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_conversation, ConvId});
+            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_conversation_info, ConvId});
         {error, Error} ->
             {error, Error}
     end.
@@ -205,7 +211,8 @@ notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
 
 -record(session, {
     user_id :: nkdomain:obj_id(),
-    convs :: #{nkdomain:obj_id() => {Data::map(), pid()}},
+    %convs :: #{nkdomain:obj_id() => {Data::map(), pid()}},
+    conv_pids :: #{nkdomain:obj_id() => {Data::map(), pid()}},
     active_id :: undefined | nkdomain:obj_id()
 }).
 
@@ -260,7 +267,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     #{parent_id := UserId} = Obj,
     Session = #session{
         user_id = UserId,
-        convs = #{}
+        conv_pids = #{}
     },
     State2 = State#?STATE{session=Session},
     {ok, Convs1} = nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, UserId),
@@ -289,15 +296,15 @@ object_stop(_Reason, State) ->
 
 %% @private
 object_sync_op({?MODULE, get_conversations}, _From, #?STATE{session=Session}=State) ->
-    #session{convs=Convs} = Session,
-    Data = [Conv#{conversation_id=>ConvId} || {ConvId, {Conv, _}} <- maps:to_list(Convs)],
-    {reply, {ok, Data}, State};
+    #session{conv_pids=Convs} = Session,
+    {reply, {ok, maps:keys(Convs)}, State};
 
-object_sync_op({?MODULE, get_conversation, ConvId}, _From, State) ->
+object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #?STATE{session=Session}=State) ->
+    #session{user_id=UserId} = Session,
     case get_conv_pid(ConvId, State) of
         {ok, Pid} ->
-            {ok, Conv} = nkchat_conversation_obj:get_info(Pid),
-            {reply, {ok, Conv}, State};
+            {ok, Info} = nkchat_conversation_obj:get_member_info(any, Pid, UserId),
+            {reply, {ok, Info}, State};
         not_found ->
             {reply, {error, conversation_not_found}, State}
     end;
@@ -418,8 +425,8 @@ object_async_op(_Op, _State) ->
 
 %% @private
 do_set_active_conv(ConvId, #?STATE{session=Session, id=#obj_id_ext{obj_id=SessId}}=State) ->
-    #session{user_id=UserId, convs=Convs} = Session,
-    do_set_active_conv(maps:to_list(Convs), ConvId, UserId, SessId),
+    #session{user_id=UserId, conv_pids=ConvPids} = Session,
+    do_set_active_conv(maps:to_list(ConvPids), ConvId, UserId, SessId),
     Session2 = Session#session{active_id=ConvId},
     State#?STATE{session=Session2}.
 
@@ -428,8 +435,8 @@ do_set_active_conv(ConvId, #?STATE{session=Session, id=#obj_id_ext{obj_id=SessId
 do_set_active_conv([], _ActiveId, _UserId, _SessId) ->
     ok;
 
-do_set_active_conv([{ConvId, {_Data, Pid}}|Rest], ActiveId, UserId, SessId) ->
-    Active = ActiveId == ConvId,
+do_set_active_conv([{ConvId, Pid}|Rest], ActiveId, UserId, SessId) ->
+    Active = (ActiveId == ConvId),
     nkchat_conversation_obj:set_session_active(any, Pid, UserId, SessId, Active),
     do_set_active_conv(Rest, ActiveId, UserId, SessId).
 
@@ -438,12 +445,12 @@ do_set_active_conv([{ConvId, {_Data, Pid}}|Rest], ActiveId, UserId, SessId) ->
 do_add_conv(ConvId, State) ->
     #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=SessId}} = State,
     #?STATE{session=Session} = State,
-    #session{user_id=UserId, convs=Convs1} = Session,
+    #session{user_id=UserId, conv_pids=Convs1} = Session,
     case nkchat_conversation_obj:add_session(SrvId, ConvId, UserId, SessId, #{}) of
-        {ok, Data, Pid} ->
+        {ok, Pid} ->
             monitor(process, Pid),
-            Convs2 = Convs1#{ConvId => {Data, Pid}},
-            Session2 = Session#session{convs=Convs2},
+            Convs2 = Convs1#{ConvId => Pid},
+            Session2 = Session#session{conv_pids=Convs2},
             {ok, State#?STATE{session=Session2}};
         {error, Error} ->
             {error, Error}
@@ -456,10 +463,10 @@ do_rm_conv(ConvId, State) ->
         {ok, Pid} ->
             #?STATE{id=#obj_id_ext{obj_id=SessId}} = State,
             #?STATE{session=Session} = State,
-            #session{user_id=UserId, convs=Convs1, active_id=ActiveId} = Session,
+            #session{user_id=UserId, conv_pids=ConvPids1, active_id=ActiveId} = Session,
             nkchat_conversation_obj:remove_session(any, Pid, UserId, SessId),
-            Convs2 = maps:remove(ConvId, Convs1),
-            Session2 = Session#session{convs=Convs2},
+            ConvPids2 = maps:remove(Pid, ConvPids1),
+            Session2 = Session#session{conv_pids=ConvPids2},
             Session3 = case ActiveId of
                 ConvId ->
                     Session2#session{active_id=undefined};
@@ -506,9 +513,9 @@ do_conversation_event(_Event, _ConvId, State) ->
 
 %% @private
 get_conv_pid(ConvId, #?STATE{session=Session}) ->
-    #session{convs=Convs} = Session,
+    #session{conv_pids=Convs} = Session,
     case maps:find(ConvId, Convs) of
-        {ok, {_Conv, Pid}} ->
+        {ok, Pid} ->
             {ok, Pid};
         error ->
             not_found

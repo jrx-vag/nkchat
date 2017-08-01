@@ -95,10 +95,10 @@ cmd(<<"get_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
             {error, Error}
     end;
 
-cmd(<<"get_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}=Req) ->
+cmd(<<"get_conversation_info">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
-            case nkchat_session_obj:get_conversation(SrvId, Id, ConvId) of
+            case nkchat_session_obj:get_conversation_info(SrvId, Id, ConvId) of
                 {ok, Data2} ->
                     {ok, Data2};
                 {error, Error} ->

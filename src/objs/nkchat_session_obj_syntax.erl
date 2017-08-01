@@ -44,7 +44,7 @@ api(<<"get_conversations">>, Syntax) ->
         id => binary
     };
 
-api(<<"get_conversation">>, Syntax) ->
+api(<<"get_conversation_info">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
