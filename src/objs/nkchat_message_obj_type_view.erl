@@ -162,7 +162,7 @@ table_filter([{_, <<>>}|Rest], Acc, Info) ->
     table_filter(Rest, Acc, Info);
 
 table_filter([{<<"conversation">>, Data}|Rest], Acc, Info) ->
-    Acc2 = Acc#{<<"path">> => nkdomain_admin_detail:search_spec(<<"/conversations/",Data/binary>>)},
+    Acc2 = Acc#{<<"path">> => nkdomain_admin_util:search_spec(<<"/conversations/",Data/binary>>)},
     table_filter(Rest, Acc2, Info);
 
 table_filter([{<<"text">>, Data}|Rest], Acc, Info) ->
@@ -174,7 +174,7 @@ table_filter([{<<"file_id">>, Data}|Rest], Acc, Info) ->
     table_filter(Rest, Acc2, Info);
 
 table_filter([{<<"created_by">>, Data}|Rest], Acc, Info) ->
-    Acc2 = Acc#{<<"created_by">> => nkdomain_admin_detail:search_spec(Data)},
+    Acc2 = Acc#{<<"created_by">> => nkdomain_admin_util:search_spec(Data)},
     table_filter(Rest, Acc2, Info);
 
 table_filter([{<<"created_time">>, <<"custom">>}|_Rest], _Acc, _Info) ->
