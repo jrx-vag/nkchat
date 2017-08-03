@@ -29,7 +29,7 @@
 -include_lib("nkadmin/include/nkadmin.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 
--define(ID, <<"domain_detail_chat_messages_table">>).
+-define(ID, <<"domain_detail_type_view__message">>).
 -define(ID_SUBDOMAINS, <<"domain_detail_chat_messages_table_subdomains">>).
 
 
@@ -40,11 +40,6 @@ view(Session) ->
         subdomains_id => ?ID_SUBDOMAINS,
         filters => [?ID_SUBDOMAINS],
         columns => [
-%            #{
-%                id => pos,
-%                type => pos,
-%                name => domain_column_pos
-%            },
             #{
                 id => checkbox,
                 type => checkbox
@@ -53,7 +48,23 @@ view(Session) ->
                 id => conversation,
                 type => text,
                 name => domain_column_conversation,
+                sort => false,
+                options => nkdomain_admin_util:get_agg(<<"parent_id">>, ?CHAT_MESSAGE, Session),
+                is_html => true
+            },
+            #{
+                id => created_time,
+                type => date,
+                name => domain_column_created_time,
                 sort => true
+            },
+            #{
+                id => created_by,
+                type => text,
+                name => domain_column_created_by,
+                sort => false,
+                options => nkdomain_admin_util:get_agg(<<"created_by">>, ?CHAT_MESSAGE, Session),
+                is_html => true % Will allow us to return HTML inside the column data
             },
             #{
                 id => text,
@@ -65,27 +76,9 @@ view(Session) ->
             #{
                 id => file_id,
                 type => text,
-                name => domain_column_file_id
-            },
-            #{
-                id => created_by,
-                type => text,
-                name => domain_column_created_by,
-                sort => true
-            },
-            #{
-                id => created_time,
-                type => date,
-                name => domain_column_created_time,
-                sort => true
-%            },
-%            #{
-%                id => enabled_icon,
-%                type => {icon, <<"enabled_icon">>}
-%            },
-%            #{
-%                id => delete,
-%                type => {fixed_icon, <<"fa-trash">>}
+                name => domain_column_file_id,
+                options => [#{id=><<>>, value=><<>>}, #{id=>true, value=>true}, #{id=>false, value=>false}],
+                is_html => true
             }
         ],
         left_split => 1,
@@ -127,9 +120,10 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
             <<"desc:path">>
     end,
     %% Get the timezone_offset from the filter list and pass it to table_filter
-    ClientTimeOffset = maps:get(<<"timezone_offset">>, Filter, <<"0">>),
-    case table_filter(maps:to_list(Filter), #{type=>message}, #{timezone_offset => ClientTimeOffset}) of
-        {ok, Filters} -> 
+    case table_filter(maps:to_list(Filter), Filter, #{type=>message}) of
+        {ok, Filters} ->
+            lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filters)]),
+
             FindSpec = #{
                 filters => Filters,
                 fields => [<<"created_by">>, <<"created_time">>, <<"parent_id">>,
@@ -155,63 +149,42 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
 
 
 %% @private
-table_filter([], Acc, _) ->
+table_filter([], _Filter, Acc) ->
     {ok, Acc};
 
-table_filter([{_, <<>>}|Rest], Acc, Info) ->
-    table_filter(Rest, Acc, Info);
+table_filter([{_, <<>>}|Rest], Filter, Acc) ->
+    table_filter(Rest, Filter, Acc);
 
-table_filter([{<<"conversation">>, Data}|Rest], Acc, Info) ->
-    Acc2 = Acc#{<<"path">> => nkdomain_admin_util:search_spec(<<"/conversations/",Data/binary>>)},
-    table_filter(Rest, Acc2, Info);
+table_filter([{<<"conversation">>, Data}|Rest], Filter, Acc) ->
+    Acc2 = Acc#{<<"parent_id">> => Data},
+    table_filter(Rest, Filter, Acc2);
 
-table_filter([{<<"text">>, Data}|Rest], Acc, Info) ->
+table_filter([{<<"created_by">>, Data}|Rest], Filter, Acc) ->
+    Acc2 = Acc#{<<"created_by">> => Data},
+    table_filter(Rest, Filter, Acc2);
+
+table_filter([{<<"created_time">>, Data}|Rest], Filter, Acc) ->
+    case nkdomain_admin_util:table_filter_time(Data, Filter, Acc) of
+        {ok, Acc2} ->
+            table_filter(Rest, Filter, Acc2);
+        {error, Error} ->
+            {error, Error}
+    end;
+
+table_filter([{<<"text">>, Data}|Rest], Filter, Acc) ->
     Acc2 = Acc#{<<"message.text">> => Data},
-    table_filter(Rest, Acc2, Info);
+    table_filter(Rest, Filter, Acc2);
 
-table_filter([{<<"file_id">>, Data}|Rest], Acc, Info) ->
-    Acc2 = Acc#{<<"message.file_id">> => Data},
-    table_filter(Rest, Acc2, Info);
+table_filter([{<<"file_id">>, <<"true">>}|Rest], Filter, Acc) ->
+    Acc2 = Acc#{<<"message.file_id">> => <<"prefix:file">>},
+    table_filter(Rest, Filter, Acc2);
 
-table_filter([{<<"created_by">>, Data}|Rest], Acc, Info) ->
-    Acc2 = Acc#{<<"created_by">> => nkdomain_admin_util:search_spec(Data)},
-    table_filter(Rest, Acc2, Info);
+table_filter([{<<"file_id">>, <<"false">>}|Rest], Filter, Acc) ->
+    Acc2 = Acc#{<<"message.file_id">> => <<>>},
+    table_filter(Rest, Filter, Acc2);
 
-table_filter([{<<"created_time">>, <<"custom">>}|_Rest], _Acc, _Info) ->
-    {error, date_needs_more_data};
-
-table_filter([{<<"created_time">>, Data}|Rest], Acc, #{timezone_offset:=Offset}=Info) ->
-    SNow = nklib_util:timestamp(),
-    {_,{H,M,S}} = nklib_util:timestamp_to_gmt(SNow),
-    Now = SNow - H*3600 - M*60 - S,
-    OffsetSecs = Offset * 60,
-    % Now is the server time for today at 00:00 in seconds
-    % OffsetSecs is difference between the client time and the server in seconds
-    case Data of
-        <<"today">> ->
-            Now2 = (Now + OffsetSecs)*1000,
-            Filter = list_to_binary([">", nklib_util:to_binary(Now2)]);
-        <<"yesterday">> ->
-            Now2 = (Now - 24*60*60 + OffsetSecs)*1000,
-            Now3 = (Now + OffsetSecs)*1000,
-            Filter = list_to_binary(["<", nklib_util:to_binary(Now2), "-", nklib_util:to_binary(Now3),">"]);
-        <<"last_7">> ->
-            Now2 = (Now - 7*24*60*60 + OffsetSecs)*1000,
-            Filter = list_to_binary([">", nklib_util:to_binary(Now2)]);
-        <<"last_30">> ->
-            Now2 = (Now - 30*24*60*60 + OffsetSecs)*1000,
-            Filter = list_to_binary([">", nklib_util:to_binary(Now2)]);
-        <<"custom">> ->
-            Filter = <<"">>;
-        _ ->
-            Filter = <<"">>
-    end,
-    Acc2 = Acc#{<<"created_time">> => Filter},
-    table_filter(Rest, Acc2, Info);
-
-table_filter([_|Rest], Acc, Info) ->
-    table_filter(Rest, Acc, Info).
-
+table_filter([_|Rest], Filter, Acc) ->
+    table_filter(Rest, Filter, Acc).
 
 
 %% @private
@@ -236,19 +209,41 @@ table_iter([Entry|Rest], Pos, Acc, #admin_session{srv_id=SrvId}=Session) ->
         true -> <<"">>;
         false -> <<"webix_cell_disabled">>
     end,
-    ConvName = case nkdomain_lib:find(SrvId, ParentId) of
-        #obj_id_ext{path=Path} -> Path;
-        _ -> <<"(", ParentId/binary, ")">>
+    Conv = case nkdomain_lib:find(SrvId, ParentId) of
+        #obj_id_ext{path=ConvPath} ->
+            nkdomain_admin_util:obj_url(ParentId, ConvPath);
+        _ ->
+            <<>>
+    end,
+    User = case nkdomain:get_name(SrvId, CreatedBy) of
+        {ok, #{name:=UserName}} ->
+            nkdomain_admin_util:obj_url(CreatedBy, UserName);
+        _ ->
+            <<>>
+    end,
+    File = case MessageFileId of
+        <<>> ->
+            <<>>;
+        _ ->
+            case nkdomain:get_obj(SrvId, MessageFileId) of
+                {ok, #{name:=FileName, ?DOMAIN_FILE:=FileObj}} ->
+                    #{content_type:=CT, size:=Size} = FileObj,
+                    FileTxt = <<FileName/binary, $(, CT/binary, ", ",
+                                (nklib_util:to_binary(Size div 1024))/binary, "KB)">>,
+                    nkdomain_admin_util:obj_url(MessageFileId, FileTxt);
+                _ ->
+                    <<>>
+            end
     end,
     Data = #{
         checkbox => <<"0">>,
         pos => Pos,
         id => ObjId,
-        conversation => ConvName,
-        text => MessageText,
-        file_id => MessageFileId,
-        created_by => CreatedBy,
+        conversation => Conv,
         created_time => CreatedTime,
+        created_by => User,
+        text => MessageText,
+        file_id => File,
         enabled_icon => Enabled,
         <<"$css">> => Css
     },
