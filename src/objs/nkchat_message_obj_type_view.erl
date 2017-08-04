@@ -23,7 +23,7 @@
 -module(nkchat_message_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([view/1, table_data/2]).
+-export([view/1, view/2, table_data/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
@@ -35,8 +35,19 @@
 
 %% @doc
 view(Session) ->
+    view(#{}, Session).
+
+
+%% @doc
+view(Opts, Session) ->
+    Id = case Opts of
+        #{table_id:=TableId} ->
+            <<?ID/binary, "__", TableId/binary>>;
+        _ ->
+            ?ID
+    end,
     Spec = #{
-        table_id => ?ID,
+        table_id => Id,
         subdomains_id => ?ID_SUBDOMAINS,
         filters => [?ID_SUBDOMAINS],
         columns => [
