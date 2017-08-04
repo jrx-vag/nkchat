@@ -77,7 +77,7 @@ view(Session) ->
                 id => file_id,
                 type => text,
                 name => domain_column_file_id,
-                options => [#{id=><<>>, value=><<>>}, #{id=>true, value=>true}, #{id=>false, value=>false}],
+                options => [#{id=><<>>, value=><<>>}, #{id=>with_attach, value=><<"With attach">>}],
                 is_html => true
             }
         ],
@@ -122,7 +122,7 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
     %% Get the timezone_offset from the filter list and pass it to table_filter
     case table_filter(maps:to_list(Filter), Filter, #{type=>message}) of
         {ok, Filters} ->
-            lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filters)]),
+            lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filter)]),
 
             FindSpec = #{
                 filters => Filters,
@@ -175,7 +175,7 @@ table_filter([{<<"text">>, Data}|Rest], Filter, Acc) ->
     Acc2 = Acc#{<<"message.text">> => Data},
     table_filter(Rest, Filter, Acc2);
 
-table_filter([{<<"file_id">>, <<"true">>}|Rest], Filter, Acc) ->
+table_filter([{<<"file_id">>, <<"with_attach">>}|Rest], Filter, Acc) ->
     Acc2 = Acc#{<<"message.file_id">> => <<"prefix:file">>},
     table_filter(Rest, Filter, Acc2);
 
