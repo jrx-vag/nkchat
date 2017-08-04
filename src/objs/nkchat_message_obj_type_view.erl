@@ -52,7 +52,7 @@ table(Opts, Session) ->
     end,
     Spec = #{
         table_id => Id,
-        is_subtable = maps:get(is_subtable, Opts),
+        is_subtable => maps:get(is_subtable, Opts),
         subdomains_id => ?ID_SUBDOMAINS,
         filters => [?ID_SUBDOMAINS],
         columns => [
