@@ -23,7 +23,7 @@
 -module(nkchat_message_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([view/1, view/2, table_data/2]).
+-export([view/1, subview/2, table_data/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
@@ -35,11 +35,15 @@
 
 %% @doc
 view(Session) ->
-    view(#{}, Session).
+    table(#{is_subtable=>false}, Session).
+
+%% @doc
+subview(Opts, Session) ->
+    table(Opts#{is_subtable=>true}, Session).
 
 
 %% @doc
-view(Opts, Session) ->
+table(Opts, Session) ->
     Id = case Opts of
         #{table_id:=TableId} ->
             <<?ID/binary, "__", TableId/binary>>;
@@ -48,6 +52,7 @@ view(Opts, Session) ->
     end,
     Spec = #{
         table_id => Id,
+        is_subtable = maps:get(is_subtable, Opts),
         subdomains_id => ?ID_SUBDOMAINS,
         filters => [?ID_SUBDOMAINS],
         columns => [
