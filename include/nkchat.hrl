@@ -28,6 +28,8 @@
 -define(CHAT_CONVERSATION, <<"conversation">>).
 -define(CHAT_MESSAGE, <<"message">>).
 -define(CHAT_SESSION, <<"chat.session">>).
+-define(MEDIA_SESSION, <<"media.session">>).
+-define(MEDIA_CALL, <<"media.call">>).
 
 
 
