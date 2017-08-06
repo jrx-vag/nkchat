@@ -152,6 +152,51 @@ session_get_conversation(ConvId) ->
 
 
 
+media_session_start() ->
+    cmd(<<"objects/media.session/start">>, #{}).
+
+media_session_get() ->
+    cmd(<<"objects/media.session/get">>, #{}).
+
+media_session_get(SessId) ->
+    cmd(<<"objects/media.session/get">>, #{id=>SessId}).
+
+media_session_stop() ->
+    cmd(<<"objects/media.session/stop">>, #{}).
+
+media_session_delete(Id) ->
+    cmd(<<"objects/media.session/delete">>, #{id=>Id}).
+
+media_session_invite(UserId, SDP) ->
+    cmd(<<"objects/media.session/invite">>, #{user_id=>UserId, sdp=>SDP}).
+
+
+%% f(SM1), f(SM2), f(P1), f(P2), {SM1, P1, SM2, P2} = nkchat_sample:media_init().
+media_init() ->
+    {ok, _, Pid1} = nkdomain_sample:login("/ct/users/u1", "1234"),
+    {ok, _, Pid2} = nkdomain_sample:login("/ct/users/u2", "1234"),
+    {ok, #{<<"obj_id">>:=SM1}} = cmd(Pid1, <<"objects/media.session/start">>, #{}),
+    {ok, #{<<"obj_id">>:=SM2}} = cmd(Pid2, <<"objects/media.session/start">>, #{}),
+    {SM1, Pid1, SM2, Pid2}.
+
+%% f(I), I = nkchat_sample:media_invite(SM1, P1).
+media_invite(SM1, P1) ->
+    Data = #{id=>SM1, user_id=><<"/ct/users/u2">>, sdp=><<"sdp">>, ttl=>30},
+    {ok, #{<<"invite_id">>:=InvId}} = cmd(P1, <<"objects/media.session/invite">>, Data),
+    InvId.
+
+%% nkchat_sample:media_invite_cancel(SM1, P1, I).
+media_invite_cancel(SM1, P1, InvId) ->
+    cmd(P1, <<"objects/media.session/cancel_invite">>, #{id=>SM1, invite_id=>InvId}).
+
+%% nkchat_sample:media_invite_reject(SM2, P2, I).
+media_invite_reject(SM2, P2, InvId) ->
+    cmd(P2, <<"objects/media.session/reject_invite">>, #{id=>SM2, invite_id=>InvId}).
+
+
+%% nkchat_sample:media_invite_accept(SM2, P2, I).
+media_invite_accept(SM2, P2, InvId) ->
+    cmd(P2, <<"objects/media.session/accept_invite">>, #{id=>SM2, invite_id=>InvId, sdp=>sdp2}).
 
 
 %% ===================================================================

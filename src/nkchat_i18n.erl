@@ -31,6 +31,9 @@ i18n() -> #{
 
         "domain_tree_sessions__chat.session" => "Chat",
 
+        "domain_tree_sessions__media.session" => "Media",
+        "domain_tree_sessions__media.call" => "Calls",
+
         "domain_column_conversation" => "CONVERSATION",
         "domain_column_text" => "MESSAGE",
         "domain_column_file_id" => "FILE"
@@ -40,7 +43,10 @@ i18n() -> #{
         "domain_tree_resources__message" => "Mensajes de chat",
 
         "domain_tree_sessions__chat.session" => "Chat",
-        
+
+        "domain_tree_sessions__media.session" => "Media",
+        "domain_tree_sessions__media.call" => "Llamadas",
+
         "domain_column_conversation" => <<"CONVERSACIÓN"/utf8>>,
         "domain_column_text" => "MENSAJE",
         "domain_column_file_id" => "FICHERO"

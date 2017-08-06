@@ -33,38 +33,15 @@
 
 
 %% @private
-event({conversation_added, ConvId}, State) ->
-    {event, {conversation_added, #{conversation_id=>ConvId}}, State};
+%%event({invite, TokenId, CallerId, CallData}, State) ->
+%%    Body = #{invite_id=>TokenId, caller_id=>CallerId, call_data=>CallData},
+%%    {event, {invite, Body}, State};
+%%
+%%event({invite_cancelled, TokenId, Reason}, State) ->
+%%    {event, {invite_cancelled, #{invite_id=>TokenId, reason=>Reason}}, State};
 
-event({conversation_removed, ConvId}, State) ->
-    {event, {conversation_removed, #{conversation_id=>ConvId}}, State};
-
-event({member_added, ConvId, MemberId}, State) ->
-    {event, {member_added, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
-
-event({member_removed, ConvId, MemberId}, State) ->
-    {event, {member_removed, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
-
-event({message_created, ConvId, Msg}, State) ->
-    {event, {message_created, #{conversation_id=>ConvId, message=>Msg}}, State};
-
-event({message_updated, ConvId, Msg}, State) ->
-    {event, {message_updated, #{conversation_id=>ConvId, message=>Msg}}, State};
-
-event({message_deleted, ConvId, MsgId}, State) ->
-    {event, {message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}}, State};
-
-event({unread_counter_updated, ConvId, Counter}, State) ->
-    {event, {unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}}, State};
-
-event({invited_to_conversation, TokenId, UserId, ConvId}, State) ->
-    Data = #{token_id=>TokenId, user_id=>UserId, conversation_id=>ConvId},
-    {event, {invited_to_conversation, Data}, State};
-
-event({remove_notification, TokenId}, State) ->
-    {event, {remove_notification, #{token_id=>TokenId}}, State};
-
-event(_Event, State) ->
+event(_Event, #?STATE{parent_id=ParentId}=State) ->
+    lager:error("NKLOG MS Event (~s) ~p", [ParentId, _Event]),
     {ok, State}.
 
 

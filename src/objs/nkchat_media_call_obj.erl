@@ -25,8 +25,9 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/5, hangup_call/3, hangup_call_async/3]).
--export([add_member/6, remove_member/3, get_member_info/3, get_info/1, invite/3]).
+-export([add_member/6, remove_member/3, get_member_info/3, get_info/1]).
 -export([find_member_calls/3, find_calls_with_members/3]).
+%%-export([add_invite_op/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
@@ -40,7 +41,6 @@
 -include_lib("nkservice/include/nkservice.hrl").
 
 -define(CHECK_DOWN_TIME, 5*60).     % Secs
--define(DEFAULT_INVITE_TTL, 3*60).     % Secs
 
 %% ===================================================================
 %% Types
@@ -109,7 +109,7 @@ hangup_call_async(SrvId, Id, Reason) ->
 
 
 -spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id(), [role()], nkdomain:obj_id(), call_opts()) ->
-    {ok, nkdomain:obj_id()} | {error, term()}.
+    ok | {error, term()}.
 
 add_member(SrvId, Id, Member, Role, SessId, CallOpts) when is_binary(Role); is_atom(Role) ->
     add_member(SrvId, Id, Member, [nklib_util:to_binary(Role)], SessId, CallOpts);
@@ -151,13 +151,6 @@ get_member_info(SrvId, CallId, MemberId) ->
 %% @private
 get_info(Pid) ->
     nkdomain_obj:sync_op(any, Pid, {?MODULE, get_info}).
-
-
-%% @private
-invite(SrvId, CallId, CalleeId) ->
-    nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, invite, CalleeId}).
-
-
 
 %% @doc
 find_member_calls(SrvId, Domain, MemberId) ->
@@ -214,6 +207,16 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
         _ ->
             {error, domain_unknown}
     end.
+
+
+%%%% @doc
+%%add_invite_op(SrvId, CallId, Callee, Base) ->
+%%    case nkdomain_lib:find(SrvId, Callee) of
+%%        #obj_id_ext{obj_id=CalleeId} ->
+%%            nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, add_invite_op, CalleeId, Base});
+%%        {error, Error} ->
+%%            {error, Error}
+%%    end.
 
 
 %%%% @doc
@@ -305,7 +308,7 @@ object_parse(_SrvId, _Mode, _Obj) ->
                      '__mandatory' => [member_id, added_time, roles]
                  }
             },
-        '__defaults' => #{type => <<"one2one">>, members => []}
+        '__defaults' => #{type => one2one, members => []}
     }.
 
 
@@ -331,7 +334,8 @@ object_api_cmd(Cmd, Req) ->
     nkchat_conversation_obj_api:cmd(Cmd, Req).
 
 
-% @private When the object is loaded, we make our cache
+%% @private
+%% Client must start a session or it will be destroyed after timeout
 object_init(#?STATE{obj=Obj}=State) ->
     #{?MEDIA_CALL := #{members:=MemberList, type:=Type}} = Obj,
     Members = lists:map(
@@ -393,7 +397,7 @@ object_sync_op({?MODULE, get_info}, _From, State) ->
 object_sync_op({?MODULE, add_member, MemberId, Roles, SessId, Pid, CallOpts}, _From, State) ->
     case do_add_member(MemberId, Roles, SessId, Pid, CallOpts, State) of
         {ok, State2} ->
-            {reply, {ok, self()}, State2};
+            {reply, ok, State2};
         {error, Error} ->
             {reply, {error, Error}, State}
     end;
@@ -406,13 +410,13 @@ object_sync_op({?MODULE, remove_member, MemberId}, _From, State) ->
             {reply, {error, Error}, State}
     end;
 
-object_sync_op({?MODULE, invite, CalleeId}, _From, State) ->
+object_sync_op({?MODULE, add_invite_op, CalleeId, Base}, _From, State) ->
     #?STATE{session=Session} = State,
     case Session of
         #session{type=one2one} ->
-            case do_one2one_invite(CalleeId, State) of
-                {ok, TokenId} ->
-                    {reply, {ok, TokenId}, State};
+            case do_one2one_invite(CalleeId, Base, State) of
+                {ok, Op} ->
+                    {reply, {ok, CalleeId, Op}, State};
                 {error, Error} ->
                     {reply, {error, Error}, State}
             end;
@@ -482,12 +486,12 @@ object_handle_info(_Info, _State) ->
 %% Internal
 %% ===================================================================
 
-do_one2one_invite(CalleeId, State) ->
-    #?STATE{srv_id=SrvId, domain_id=DomainId, id=#obj_id_ext{obj_id=CallId}} = State,
+do_one2one_invite(_CalleeId, Base, State) ->
+    #?STATE{id=#obj_id_ext{obj_id=CallId}} = State,
     Members = get_members(State),
     case maps:to_list(Members) of
-        [{CallerId, #member{call_opts=#{sdp:=SDP}=CallOpts}}] ->
-            Op = #{
+        [{CallerId, #member{call_opts=#{sdp:=SDP}}}] ->
+            Op = Base#{
                 ?MEDIA_CALL => #{
                     <<"invite_op">> => #{
                         <<"call_id">> => CallId,
@@ -496,20 +500,7 @@ do_one2one_invite(CalleeId, State) ->
                     }
                 }
             },
-            case nkdomain_user_obj:add_notification_op(SrvId, CalleeId, ?MEDIA_SESSION, #{}, Op) of
-                {ok, _MemberId, Data2} ->
-                    Opts = #{ttl => maps:get(ttl, CallOpts, ?DEFAULT_INVITE_TTL)},
-                    case
-                        nkdomain_token_obj:create(SrvId, DomainId, CalleeId, CalleeId, <<"media.call">>, Opts, Data2)
-                    of
-                        {ok, TokenId, _Secs, _Unknown} ->
-                            {ok, TokenId};
-                        {error, Error} ->
-                            {error, Error}
-                    end;
-                {error, Error} ->
-                    {error, Error}
-            end;
+            {ok, Op};
         _ ->
             {error, operation_invalid}
     end.
@@ -604,7 +595,7 @@ do_event_all_sessions(Event, #?STATE{id=#obj_id_ext{obj_id=CallId}}=State) ->
 do_event_all_sessions(_CallId, [], _Event, State) ->
     State;
 
-do_event_all_sessions(CallId, [#member{session_pid=Pid}|Rest], Event, State) ->
+do_event_all_sessions(CallId, [{_MemberId, #member{session_pid=Pid}}|Rest], Event, State) ->
     nkchat_media_session_obj:call_event(Pid, CallId, Event),
     do_event_all_sessions(CallId, Rest, Event, State).
 

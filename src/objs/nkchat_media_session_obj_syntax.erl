@@ -51,13 +51,21 @@ api(<<"get_call_info">>, Syntax) ->
         '__mandatory' => [call_id]
     };
 
-api(<<"make_call">>, Syntax) ->
+api(<<"invite">>, Syntax) ->
     Syntax#{
         id => binary,
         user_id => binary,
         sdp => binary,
+        ttl => {integer, 1, 5*60},          % Secs
         trickle_ice => boolean,
         '__mandatory' => [user_id, sdp]
+    };
+
+api(<<"cancel_invite">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        invite_id =>  binary,
+        '__mandatory' => [invite_id]
     };
 
 api(<<"hangup_call">>, Syntax) ->
@@ -67,20 +75,20 @@ api(<<"hangup_call">>, Syntax) ->
         '__mandatory' => [call_id]
     };
 
-api(<<"accept_call">>, Syntax) ->
+api(<<"accept_invite">>, Syntax) ->
     Syntax#{
         id => binary,
-        call_id =>  binary,
+        invite_id =>  binary,
         sdp => binary,
         trickle_ice => boolean,
-        '__mandatory' => [call_id, sdp]
+        '__mandatory' => [invite_id, sdp]
     };
 
-api(<<"reject_call">>, Syntax) ->
+api(<<"reject_invite">>, Syntax) ->
     Syntax#{
         id => binary,
-        call_id =>  binary,
-        '__mandatory' => [call_id]
+        invite_id =>  binary,
+        '__mandatory' => [invite_id]
     };
 
 api(Cmd, Syntax) ->

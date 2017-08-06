@@ -167,7 +167,7 @@ send_invitation(SrvId, SessId, MemberId, ConvId, TTL) ->
     ok | {error, term()}.
 
 accept_invitation(SrvId, SessId, TokenId) ->
-    case nkdomain_token_obj:consume_token(SrvId, TokenId) of
+    case nkdomain_token_obj:consume_token(SrvId, TokenId, accepted) of
         {ok, #{data:=Data}} ->
             nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, accept_invitation, Data});
         {error, Error} ->
@@ -180,7 +180,7 @@ accept_invitation(SrvId, SessId, TokenId) ->
     ok | {error, term()}.
 
 reject_invitation(SrvId, _SessId, TokenId) ->
-    case nkdomain_token_obj:consume_token(SrvId, TokenId) of
+    case nkdomain_token_obj:consume_token(SrvId, TokenId, rejected) of
         {ok, _Data} ->
             lager:error("NKLOG Token consumed"),
             ok;
@@ -359,7 +359,7 @@ object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
                     },
                     Opts = #{ttl => TTL},
                     case nkdomain_token_obj:create(SrvId, DomainId, MemberId, UserId, <<"chat.invite">>, Opts, Op3) of
-                        {ok, TokenId, _Secs, _Unknown} ->
+                        {ok, TokenId, _Pid, _Secs, _Unknown} ->
                             {ok, TokenId};
                         {error, Error} ->
                             {error, Error}
@@ -409,7 +409,7 @@ object_async_op({?MODULE, notify, TokenId, Msg, Op}, State) ->
             end,
             {noreply, do_event(Event, State)};
         _ ->
-            ?LLOG(warning, "unxpected notify: ~p", [Msg], State),
+            ?LLOG(warning, "unxepected notify: ~p", [Msg], State),
             {noreply, State}
     end;
 

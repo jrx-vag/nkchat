@@ -549,7 +549,7 @@ object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) -
             spawn_link(
                 fun() ->
                     Reply = case nkdomain_token_obj:create(SrvId, DomainId, ConvId, UserId, ?CHAT_CONVERSATION, Opts, Data) of
-                        {ok, TokenId, _Secs, _Unknown} ->
+                        {ok, TokenId, _Pid, _Secs, _Unknown} ->
                             {ok, ConvId, TokenId, TTL2};
                         {error, Error} ->
                             {error, Error}
