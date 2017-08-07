@@ -46,7 +46,8 @@ subview(Opts, Session) ->
 table(Opts, Session) ->
     Id = case Opts of
         #{table_id:=TableId} ->
-            <<?ID/binary, "__", TableId/binary>>;
+%            <<?ID/binary, "__", TableId/binary>>;
+            TableId;
         _ ->
             ?ID
     end,
@@ -114,13 +115,21 @@ table(Opts, Session) ->
 %            }            
         ]
     },
+    Spec2 = case Opts of
+        #{header:=Header} ->
+            Spec#{header => Header};
+        _ ->
+            Spec
+    end,
     Table = #{
-        id => ?ID,
+%        id => ?ID,
+        id => Id,
         class => webix_ui,
-        value => nkadmin_webix_datatable:datatable(Spec, Session)
+        value => nkadmin_webix_datatable:datatable(Spec2, Session)
     },
     KeyData = #{data_fun => fun ?MODULE:table_data/2},
-    Session2 = nkadmin_util:set_key_data(?ID, KeyData, Session),
+%    Session2 = nkadmin_util:set_key_data(?ID, KeyData, Session),
+    Session2 = nkadmin_util:set_key_data(Id, KeyData, Session),
     {Table, Session2}.
 
 
