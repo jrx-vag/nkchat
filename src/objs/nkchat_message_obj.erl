@@ -81,6 +81,7 @@ object_admin_info() ->
 %% @private
 object_es_mapping() ->
     #{
+        vsn => #{type => keyword},
         text => #{type => text},
         file_id => #{type => keyword}
     }.
@@ -90,9 +91,11 @@ object_es_mapping() ->
 %% @private
 object_parse(_SrvId, _Mode, _Obj) ->
     #{
+        vsn => binary,
         text => binary,
         file_id => fun ?MODULE:syntax_check_file/3,
-        '__mandatory' => [text]
+        '__mandatory' => [text],
+        '__defaults' => #{vsn => <<"1">>}
     }.
 
 
