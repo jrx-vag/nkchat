@@ -382,6 +382,7 @@ object_parse(_SrvId, _Mode, _Obj) ->
                  }
             },
         push_app_id => binary,
+        obj_name_member_ids => {list, binary},
         '__defaults' => #{type => <<"private">>, members => []}
     }.
 
@@ -389,8 +390,23 @@ object_parse(_SrvId, _Mode, _Obj) ->
 %% @doc
 object_create(SrvId, Obj) ->
     #{?CHAT_CONVERSATION := Conv} = Obj,
-    Obj2 = Obj#{?CHAT_CONVERSATION => Conv#{members => []}},
-    nkdomain_obj_make:create(SrvId, Obj2).
+    {MemberIds, Conv2} = case maps:take(obj_name_member_ids, Conv) of
+        error ->
+            {[], Conv};
+        {[], C2} ->
+            {[], C2};
+        {M2, C2} ->
+            {M2, C2}
+    end,
+    Obj2 = Obj#{?CHAT_CONVERSATION => Conv2#{members => []}},
+    Obj3 = case MemberIds of
+        [] ->
+            Obj2;
+        _ ->
+            Hash = get_members_hash(MemberIds),
+            Obj2#{obj_name => <<"mhash-", Hash/binary>>}
+    end,
+    nkdomain_obj_make:create(SrvId, Obj3).
 
 
 %% @private
