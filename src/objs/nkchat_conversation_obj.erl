@@ -318,10 +318,12 @@ perform_op(_SrvId, _Data) ->
 }).
 
 -record(session, {
+    name :: binary(),
     type :: binary(),
     members :: [#member{}],
     total_messages :: integer(),
-    messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}]
+    messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
+    push_app_id :: binary()
 }).
 
 
@@ -356,7 +358,8 @@ object_es_mapping() ->
                 last_active_time => #{type => date},
                 last_seen_message_time => #{type => date}
             }
-        }
+        },
+        push_app_id => #{type => keyword}
     }.
 
 
@@ -378,6 +381,7 @@ object_parse(_SrvId, _Mode, _Obj) ->
                      '__mandatory' => [member_id, added_time, last_active_time, last_seen_message_time]
                  }
             },
+        push_app_id => binary,
         '__defaults' => #{type => <<"private">>, members => []}
     }.
 
@@ -407,7 +411,7 @@ object_api_cmd(Cmd, Req) ->
 % @private When the object is loaded, we make our cache
 object_init(#?STATE{id=Id, obj=Obj}=State) ->
     #obj_id_ext{obj_id=ConvId} = Id,
-    #{?CHAT_CONVERSATION := #{members:=MemberList, type:=Type}} = Obj,
+    #{obj_name:=ObjName, ?CHAT_CONVERSATION := #{members:=MemberList, type:=Type}=Conv} = Obj,
     Members = lists:map(
         fun(Data) ->
             #{
@@ -430,10 +434,12 @@ object_init(#?STATE{id=Id, obj=Obj}=State) ->
                 fun(#{<<"obj_id">>:=MsgId, <<"created_time">>:=Time}=Msg) -> {Time, MsgId, Msg} end,
                 Msgs),
             Session = #session{
+                name = maps:get(name, Obj, ObjName),
                 type = Type,
                 members = Members,
                 total_messages = Total,
-                messages = Msgs2
+                messages = Msgs2,
+                push_app_id = maps:get(push_app_id, Conv, <<>>)
             },
             {ok, State#?STATE{session=Session}};
         {error, Error} ->
@@ -865,6 +871,8 @@ do_new_msg_event([], _Time, _Msg, Acc, State) ->
     set_members(Acc, State);
 
 do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
+
+
     #member{
         member_id = MemberId,
         unread_count = Count,
@@ -873,8 +881,22 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
     IsActive = lists:keymember(true, #chat_session.is_active, Sessions),
     Acc2 = case Sessions of
         [] ->
-            lager:notice("NKLOG SEND PUSH TO  ~p", [MemberId]),
-            [Member|Acc];
+            Count2 = Count + 1,
+            Member2 = Member#member{
+                unread_count = Count2
+            },
+            #{?CHAT_MESSAGE:=#{text:=Txt}} = Msg,
+            #?STATE{session=#session{name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
+            Push = #{
+                type => ?CHAT_CONVERSATION,
+                class => new_msg,
+                conversation_name => Name,
+                message_text => Txt,
+                conversation_id => ConvId,
+                unread_counter => Count2
+            },
+            send_push(MemberId, Push, State),
+            [Member2|Acc];
         _ when IsActive ->
             Member2 = Member#member{
                 last_seen_msg_time = Time,
@@ -979,3 +1001,12 @@ get_member_info(Member, State) ->
         last_message => LastMessage
     }.
 
+
+%% @private
+send_push(MemberId, Push, #?STATE{srv_id=SrvId, session=#session{push_app_id=AppId}}) ->
+    case AppId of
+        <<>> ->
+            ok;
+        _ ->
+            nkdomain_user_obj:send_push(SrvId, MemberId, AppId, Push)
+    end.
