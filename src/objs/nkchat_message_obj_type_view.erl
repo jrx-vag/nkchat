@@ -30,7 +30,7 @@
 -include_lib("nkdomain/include/nkdomain.hrl").
 
 -define(ID, <<"domain_detail_type_view__message">>).
--define(ID_SUBDOMAINS, <<"domain_detail_type_view__message___subdomains">>).
+-define(ID_SUBDOMAINS, <<"domain_detail_type_view__message__subdomains">>).
 
 
 %% @doc
