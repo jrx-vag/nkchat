@@ -185,7 +185,7 @@ find_member_conversations(SrvId, Domain, MemberId) ->
 find_conversations_with_members(SrvId, Domain, MemberIds) ->
     case nkdomain_lib:find(SrvId, Domain) of
         #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
-            Hash = get_members_hash(MemberIds),
+            Hash = make_members_hash(MemberIds),
             Filters = #{
                 type => ?CHAT_CONVERSATION,
                 domain_id => DomainId,
@@ -323,6 +323,7 @@ perform_op(_SrvId, _Data) ->
     members :: [#member{}],
     total_messages :: integer(),
     messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
+    obj_name_follows_members :: boolean(),
     push_app_id :: binary()
 }).
 
@@ -348,7 +349,6 @@ object_admin_info() ->
 object_es_mapping() ->
     #{
         type => #{type => keyword},
-        members_hash => #{type => keyword},
         members => #{
             type => object,
             dynamic => false,
@@ -359,6 +359,8 @@ object_es_mapping() ->
                 last_seen_message_time => #{type => date}
             }
         },
+        members_hash => #{type => keyword},
+        obj_name_follows_members => #{type => boolean},
         push_app_id => #{type => keyword}
     }.
 
@@ -370,7 +372,6 @@ object_parse(_SrvId, update, _Obj) ->
 object_parse(_SrvId, _Mode, _Obj) ->
     #{
         type => binary,
-        members_hash => binary,
         members =>
             {list,
                  #{
@@ -381,32 +382,35 @@ object_parse(_SrvId, _Mode, _Obj) ->
                      '__mandatory' => [member_id, added_time, last_active_time, last_seen_message_time]
                  }
             },
+        members_hash => binary,
+        obj_name_follows_members => boolean,
         push_app_id => binary,
-        obj_name_member_ids => {list, binary},
+        initial_member_ids => {list, binary},
         '__defaults' => #{type => <<"private">>, members => []}
     }.
 
 
 %% @doc
-object_create(SrvId, Obj) ->
-    #{?CHAT_CONVERSATION := Conv} = Obj,
-    {MemberIds, Conv2} = case maps:take(obj_name_member_ids, Conv) of
-        error ->
-            {[], Conv};
-        {[], C2} ->
-            {[], C2};
-        {M2, C2} ->
-            {M2, C2}
-    end,
-    Obj2 = Obj#{?CHAT_CONVERSATION => Conv2#{members => []}},
-    Obj3 = case MemberIds of
-        [] ->
-            Obj2;
-        _ ->
-            Hash = get_members_hash(MemberIds),
-            Obj2#{obj_name => <<"mhash-", Hash/binary>>}
-    end,
-    nkdomain_obj_make:create(SrvId, Obj3).
+object_create(SrvId, #{?CHAT_CONVERSATION:=Conv} = Obj) ->
+    Members = maps:get(initial_member_ids, Conv, []),
+    case check_members(Members, SrvId, []) of
+        {ok, MemberIds} ->
+            Conv2 = Conv#{
+                members => [],
+                initial_member_ids => MemberIds
+            },
+            Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
+            Obj3 = case Conv2 of
+                #{obj_name_follows_members:=true} ->
+                    ObjName = make_obj_name(make_members_hash(MemberIds)),
+                    ?ADD_TO_OBJ(obj_name, ObjName, Obj2);
+                _ ->
+                    Obj2
+            end,
+            nkdomain_obj_make:create(SrvId, Obj3);
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% @private
@@ -455,9 +459,20 @@ object_init(#?STATE{id=Id, obj=Obj}=State) ->
                 members = Members,
                 total_messages = Total,
                 messages = Msgs2,
-                push_app_id = maps:get(push_app_id, Conv, <<>>)
+                push_app_id = maps:get(push_app_id, Conv, <<>>),
+                obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
-            {ok, State#?STATE{session=Session}};
+            State2 = State#?STATE{session=Session},
+            case maps:take(initial_member_ids, Conv) of
+                error ->
+                    {ok, State2};
+                {MemberIds, Conv2} when Members == [] ->
+                    Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
+                    State3 = State2#?STATE{obj=Obj2, is_dirty=true},
+                    % Store generated users
+                    nkdomain_obj:async_op(any, self(), save),
+                    load_initial_members(MemberIds, State3)
+            end;
         {error, Error} ->
             {error, Error}
     end.
@@ -514,9 +529,14 @@ object_sync_op({?MODULE, remove_member, MemberId}, _From, State) ->
     case find_member(MemberId, State) of
         {true, _} ->
             State2 = do_event({member_removed, MemberId}, State),              % Using original state
-            {ok, State3} = do_remove_member(MemberId, State2),
-            State4 = do_event({removed_from_conversation, MemberId}, State3),
-            {reply_and_save, ok, State4};
+            case do_remove_member(MemberId, State2) of
+                {ok, State3} ->
+                    State4 = do_event({removed_from_conversation, MemberId}, State3),
+                    {reply_and_save, ok, State4};
+                {error, Error} ->
+                    % Can fail if obj_name_follows_members
+                    {reply, {error, Error}, State2}
+            end;
         false ->
             {reply, {error, member_not_found}, State}
     end;
@@ -724,6 +744,34 @@ object_event(_Event, State) ->
 %% Internal
 %% ===================================================================
 
+%% @private
+load_initial_members(MemberIds, #?STATE{session=#session{obj_name_follows_members=true}=Session}=State) ->
+    State2 = State#?STATE{session=Session#session{obj_name_follows_members=false}},
+    % We don't want to update obj_name, it is already calculated for the initial user list
+    case do_add_members(MemberIds, State2) of
+        {ok, #?STATE{session=Session3}=State3} ->
+            % From now on we keep updating
+            {ok, State3#?STATE{session=Session3#session{obj_name_follows_members=true}}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
+load_initial_members(MemberIds, State) ->
+    do_add_members(MemberIds, State).
+
+
+%% @private
+do_add_members([], State) ->
+    {ok, State};
+
+do_add_members([MemberId|Rest], State) ->
+    case do_add_member(MemberId, State) of
+        {ok, State2} ->
+            do_add_members(Rest, State2);
+        {error, Error} ->
+            {error, Error}
+    end.
+
 
 %% @private
 do_add_member(MemberId, State) ->
@@ -734,7 +782,7 @@ do_add_member(MemberId, State) ->
                 added_time = nkdomain_util:timestamp()
             },
             State2 = set_member(MemberId, Member, State),
-            {ok, set_members_hash(State2)};
+            set_obj_name_members(State2);
         {true, _} ->
             {error, member_already_present}
     end.
@@ -744,9 +792,14 @@ do_add_member(MemberId, State) ->
 do_remove_member(MemberId, State) ->
     case find_member(MemberId, State) of
         {true, #member{sessions=Sessions}} ->
-            State2 = do_remove_sessions(MemberId, Sessions, State),
-            State3 = rm_member(MemberId, State2),
-            {ok, set_members_hash(State3)};
+            State2 = rm_member(MemberId, State),
+            case set_obj_name_members(State2) of
+                {ok, State3} ->
+                    State4 = do_remove_sessions(MemberId, Sessions, State3),
+                    {ok, State4};
+                {error, Error} ->
+                    {error, Error}               % Old state
+            end;
         false ->
             {error, member_not_found}
     end.
@@ -887,8 +940,6 @@ do_new_msg_event([], _Time, _Msg, Acc, State) ->
     set_members(Acc, State);
 
 do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
-
-
     #member{
         member_id = MemberId,
         unread_count = Count,
@@ -981,19 +1032,31 @@ find_unread(Time, #?STATE{srv_id=SrvId, id=Id}=State) ->
 
 
 %% @private
-set_members_hash(#?STATE{obj=Obj, session=#session{members=Members}}=State) ->
+set_obj_name_members(#?STATE{obj=#{?CHAT_CONVERSATION:=Conv}=Obj, session=Session}=State) ->
+    #?STATE{session=#session{members=Members}} = State,
     MemberIds = [Id || #member{member_id=Id} <- Members],
-    Hash = get_members_hash(MemberIds),
-    #{?CHAT_CONVERSATION:=Conv} = Obj,
-    Conv2 = Conv#{members_hash=>Hash},
+    Hash = make_members_hash(MemberIds),
+    Conv2 = Conv#{members_hash => Hash},
     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
-    State#?STATE{obj=Obj2, is_dirty=true}.
+    State2 = State#?STATE{obj=Obj2, is_dirty=true},
+    case Session of
+        #session{obj_name_follows_members=true} ->
+            ObjName = make_obj_name(Hash),
+            nkdomain_obj:do_update_name(ObjName, State2);
+        _ ->
+            {ok, State2}
+    end.
 
 
 %% @private
-get_members_hash(MemberIds) ->
+make_members_hash(MemberIds) ->
     MemberIds2 = lists:usort(MemberIds),
-    base64:encode(crypto:hash(sha, erlang:term_to_binary(MemberIds2))).
+    nkdomain_util:name(base64:encode(crypto:hash(sha, erlang:term_to_binary(MemberIds2)))).
+
+
+%% @private
+make_obj_name(Hash) ->
+    <<"mh-", Hash/binary>>.
 
 
 %% @private
@@ -1025,4 +1088,17 @@ send_push(MemberId, Push, #?STATE{srv_id=SrvId, session=#session{push_app_id=App
             ok;
         _ ->
             nkdomain_user_obj:send_push(SrvId, MemberId, AppId, Push)
+    end.
+
+
+%% @private
+check_members([], _SrvId, Acc) ->
+    {ok, Acc};
+
+check_members([Member|Rest], SrvId, Acc) ->
+    case nkdomain_lib:find(SrvId, Member) of
+        #obj_id_ext{obj_id=MemberId, type=?DOMAIN_USER} ->
+            check_members(Rest, SrvId, [MemberId|Acc]);
+        _ ->
+            {error, member_not_found}
     end.
