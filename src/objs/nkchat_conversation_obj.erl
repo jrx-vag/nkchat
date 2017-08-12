@@ -332,7 +332,7 @@ perform_op(_SrvId, _Data) ->
 object_info() ->
     #{
         type => ?CHAT_CONVERSATION,
-        min_first_time => 5*60*1000,
+        default_ttl => 5*60*1000,
         dont_create_childs_on_disabled => true,
         dont_update_on_disabled => true
     }.

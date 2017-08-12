@@ -211,7 +211,6 @@ notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
 
 -record(session, {
     user_id :: nkdomain:obj_id(),
-    %convs :: #{nkdomain:obj_id() => {Data::map(), pid()}},
     conv_pids :: #{nkdomain:obj_id() => {Data::map(), pid()}},
     active_id :: undefined | nkdomain:obj_id()
 }).
