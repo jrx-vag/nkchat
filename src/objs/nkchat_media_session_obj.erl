@@ -133,7 +133,7 @@ get_calls(SrvId, Id) ->
 
 get_call_info(SrvId, Id, Call) ->
     case nkdomain_lib:find(SrvId, Call) of
-        #obj_id_ext{obj_id=CallId} ->
+        {ok, _Type, CallId, _Pid} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_call_info, CallId});
         {error, Error} ->
             {error, Error}

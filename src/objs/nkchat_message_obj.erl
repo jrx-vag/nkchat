@@ -19,6 +19,10 @@
 %% -------------------------------------------------------------------
 
 %% @doc Message Object
+%%
+%% Messages will always have the same domain_id as its conversation
+
+
 -module(nkchat_message_obj).
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
@@ -65,7 +69,8 @@ object_info() ->
     #{
         type => ?CHAT_MESSAGE,
         dont_update_on_disabled => true,
-        dont_delete_on_disabled => true
+        dont_delete_on_disabled => true,
+        default_ttl => 5*60*1000
     }.
 
 
@@ -101,8 +106,13 @@ object_parse(_SrvId, _Mode, _Obj) ->
 
 
 %% @doc
-object_create(SrvId, #{parent_id:=_ConvId}=Obj) ->
-    nkdomain_obj_make:create(SrvId, Obj);
+object_create(SrvId, #{parent_id:=ConvId}=Obj) ->
+    case nkdomain:get_domain_id(SrvId, ConvId) of
+        {ok, DomainId} ->
+            nkdomain_obj_make:create(SrvId, Obj#{domain_id=>DomainId});
+        _ ->
+            {error, {could_not_load_parent, ConvId}}
+    end;
 
 object_create(_SrvId, _Obj) ->
     {error, {missing_field, <<"parent_id">>}}.
@@ -136,7 +146,7 @@ object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}
 syntax_check_file(file_id, File, Ctx) ->
     #{domain_srv_id:=SrvId} = Ctx,
     case nkdomain_lib:find(SrvId, File) of
-        #obj_id_ext{type=?DOMAIN_FILE, obj_id=FileId} ->
+        {ok, ?DOMAIN_FILE, FileId, _Pid} ->
             {ok, FileId};
         _ ->
             {error, {file_not_found, File}}

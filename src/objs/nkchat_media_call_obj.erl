@@ -116,9 +116,9 @@ add_member(SrvId, Id, Member, Role, SessId, CallOpts) when is_binary(Role); is_a
 
 add_member(SrvId, Id, Member, Roles, SessId, CallOpts) when is_list(Roles) ->
     case nkdomain_lib:find(SrvId, Member) of
-        #obj_id_ext{type = ?DOMAIN_USER, obj_id=MemberId} ->
+        {ok, ?DOMAIN_USER, MemberId, _Pid} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, add_member, MemberId, Roles, SessId, self(), CallOpts});
-        #obj_id_ext{} ->
+        {ok, _, _, _} ->
             {error, member_invalid};
         {error, object_not_found} ->
             {error, member_not_found};
@@ -133,7 +133,7 @@ add_member(SrvId, Id, Member, Roles, SessId, CallOpts) when is_list(Roles) ->
 
 remove_member(SrvId, Id, Member) ->
     case nkdomain_lib:find(SrvId, Member) of
-        #obj_id_ext{obj_id=MemberId} ->
+        {ok, _Type, MemberId, _Pid} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, remove_member, MemberId});
         _ ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, remove_member, Member})
@@ -155,7 +155,7 @@ get_info(Pid) ->
 %% @doc
 find_member_calls(SrvId, Domain, MemberId) ->
     case nkdomain_lib:find(SrvId, Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
+        {ok, ?DOMAIN_DOMAIN, DomainId, _Pid} ->
             Filters = #{
                 type => ?MEDIA_CALL,
                 domain_id => DomainId,
@@ -183,7 +183,7 @@ find_member_calls(SrvId, Domain, MemberId) ->
 %% @doc
 find_calls_with_members(SrvId, Domain, MemberIds) ->
     case nkdomain_lib:find(SrvId, Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
+        {ok, ?DOMAIN_DOMAIN, DomainId, _Pid} ->
             Hash = get_members_hash(MemberIds),
             Filters = #{
                 type => ?MEDIA_CALL,
