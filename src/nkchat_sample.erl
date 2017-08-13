@@ -112,6 +112,9 @@ message_get(MsgId) ->
 message_update(MsgId, Msg) ->
     cmd(<<"objects/message/update">>, #{id=>MsgId, ?CHAT_MESSAGE=>#{text=>Msg}}).
 
+message_update_name(MsgId, Name) ->
+    cmd(<<"objects/message/update_obj_name">>, #{id=>MsgId, obj_name=>Name}).
+
 message_delete(MsgId) ->
     cmd(<<"objects/message/delete">>, #{id=>MsgId}).
 
