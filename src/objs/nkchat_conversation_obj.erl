@@ -685,6 +685,7 @@ object_link_down(_Link, State) ->
 
 %% @private Hook called before sending a event
 object_event({message_created, Msg}, #?STATE{session=Session}=State) ->
+    ?DEBUG("created message ~p", [Msg], State),
     #session{total_messages=Total, messages=Msgs} = Session,
     #{obj_id:=MsgId, created_time:=Time} = Msg,
     Msgs2 = [{Time, MsgId, Msg}|Msgs],
