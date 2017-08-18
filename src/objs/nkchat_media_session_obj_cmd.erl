@@ -147,6 +147,14 @@ cmd(<<"reject_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data, srv_id=SrvId}=
             {error, Error}
     end;
 
+cmd(<<"hangup_call">>, #nkreq{data=#{call_id:=CallId}=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
+        {ok, Id} ->
+            nkchat_media_session_obj:call_hangup(SrvId, Id, CallId);
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(Cmd, Req) ->
     nkdomain_obj_api:api(Cmd, ?CHAT_SESSION, Req).
 

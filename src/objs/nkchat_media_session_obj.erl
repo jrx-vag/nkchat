@@ -24,12 +24,12 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([start/4, get_calls/2, get_call_info/3]).
--export([invite/4, cancel_invite/3, accept_invite/4, reject_invite/3]).
+-export([invite/4, cancel_invite/3, accept_invite/4, reject_invite/3, call_hangup/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2]).
--export([object_admin_info/0, object_link_down/2]).
+-export([object_admin_info/0, object_link_down/2, object_handle_info/2]).
 -export([call_event/3, notify_fun/5]).
 
 -export_type([event/0]).
@@ -57,8 +57,13 @@
 
 -type event() ::
     {invite, InviteId::binary(), CallerId::binary(), call_opts()} |
-    {invite_removed, InviteId::binary(), #{reason=>nkservice:error()}} |
-    {invite_accepted, InviteId::binary(), CallId::binary(), call_opts()}.
+    {invite_removed, InviteId::binary(), Reason::nkservice:error()} |
+    {invite_accepted, InviteId::binary(), CallId::binary(), call_opts()} |
+    {call_created, InviteId::binary(), CallId::binary(), call_opts()} |
+    {call_hangup, CallId::binary(), Reason::nkservice:error()} |
+    {member_added,  CallId::binary(), Member::binary(), Roles::[binary()]} |
+    {member_removed,  CallId::binary(), Member::binary(), Roles::[binary()]} |
+    {member_down,  CallId::binary(), Member::binary(), Roles::[binary()]}.
 
 
 -type start_opts() :: #{
@@ -166,17 +171,20 @@ reject_invite(SrvId, SessId, InvId) ->
     end.
 
 
+%% @doc
+call_hangup(SrvId, SessId, CallId) ->
+    nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, call_hangup, CallId}).
 
-%% @private To be called from nkdomain_user_obj
+
+%% @private To be called from nkmedia_call_obj
 call_event(Pid, CallId, Event) ->
-    lager:notice("NKLOG media sess call event ~p", [Event]),
     nkdomain_obj:async_op(any, Pid, {?MODULE, call_event, CallId, Event}).
 
 
 %% @private To be called from nkdomain_user_obj
 notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
     % lager:error("NKLOG SESS FUN ~p ~p", [Op, Msg]),
-    nkdomain_obj:async_op(any, Pid, {?MODULE, notify, TokenId, Msg, Op}).
+    nkdomain_obj:async_op(any, Pid, {?MODULE, notify_fun, TokenId, Msg, Op}).
 
 
 
@@ -186,13 +194,16 @@ notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
 
 -record(invite, {
     id :: nkdomain:obj_id(),
+    callee_id :: nkdomain_obj:id(),
     token_pid :: pid(),
     call_opts :: call_opts()
 }).
 
 -record(call, {
     id :: nkdomain:obj_id(),
-    pid :: pid()
+    role :: caller | callee,
+    pid :: pid(),
+    monitor :: reference()
 }).
 
 -record(session, {
@@ -291,12 +302,14 @@ object_sync_op({?MODULE, invite, CalleeId, CallOpts}, _From, State) ->
             {reply, {error, Error}, State}
     end;
 
-object_sync_op({?MODULE, cancel_invite, InviteId, _Data}, _From, State) ->
+object_sync_op({?MODULE, cancel_invite, InviteId, _Data}, _From, #?STATE{srv_id=SrvId}=State) ->
     Invites = get_invites(State),
-    case lists:keymember(InviteId, #invite.id, Invites) of
-        true ->
+    case lists:keyfind(InviteId, #invite.id, Invites) of
+        #invite{callee_id=CalleeId} ->
+            % Avoid user detecting the going down of token
+            nkdomain_user_obj:remove_notification(SrvId, CalleeId, InviteId, caller_cancelled),
             State2 = rm_invite(InviteId, State),
-            State3 = do_event({invite_removed, InviteId, #{reason=>caller_cancelled}}, State2),
+            State3 = do_event({invite_removed, InviteId, caller_cancelled}, State2),
             {reply, ok, State3};
         false ->
             {reply, {error, invite_not_found}, State}
@@ -312,10 +325,17 @@ object_sync_op({?MODULE, accept_invite, InviteId, Data, CallOpts}, _From, State)
             }
         } ->
             #?STATE{srv_id=SrvId, parent_id=UserId} = State,
-            % Avoid user detecting the going down of token
+            % Avoid user detecting the going down of token and send the invite_removed event
             nkdomain_user_obj:remove_notification(SrvId, UserId, InviteId, call_accepted),
-            Reply = nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, remote_accept_invite, InviteId, CallOpts}),
-            {reply, Reply, State};
+            case nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, remote_accept_invite, InviteId, CallOpts}) of
+                {ok, CallId, CallPid} ->
+                    State2 = do_event({call_created, InviteId, CallId, CallOpts}, State),
+                    ok = nkchat_media_call_obj:add_member(SrvId, CallPid, UserId, callee, SessId, CallOpts),
+                    State3 = add_call(CallId, CallPid, callee, State2),
+                    {reply, {ok, CallId}, State3};
+                {error, Error} ->
+                    {reply, {error, Error}, State}
+            end;
         _ ->
             {reply, {error, operation_token_invalid}, State}
     end;
@@ -331,7 +351,9 @@ object_sync_op({?MODULE, reject_invite, InviteId, Data}, _From, State) ->
         } ->
             #?STATE{srv_id=SrvId, parent_id=UserId} = State,
             % Avoid user detecting the going down of token
-            nkdomain_user_obj:remove_notification(SrvId, UserId, InviteId, call_rejected),
+            % User will send a notification removal throw notify_fun and we will send
+            % the invite_removed event
+            nkdomain_user_obj:remove_notification(SrvId, UserId, InviteId, callee_rejected),
             Reply = nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, remote_reject_invite, InviteId}),
             {reply, Reply, State};
         _ ->
@@ -342,11 +364,12 @@ object_sync_op({?MODULE, remote_accept_invite, InviteId, CallOpts}, _From, State
     Invites = get_invites(State),
     case lists:keymember(InviteId, #invite.id, Invites) of
         true ->
-            case do_accept_invite(InviteId, CallOpts, State) of
-                {ok, CallId, State2} ->
-                    {reply, {ok, CallId}, State2};
-                {error, Error, State2} ->
-                    {reply, {error, Error}, State2}
+            State2 = do_event({invite_removed, InviteId, caller_accepted}, State),
+            case do_accept_invite(InviteId, CallOpts, State2) of
+                {ok, CallId, CallPid, State3} ->
+                    {reply, {ok, CallId, CallPid}, State3};
+                {error, Error, State3} ->
+                    {reply, {error, Error}, State3}
             end;
         false ->
             {reply, {error, invite_not_found}, State}
@@ -357,10 +380,24 @@ object_sync_op({?MODULE, remote_reject_invite, InviteId}, _From, State) ->
     case lists:keymember(InviteId, #invite.id, Invites) of
         true ->
             State2 = rm_invite(InviteId, State),
-            State3 = do_event({invite_removed, InviteId, #{reason=>callee_rejected}}, State2),
+            State3 = do_event({invite_removed, InviteId, callee_rejected}, State2),
             {reply, ok, State3};
         false ->
             {error, invite_not_found}
+    end;
+
+object_sync_op({?MODULE, call_hangup, CallId}, _From, #?STATE{srv_id=SrvId}=State) ->
+    Calls = get_calls(State),
+    case lists:keyfind(CallId, #call.id, Calls) of
+        #call{pid=Pid, role=Role} ->
+            Reason = case Role of
+                caller -> caller_hangup;
+                callee -> calee_hangup
+            end,
+            Reply = nkchat_media_call_obj:hangup_call(SrvId, Pid, Reason),
+            {reply, Reply, State};
+        false ->
+            {error, call_not_found}
     end;
 
 object_sync_op(_Op, _From, _State) ->
@@ -372,7 +409,7 @@ object_async_op({?MODULE, call_event, CallId, Event}, State) ->
     State2 = do_call_event(Event, CallId, State),
     {noreply, State2};
 
-object_async_op({?MODULE, notify, InviteId, Msg, Op}, State) ->
+object_async_op({?MODULE, notify_fun, InviteId, Msg, Op}, State) ->
     case Msg of
         #{
             ?MEDIA_SESSION := #{
@@ -388,7 +425,7 @@ object_async_op({?MODULE, notify, InviteId, Msg, Op}, State) ->
                 created ->
                     do_event({invite, InviteId, CallerId, CallOpts}, State);
                 {removed, Reason} ->
-                    do_event({invite_removed, InviteId, #{reason=>Reason}}, State)
+                    do_event({invite_removed, InviteId, Reason}, State)
             end,
             {noreply, State2};
         _ ->
@@ -404,11 +441,28 @@ object_async_op(_Op, _State) ->
 object_link_down({usage, {?MODULE, invite, InviteId, _Pid}}, State) ->
     ?LLOG(notice, "invite token down ~s", [InviteId], State),
     State2 = rm_invite(InviteId, State),
-    State3 = do_event({invite_removed, InviteId, #{reason=>timeout}}, State2),
+    State3 = do_event({invite_removed, InviteId, process_down}, State2),
     {ok, State3};
 
 object_link_down(_Link, State) ->
     {ok, State}.
+
+
+%% @private
+object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, State) ->
+    Calls = get_calls(State),
+    case lists:keyfind(Pid, #call.pid, Calls) of
+        #call{id=CallId} ->
+            ?LLOG(notice, "call down ~s", [CallId], State),
+            State2 = rm_call(CallId, process_down, State),
+            {noreply, State2};
+        false ->
+            continue
+    end;
+
+object_handle_info(_Msg, _State) ->
+    continue.
+
 
 
 %% ===================================================================
@@ -441,7 +495,7 @@ do_invite(CalleeId, CallOpts, State) ->
                 nkdomain_token_obj:create(SrvId, DomainId, CalleeId, CalleeId, <<"media.call">>, Opts, Op2)
             of
                 {ok, InviteId, Pid, _Secs, _Unknown} ->
-                    State2 = add_invite(InviteId, Pid, CallOpts, State),
+                    State2 = add_invite(InviteId, Pid, CalleeId, CallOpts, State),
                     {ok, InviteId, State2};
                 {error, Error} ->
                     {error, Error}
@@ -452,12 +506,13 @@ do_invite(CalleeId, CallOpts, State) ->
 
 
 do_accept_invite(InviteId, CallOpts, State) ->
-    #?STATE{srv_id=SrvId, domain_id=DomainId, parent_id=CallerId} = State,
+    #?STATE{srv_id=SrvId, domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
     State2 = rm_invite(InviteId, State),
     case nkchat_media_call_obj:create(SrvId, DomainId, <<>>, CallerId, one2one) of
         {ok, CallId, CallPid} ->
-            State3 = add_call(CallId, CallPid, State2),
-            State4 = do_event({invite_accepted, InviteId, CallId, CallOpts}, State3),
+            State3 = do_event({call_created, InviteId, CallId, CallOpts}, State2),
+            ok = nkchat_media_call_obj:add_member(SrvId, CallPid, CallerId, caller, SessId, CallOpts),
+            State4 = add_call(CallId, CallPid, caller, State3),
             {ok, CallId, CallPid, State4};
         {error, Error} ->
             ?LLOG(warning, "could not created call: ~p", [Error], State),
@@ -468,13 +523,20 @@ do_accept_invite(InviteId, CallOpts, State) ->
 
 
 %% @private
+do_call_event({call_hangup, Reason}, CallId, State) ->
+    rm_call(CallId, Reason, State);
 
-%%
-%%do_call_event({counter_updated, Counter}, CallId, State) ->
-%%    do_event({unread_counter_updated, CallId, Counter}, State);
+do_call_event({member_added, MemberId, Roles, _SessId, _Pid}, CallId, State) ->
+    do_event({member_added, CallId, MemberId, Roles}, State);
+
+do_call_event({member_removed, MemberId, Roles}, CallId, State) ->
+    do_event({member_removed, CallId, MemberId, Roles}, State);
+
+do_call_event({member_down, MemberId, Roles}, CallId, State) ->
+    do_event({member_down, CallId, MemberId, Roles}, State);
 
 do_call_event(_Event, _CallId, State) ->
-    lager:error("SESS EV2"),
+    lager:error("SESS EV2: ~p", [_Event]),
     State.
 
 
@@ -490,9 +552,9 @@ get_invites(#?STATE{session=Session}) ->
 
 
 %% @private
-add_invite(InviteId, Pid, CallOpts, #?STATE{session=Session}=State) ->
+add_invite(InviteId, Pid, CalleeId, CallOpts, #?STATE{session=Session}=State) ->
     Invites = get_invites(State),
-    Invite = #invite{id=InviteId, token_pid=Pid, call_opts=CallOpts},
+    Invite = #invite{id=InviteId, callee_id=CalleeId, token_pid=Pid, call_opts=CallOpts},
     Invites2 = lists:keystore(InviteId, #invite.id, Invites, Invite),
     Session2 = Session#session{invites2=Invites2},
     State2 = State#?STATE{session=Session2},
@@ -519,10 +581,25 @@ get_calls(#?STATE{session=Session}) ->
 
 
 %% @private
-add_call(CallId, Pid, #?STATE{session=Session}=State) ->
+add_call(CallId, Pid, Role, #?STATE{session=Session}=State) ->
     Calls = get_calls(State),
-    Call = #call{id=CallId, pid=Pid},
+    Mon = monitor(process, Pid),
+    Call = #call{id=CallId, role=Role, pid=Pid, monitor=Mon},
     Calls2 = lists:keystore(CallId, #call.id, Calls, Call),
     Session2 = Session#session{calls2=Calls2},
-    State2 = State#?STATE{session=Session2},
-    nkdomain_obj:links_add(usage, {?MODULE, call, CallId, Pid}, State2).
+    State#?STATE{session=Session2}.
+
+
+%% @private
+rm_call(CallId, Reason, #?STATE{session=Session}=State) ->
+    Calls = get_calls(State),
+    case lists:keytake(CallId, #call.id, Calls) of
+        {value, #call{monitor=Mon}, Calls2} ->
+            nklib_util:demonitor(Mon),
+            Session2 = Session#session{calls2=Calls2},
+            State2 = State#?STATE{session=Session2},
+            do_event({call_hangup, CallId, Reason}, State2);
+        false ->
+            State
+    end.
+

@@ -511,7 +511,6 @@ do_conversation_event({counter_updated, Counter}, ConvId, State) ->
     {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
 
 do_conversation_event(_Event, _ConvId, State) ->
-    % lager:error("SESS EV2"),
     {noreply, State}.
 
 

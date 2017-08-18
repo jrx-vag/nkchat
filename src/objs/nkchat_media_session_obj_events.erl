@@ -40,6 +40,24 @@ event({invite, InviteId, CallerId, CallData}, State) ->
 event({invite_removed, InviteId, Reason}, State) ->
     {event, {invite_removed, #{invite_id=>InviteId, reason=>Reason}}, State};
 
+event({invite_accepted, InviteId, CallId, CallOpts}, State) ->
+    {event, {invite_accepted, #{invite_id=>InviteId, call_id=>CallId, call_opts=>CallOpts}}, State};
+
+event({member_added, CallId, MemberId, Roles}, State) ->
+    {event, {member_added, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
+
+event({member_removed, CallId, MemberId, Roles}, State) ->
+    {event, {member_removed, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
+
+event({member_down, CallId, MemberId, Roles}, State) ->
+    {event, {member_down, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
+
+event({call_created, InviteId, CallId, _CallOpts}, State) ->
+    {event, {call_created, #{invite_id=>InviteId, call_id=>CallId}}, State};
+
+event({call_hangup, CallId, Reason}, State) ->
+    {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
+
 event(_Event, #?STATE{parent_id=ParentId}=State) ->
     lager:warning("NKLOG Media Event (~s) ~p", [ParentId, _Event]),
     {ok, State}.

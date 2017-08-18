@@ -31,7 +31,7 @@
 -export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
-         object_event/2, object_link_down/2, object_handle_info/2]).
+         object_link_down/2, object_handle_info/2]).
 -export([object_admin_info/0]).
 -export_type([event/0]).
 
@@ -251,8 +251,8 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
 
 -record(session, {
     type :: call_type(),
-    caller_id :: nkdomain:obj_id(),
-    callee_id :: nkdomain:obj_id(),
+    %caller_id :: nkdomain:obj_id(),
+    %callee_id :: nkdomain:obj_id(),
     members :: #{MemberId::nkdomain:obj_id() => #member{}}
 }).
 
@@ -425,8 +425,8 @@ object_sync_op({?MODULE, add_invite_op, CalleeId, Base}, _From, State) ->
     end;
 
 object_sync_op({?MODULE, hangup_call, Reason}, _From, State) ->
-    State2 = do_event({call_hangup, Reason}, State),
-    {stop, Reason, ok, State2};
+    State2 = do_event_all_sessions({call_hangup, Reason}, State),
+    {stop, normal, ok, State2};
 
 object_sync_op(_Op, _From, _State) ->
     continue.
@@ -434,8 +434,8 @@ object_sync_op(_Op, _From, _State) ->
 
 %% @private
 object_async_op({?MODULE, hangup_call, Reason}, State) ->
-    State2 = do_event({call_hangup, Reason}, State),
-    {stop, Reason, State2};
+    State2 = do_event_all_sessions({call_hangup, Reason}, State),
+    {stop, normal, State2};
 
 object_async_op(_Op, _State) ->
     continue.
@@ -450,21 +450,21 @@ object_link_down(_Link, State) ->
     {ok, State}.
 
 
-%% @private
-object_event({member_added, MemberId, Roles, _SessId, _Pid}, State) ->
-    {ok, do_event_all_sessions({member_added, MemberId, Roles}, State)};
-
-object_event({member_removed, MemberId, Roles, _SessId}, State) ->
-    {ok, do_event_all_sessions({member_removed, MemberId, Roles}, State)};
-
-object_event({member_down, MemberId, Roles}, State) ->
-    {ok, do_event_all_sessions({member_down, MemberId, Roles}, State)};
-
-object_event({call_hangup, Reason}, State) ->
-    {ok, do_event_all_sessions({call_hangup, Reason}, State)};
-
-object_event(_Event, State) ->
-    {ok, State}.
+%%%% @private
+%%object_event({member_added, MemberId, Roles, _SessId, _Pid}, State) ->
+%%    {ok, do_event_all_sessions({member_added, MemberId, Roles}, State)};
+%%
+%%object_event({member_removed, MemberId, Roles, _SessId}, State) ->
+%%    {ok, do_event_all_sessions({member_removed, MemberId, Roles}, State)};
+%%
+%%object_event({member_down, MemberId, Roles}, State) ->
+%%    {ok, do_event_all_sessions({member_down, MemberId, Roles}, State)};
+%%
+%%object_event({call_hangup, Reason}, State) ->
+%%    {ok, do_event_all_sessions({call_hangup, Reason}, State)};
+%%
+%%object_event(_Event, State) ->
+%%    {ok, State}.
 
 
 %% @private
@@ -521,7 +521,7 @@ do_add_member(MemberId, Roles, SessId, Pid, CallOpts, State) ->
             Members2 = Members#{MemberId => Member},
             State2 = set_members(Members2, State),
             State3 = nkdomain_obj:links_add(usage, {?MODULE, member, MemberId, SessId, Pid}, State2),
-            State4 = do_event({member_added, MemberId, Roles, SessId, Pid}, State3),
+            State4 = do_event_all_sessions({member_added, MemberId, Roles, SessId, Pid}, State3),
             {ok, State4};
         {ok, _} ->
             {error, member_already_present}
@@ -533,7 +533,7 @@ do_remove_member(MemberId, State) ->
     Members = get_members(State),
     case maps:find(MemberId, Members) of
         {ok, #member{roles=Roles, session_id=SessId, session_pid=Pid}} ->
-            State2 = do_event({member_removed, MemberId, Roles}, State),
+            State2 = do_event_all_sessions({member_removed, MemberId, Roles}, State),
             State3 = nkdomain_obj:links_remove(usage, {?MODULE, member, MemberId, SessId, Pid}, State2),
             Members2 = maps:remove(MemberId, Members),
             State4 = set_members(Members2, State3),
@@ -554,7 +554,7 @@ do_member_down(MemberId, State) ->
     Members = get_members(State),
     case maps:find(MemberId, Members) of
         {ok, #member{roles=Roles, session_id=SessId, session_pid=Pid}=Member} ->
-            State2 = do_event({member_down, MemberId, Roles}, State),
+            State2 = do_event_all_sessions({member_down, MemberId, Roles}, State),
             erlang:send_after(1000*?CHECK_DOWN_TIME, self(), {?MODULE, member_down_check, MemberId}),
             Member2 = Member#member{session_pid=undefined},
             Members2 = Members#{MemberId => Member2},
