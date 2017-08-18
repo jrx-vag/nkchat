@@ -63,7 +63,7 @@
     {message_deleted, nkdomain:obj_id()} |
     {unread_counter_updated, ConvId::nkdomain:obj_id(), integer()} |
     {invited_to_conversation, TokenId::binary(), UserId::binary(), ConvId::binary()} |
-    {remove_notification, TokenId::binary()}.
+    {remove_notification, TokenId::binary(), Reason::term()}.
 
 
 -type start_opts() :: #{
@@ -408,12 +408,12 @@ object_async_op({?MODULE, notify, TokenId, Msg, Op}, State) ->
             Event = case Op of
                 created ->
                     {invited_to_conversation, TokenId, UserId, ConvId};
-                removed ->
-                    {remove_notification, TokenId}
+                {removed, Reason} ->
+                    {remove_notification, TokenId, Reason}
             end,
             {noreply, do_event(Event, State)};
         _ ->
-            ?LLOG(warning, "unxepected notify: ~p", [Msg], State),
+            ?LLOG(warning, "unexpected notify: ~p", [Msg], State),
             {noreply, State}
     end;
 

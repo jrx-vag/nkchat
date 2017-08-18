@@ -33,15 +33,15 @@
 
 
 %% @private
-%%event({invite, TokenId, CallerId, CallData}, State) ->
-%%    Body = #{invite_id=>TokenId, caller_id=>CallerId, call_data=>CallData},
-%%    {event, {invite, Body}, State};
-%%
-%%event({invite_cancelled, TokenId, Reason}, State) ->
-%%    {event, {invite_cancelled, #{invite_id=>TokenId, reason=>Reason}}, State};
+event({invite, InviteId, CallerId, CallData}, State) ->
+    Body = #{invite_id=>InviteId, caller_id=>CallerId, call_data=>CallData},
+    {event, {invite, Body}, State};
+
+event({invite_removed, InviteId, Reason}, State) ->
+    {event, {invite_removed, #{invite_id=>InviteId, reason=>Reason}}, State};
 
 event(_Event, #?STATE{parent_id=ParentId}=State) ->
-    lager:error("NKLOG MS Event (~s) ~p", [ParentId, _Event]),
+    lager:warning("NKLOG Media Event (~s) ~p", [ParentId, _Event]),
     {ok, State}.
 
 

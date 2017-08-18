@@ -57,7 +57,7 @@
 
 -type event() ::
     {invite, InviteId::binary(), CallerId::binary(), call_opts()} |
-    {invite_cancelled, InviteId::binary(), #{reason=>nkservice:error()}} |
+    {invite_removed, InviteId::binary(), #{reason=>nkservice:error()}} |
     {invite_accepted, InviteId::binary(), CallId::binary(), call_opts()}.
 
 
@@ -185,18 +185,20 @@ notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
 %% ===================================================================
 
 -record(invite, {
+    id :: nkdomain:obj_id(),
     token_pid :: pid(),
     call_opts :: call_opts()
 }).
 
 -record(call, {
-    }).
-
+    id :: nkdomain:obj_id(),
+    pid :: pid()
+}).
 
 -record(session, {
     user_id :: nkdomain:obj_id(),
-    invites = #{} :: #{TokenId::nkdomain:obj_id() => #invite{}},
-    calls = #{} :: #{CallId::nkdomain:obj_id() => #call{}}
+    invites2 = [] :: [#invite{}],
+    calls2 = [] :: [#call{}]
 }).
 
 
@@ -278,8 +280,8 @@ object_stop(_Reason, State) ->
 
 %% @private
 object_sync_op({?MODULE, get_calls}, _From, #?STATE{session=Session}=State) ->
-    #session{calls=Calls} = Session,
-    {reply, {ok, maps:keys(Calls)}, State};
+    #session{calls2=Calls} = Session,
+    {reply, {ok, [CallId || #call{id=CallId} <- Calls]}, State};
 
 object_sync_op({?MODULE, invite, CalleeId, CallOpts}, _From, State) ->
     case do_invite(CalleeId, CallOpts, State) of
@@ -291,10 +293,10 @@ object_sync_op({?MODULE, invite, CalleeId, CallOpts}, _From, State) ->
 
 object_sync_op({?MODULE, cancel_invite, InviteId, _Data}, _From, State) ->
     Invites = get_invites(State),
-    case maps:is_key(InviteId, Invites) of
+    case lists:keymember(InviteId, #invite.id, Invites) of
         true ->
             State2 = rm_invite(InviteId, State),
-            State3 = do_event({invite_cancelled, InviteId, #{reason=>caller_cancelled}}, State2),
+            State3 = do_event({invite_removed, InviteId, #{reason=>caller_cancelled}}, State2),
             {reply, ok, State3};
         false ->
             {reply, {error, invite_not_found}, State}
@@ -309,7 +311,9 @@ object_sync_op({?MODULE, accept_invite, InviteId, Data, CallOpts}, _From, State)
                 }
             }
         } ->
-            #?STATE{srv_id=SrvId} = State,
+            #?STATE{srv_id=SrvId, parent_id=UserId} = State,
+            % Avoid user detecting the going down of token
+            nkdomain_user_obj:remove_notification(SrvId, UserId, InviteId, call_accepted),
             Reply = nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, remote_accept_invite, InviteId, CallOpts}),
             {reply, Reply, State};
         _ ->
@@ -325,7 +329,9 @@ object_sync_op({?MODULE, reject_invite, InviteId, Data}, _From, State) ->
                 }
             }
         } ->
-            #?STATE{srv_id=SrvId} = State,
+            #?STATE{srv_id=SrvId, parent_id=UserId} = State,
+            % Avoid user detecting the going down of token
+            nkdomain_user_obj:remove_notification(SrvId, UserId, InviteId, call_rejected),
             Reply = nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, remote_reject_invite, InviteId}),
             {reply, Reply, State};
         _ ->
@@ -334,7 +340,7 @@ object_sync_op({?MODULE, reject_invite, InviteId, Data}, _From, State) ->
 
 object_sync_op({?MODULE, remote_accept_invite, InviteId, CallOpts}, _From, State) ->
     Invites = get_invites(State),
-    case maps:is_key(InviteId, Invites) of
+    case lists:keymember(InviteId, #invite.id, Invites) of
         true ->
             case do_accept_invite(InviteId, CallOpts, State) of
                 {ok, CallId, State2} ->
@@ -348,10 +354,10 @@ object_sync_op({?MODULE, remote_accept_invite, InviteId, CallOpts}, _From, State
 
 object_sync_op({?MODULE, remote_reject_invite, InviteId}, _From, State) ->
     Invites = get_invites(State),
-    case maps:is_key(InviteId, Invites) of
+    case lists:keymember(InviteId, #invite.id, Invites) of
         true ->
             State2 = rm_invite(InviteId, State),
-            State3 = do_event({invite_cancelled, InviteId, #{reason=>callee_rejected}}, State2),
+            State3 = do_event({invite_removed, InviteId, #{reason=>callee_rejected}}, State2),
             {reply, ok, State3};
         false ->
             {error, invite_not_found}
@@ -381,9 +387,8 @@ object_async_op({?MODULE, notify, InviteId, Msg, Op}, State) ->
             State2 = case Op of
                 created ->
                     do_event({invite, InviteId, CallerId, CallOpts}, State);
-                removed ->
-                    %% TODO include reason (from Token)
-                    do_event({invite_cancelled, InviteId, #{}}, State)
+                {removed, Reason} ->
+                    do_event({invite_removed, InviteId, #{reason=>Reason}}, State)
             end,
             {noreply, State2};
         _ ->
@@ -399,7 +404,7 @@ object_async_op(_Op, _State) ->
 object_link_down({usage, {?MODULE, invite, InviteId, _Pid}}, State) ->
     ?LLOG(notice, "invite token down ~s", [InviteId], State),
     State2 = rm_invite(InviteId, State),
-    State3 = do_event({invite_cancelled, InviteId, #{reason=>timeout}}, State2),
+    State3 = do_event({invite_removed, InviteId, #{reason=>timeout}}, State2),
     {ok, State3};
 
 object_link_down(_Link, State) ->
@@ -450,11 +455,13 @@ do_accept_invite(InviteId, CallOpts, State) ->
     #?STATE{srv_id=SrvId, domain_id=DomainId, parent_id=CallerId} = State,
     State2 = rm_invite(InviteId, State),
     case nkchat_media_call_obj:create(SrvId, DomainId, <<>>, CallerId, one2one) of
-        {ok, CallId, _CallPid} ->
-            State3 = do_event({invite_accepted, InviteId, CallId, CallOpts}, State2),
-            {ok, CallId, State3};
-        _ ->
-            State3 = do_event({invite_cancelled, InviteId, internal_error}, State2),
+        {ok, CallId, CallPid} ->
+            State3 = add_call(CallId, CallPid, State2),
+            State4 = do_event({invite_accepted, InviteId, CallId, CallOpts}, State3),
+            {ok, CallId, CallPid, State4};
+        {error, Error} ->
+            ?LLOG(warning, "could not created call: ~p", [Error], State),
+            State3 = do_event({invite_removed, InviteId, internal_error}, State2),
             {error, internal_error, State3}
     end.
 
@@ -476,16 +483,18 @@ do_event(Event, State) ->
     nkdomain_obj_util:event(Event, State).
 
 
+%% @private
 get_invites(#?STATE{session=Session}) ->
-    #session{invites=Invites} = Session,
+    #session{invites2=Invites} = Session,
     Invites.
+
 
 %% @private
 add_invite(InviteId, Pid, CallOpts, #?STATE{session=Session}=State) ->
     Invites = get_invites(State),
-    Invite = #invite{token_pid=Pid, call_opts=CallOpts},
-    Invites2 = Invites#{InviteId => Invite},
-    Session2 = Session#session{invites=Invites2},
+    Invite = #invite{id=InviteId, token_pid=Pid, call_opts=CallOpts},
+    Invites2 = lists:keystore(InviteId, #invite.id, Invites, Invite),
+    Session2 = Session#session{invites2=Invites2},
     State2 = State#?STATE{session=Session2},
     nkdomain_obj:links_add(usage, {?MODULE, invite, InviteId, Pid}, State2).
 
@@ -493,13 +502,27 @@ add_invite(InviteId, Pid, CallOpts, #?STATE{session=Session}=State) ->
 %% @private
 rm_invite(InviteId, #?STATE{session=Session}=State) ->
     Invites = get_invites(State),
-    case maps:find(InviteId, Invites) of
-        {ok, #invite{token_pid=TokenPid}} ->
-            Invites2 = maps:remove(InviteId, Invites),
-            Session2 = Session#session{invites=Invites2},
+    case lists:keytake(InviteId, #invite.id, Invites) of
+        {value, #invite{token_pid=TokenPid}, Invites2} ->
+            Session2 = Session#session{invites2=Invites2},
             State2 = State#?STATE{session=Session2},
             nkdomain_obj:links_remove(usage, {?MODULE, invite, InviteId, TokenPid}, State2);
         error ->
             State
     end.
 
+
+%% @private
+get_calls(#?STATE{session=Session}) ->
+    #session{calls2=Calls} = Session,
+    Calls.
+
+
+%% @private
+add_call(CallId, Pid, #?STATE{session=Session}=State) ->
+    Calls = get_calls(State),
+    Call = #call{id=CallId, pid=Pid},
+    Calls2 = lists:keystore(CallId, #call.id, Calls, Call),
+    Session2 = Session#session{calls2=Calls2},
+    State2 = State#?STATE{session=Session2},
+    nkdomain_obj:links_add(usage, {?MODULE, call, CallId, Pid}, State2).

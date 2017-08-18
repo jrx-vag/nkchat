@@ -61,8 +61,8 @@ event({invited_to_conversation, TokenId, UserId, ConvId}, State) ->
     Data = #{token_id=>TokenId, user_id=>UserId, conversation_id=>ConvId},
     {event, {invited_to_conversation, Data}, State};
 
-event({remove_notification, TokenId}, State) ->
-    {event, {remove_notification, #{token_id=>TokenId}}, State};
+event({remove_notification, TokenId, Reason}, State) ->
+    {event, {remove_notification, #{token_id=>TokenId, reason=>Reason}}, State};
 
 event(_Event, State) ->
     {ok, State}.
