@@ -569,7 +569,7 @@ rm_invite(InviteId, #?STATE{session=Session}=State) ->
             Session2 = Session#session{invites2=Invites2},
             State2 = State#?STATE{session=Session2},
             nkdomain_obj:links_remove(usage, {?MODULE, invite, InviteId, TokenPid}, State2);
-        error ->
+        false ->
             State
     end.
 

@@ -658,7 +658,7 @@ object_async_op({?MODULE, set_active, MemberId, SessId, Bool}, State) ->
                             Member2
                     end,
                     {noreply, set_member(MemberId, Member3, State)};
-                error ->
+                false ->
                     ?LLOG(warning, "set_active for unknown session", [], State),
                     {noreply, State}
             end;
