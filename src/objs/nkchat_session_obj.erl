@@ -194,7 +194,6 @@ reject_invitation(SrvId, _SessId, TokenId) ->
     ok.
 
 conversation_event(Pid, ConvId, _Meta, Event) ->
-    lager:warning("NKLOG CONV EVENT ~p ~p", [Event, Pid]),
     nkdomain_obj:async_op(any, Pid, {?MODULE, conversation_event, ConvId, Event}).
 
 
@@ -390,7 +389,7 @@ object_async_op({?MODULE, conversation_event, ConvId, Event}, State) ->
         {ok, _} ->
             do_conversation_event(Event, ConvId, State);
         not_found ->
-            ?LLOG(notice, "received event ~p for unknown conversation", [Event], State),
+            ?LLOG(warning, "received event ~p for unknown conversation", [Event], State),
             {noreply, State}
     end;
 
@@ -511,6 +510,7 @@ do_conversation_event({counter_updated, Counter}, ConvId, State) ->
     {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
 
 do_conversation_event(_Event, _ConvId, State) ->
+    ?LLOG(warning, "unexpected conversation event: ~p", [_Event], State),
     {noreply, State}.
 
 
