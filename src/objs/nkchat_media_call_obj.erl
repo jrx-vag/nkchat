@@ -51,14 +51,6 @@
 
 -type role() :: binary().
 
--type call_opts() ::
-    #{
-        name => binary(),
-        sdp => binary(),
-        trickle_ice => boolean(),
-        ttl => integer()
-    }.
-
 
 -type event() ::
     {member_added, Member::nkdomain:obj_id(), [Role::role()], SessId::nkdomain:obj_id(), pid()} |
@@ -108,16 +100,16 @@ hangup_call_async(SrvId, Id, Reason) ->
     nkdomain_obj:async_op(SrvId, Id, {?MODULE, hangup_call, Reason}).
 
 
--spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id(), [role()], nkdomain:obj_id(), call_opts()) ->
+-spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id(), [role()], nkdomain:obj_id(), map()) ->
     ok | {error, term()}.
 
-add_member(SrvId, Id, Member, Role, SessId, CallOpts) when is_binary(Role); is_atom(Role) ->
-    add_member(SrvId, Id, Member, [nklib_util:to_binary(Role)], SessId, CallOpts);
+add_member(SrvId, Id, Member, Role, SessId, Opts) when is_binary(Role); is_atom(Role) ->
+    add_member(SrvId, Id, Member, [nklib_util:to_binary(Role)], SessId, Opts);
 
-add_member(SrvId, Id, Member, Roles, SessId, CallOpts) when is_list(Roles) ->
+add_member(SrvId, Id, Member, Roles, SessId, Opts) when is_list(Roles) ->
     case nkdomain_lib:find(SrvId, Member) of
         #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
-            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, add_member, MemberId, Roles, SessId, self(), CallOpts});
+            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, add_member, MemberId, Roles, SessId, self(), Opts});
         #obj_id_ext{} ->
             {error, member_invalid};
         {error, object_not_found} ->
@@ -245,8 +237,7 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
     added_time :: nkdomain:timestamp(),
     roles :: [role()],
     session_id :: nkdomain:obj_id(),
-    session_pid :: pid(),
-    call_opts :: call_opts()
+    session_pid :: pid()
 }).
 
 -record(session, {
@@ -410,19 +401,19 @@ object_sync_op({?MODULE, remove_member, MemberId}, _From, State) ->
             {reply, {error, Error}, State}
     end;
 
-object_sync_op({?MODULE, add_invite_op, CalleeId, Base}, _From, State) ->
-    #?STATE{session=Session} = State,
-    case Session of
-        #session{type=one2one} ->
-            case do_one2one_invite(CalleeId, Base, State) of
-                {ok, Op} ->
-                    {reply, {ok, CalleeId, Op}, State};
-                {error, Error} ->
-                    {reply, {error, Error}, State}
-            end;
-        _ ->
-            {reply, {error, operation_invalid}, State}
-    end;
+%%object_sync_op({?MODULE, add_invite_op, CalleeId, Base}, _From, State) ->
+%%    #?STATE{session=Session} = State,
+%%    case Session of
+%%        #session{type=one2one} ->
+%%            case do_one2one_invite(CalleeId, Base, State) of
+%%                {ok, Op} ->
+%%                    {reply, {ok, CalleeId, Op}, State};
+%%                {error, Error} ->
+%%                    {reply, {error, Error}, State}
+%%            end;
+%%        _ ->
+%%            {reply, {error, operation_invalid}, State}
+%%    end;
 
 object_sync_op({?MODULE, hangup_call, Reason}, _From, State) ->
     State2 = do_event_all_sessions({call_hangup, Reason}, State),
@@ -486,28 +477,28 @@ object_handle_info(_Info, _State) ->
 %% Internal
 %% ===================================================================
 
-do_one2one_invite(_CalleeId, Base, State) ->
-    #?STATE{id=#obj_id_ext{obj_id=CallId}} = State,
-    Members = get_members(State),
-    case maps:to_list(Members) of
-        [{CallerId, #member{call_opts=#{sdp:=SDP}}}] ->
-            Op = Base#{
-                ?MEDIA_CALL => #{
-                    <<"invite_op">> => #{
-                        <<"call_id">> => CallId,
-                        <<"caller_id">> =>  CallerId,
-                        <<"sdp">> => SDP
-                    }
-                }
-            },
-            {ok, Op};
-        _ ->
-            {error, operation_invalid}
-    end.
+%%do_one2one_invite(_CalleeId, Base, State) ->
+%%    #?STATE{id=#obj_id_ext{obj_id=CallId}} = State,
+%%    Members = get_members(State),
+%%    case maps:to_list(Members) of
+%%        [{CallerId, #member{call_opts=#{sdp:=SDP}}}] ->
+%%            Op = Base#{
+%%                ?MEDIA_CALL => #{
+%%                    <<"invite_op">> => #{
+%%                        <<"call_id">> => CallId,
+%%                        <<"caller_id">> =>  CallerId,
+%%                        <<"sdp">> => SDP
+%%                    }
+%%                }
+%%            },
+%%            {ok, Op};
+%%        _ ->
+%%            {error, operation_invalid}
+%%    end.
 
 
 %% @private
-do_add_member(MemberId, Roles, SessId, Pid, CallOpts, State) ->
+do_add_member(MemberId, Roles, SessId, Pid, _Opts, State) ->
     Members = get_members(State),
     case maps:find(MemberId, Members) of
         error ->
@@ -515,8 +506,7 @@ do_add_member(MemberId, Roles, SessId, Pid, CallOpts, State) ->
                 roles = Roles,
                 added_time = nkdomain_util:timestamp(),
                 session_id = SessId,
-                session_pid = Pid,
-                call_opts = CallOpts
+                session_pid = Pid
             },
             Members2 = Members#{MemberId => Member},
             State2 = set_members(Members2, State),

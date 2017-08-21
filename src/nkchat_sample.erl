@@ -155,6 +155,12 @@ session_get_conversation(ConvId) ->
 
 
 
+
+%% ===================================================================
+%% MEDIA
+%% ===================================================================
+
+
 media_session_start() ->
     cmd(<<"objects/media.session/start">>, #{}).
 
@@ -172,6 +178,9 @@ media_session_delete(Id) ->
 
 media_session_invite(UserId, SDP) ->
     cmd(<<"objects/media.session/invite">>, #{user_id=>UserId, sdp=>SDP}).
+
+
+
 
 
 %% f(SM1), f(SM2), f(P1), f(P2), {SM1, P1, SM2, P2} = nkchat_sample:media_init().

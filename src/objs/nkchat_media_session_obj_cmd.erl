@@ -105,7 +105,7 @@ cmd(<<"get_call_info">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=Srv
 cmd(<<"invite">>, #nkreq{data=#{user_id:=UserId}=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
         {ok, Id} ->
-            Opts = maps:with([sdp, trickle_ice, ttl], Data),
+            Opts = maps:with([call_name, sdp, trickle_ice, ttl], Data),
             case nkchat_media_session_obj:invite(SrvId, Id, UserId, Opts) of
                 {ok, TokenId} ->
                     {ok, #{<<"invite_id">> => TokenId}};

@@ -55,6 +55,7 @@ api(<<"invite">>, Syntax) ->
     Syntax#{
         id => binary,
         user_id => binary,
+        call_name => binary,
         sdp => binary,
         ttl => {integer, 1, 5*60},          % Secs
         trickle_ice => boolean,
