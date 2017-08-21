@@ -234,8 +234,8 @@ table_iter([Entry|Rest], Pos, Acc, #admin_session{srv_id=SrvId}=Session) ->
         true -> <<"">>;
         false -> <<"webix_cell_disabled">>
     end,
-    Conv = case nkdomain_lib:find_path(SrvId, ParentId) of
-        {ok, _, _, ConvPath} ->
+    Conv = case nkdomain_lib:find(SrvId, ParentId) of
+        #obj_id_ext{path=ConvPath} ->
             nkdomain_admin_util:obj_url(ParentId, ConvPath);
         _ ->
             <<>>

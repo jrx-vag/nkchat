@@ -95,7 +95,7 @@ create(SrvId, Domain, Name) ->
 
 add_member(SrvId, Id, Member) ->
     case nkdomain_lib:find(SrvId, Member) of
-        {ok, ?DOMAIN_USER, MemberId, _Pid} ->
+        #obj_id_ext{type= ?DOMAIN_USER, obj_id=MemberId} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, add_member, MemberId});
         {ok, _, _, _} ->
             {error, member_invalid};
@@ -112,7 +112,7 @@ add_member(SrvId, Id, Member) ->
 
 remove_member(SrvId, Id, Member) ->
     case nkdomain_lib:find(SrvId, Member) of
-        {ok, _Type, MemberId, _Pid} ->
+        #obj_id_ext{obj_id=MemberId} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, remove_member, MemberId});
         _ ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, remove_member, Member})
@@ -156,7 +156,7 @@ get_info(Pid) ->
 %% @doc
 find_member_conversations(SrvId, Domain, MemberId) ->
     case nkdomain_lib:find(SrvId, Domain) of
-        {ok, ?DOMAIN_DOMAIN, DomainId, _Pid} ->
+        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
             Filters = #{
                 type => ?CHAT_CONVERSATION,
                 domain_id => DomainId,
@@ -184,7 +184,7 @@ find_member_conversations(SrvId, Domain, MemberId) ->
 %% @doc
 find_conversations_with_members(SrvId, Domain, MemberIds) ->
     case nkdomain_lib:find(SrvId, Domain) of
-        {ok, ?DOMAIN_DOMAIN, DomainId, _Pid} ->
+        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
             Hash = make_members_hash(MemberIds),
             Filters = #{
                 type => ?CHAT_CONVERSATION,
@@ -580,7 +580,7 @@ object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) -
         _ -> TTL
     end,
     case nkdomain_lib:find(SrvId, Member) of
-        {ok, ?DOMAIN_USER, MemberId, _MPid} ->
+        #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
             Data = #{
                 <<"op">> => <<"invite_member">>,
                 <<"conversation_id">> => ConvId,
@@ -607,9 +607,9 @@ object_sync_op({?MODULE, add_invite_op, User, Member, Base}, _From, State) ->
     %% TODO check permission
     #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=ConvId}} = State,
     case nkdomain_lib:find(SrvId, Member) of
-        {ok, _MType, MemberId, _MPid} ->
+        #obj_id_ext{obj_id=MemberId} ->
             case nkdomain_lib:find(SrvId, User) of
-                {ok, _UType, UserId, _UPid} ->
+                #obj_id_ext{obj_id=UserId} ->
                     ConvData1 = maps:get(?CHAT_CONVERSATION, Base, #{}),
                     ConvData2 = ConvData1#{
                         <<"add_member_op">> => #{
@@ -1103,7 +1103,7 @@ check_members([], _SrvId, Acc) ->
 
 check_members([Member|Rest], SrvId, Acc) ->
     case nkdomain_lib:find(SrvId, Member) of
-        {ok, ?DOMAIN_USER, MemberId, _Pid} ->
+        #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
             check_members(Rest, SrvId, [MemberId|Acc]);
         _ ->
             {error, member_not_found}

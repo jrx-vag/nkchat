@@ -114,7 +114,7 @@ add_conversation(SrvId, Id, ConvId) ->
 %% @doc
 remove_conversation(SrvId, Id, ConvId) ->
     case nkdomain_lib:find(SrvId, ConvId) of
-        {ok, _Type, ConvId2, _Pid} ->
+        #obj_id_ext{obj_id=ConvId2} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, rm_conv, ConvId2});
         {error, Error} ->
             {error, Error}
@@ -135,7 +135,7 @@ get_conversations(SrvId, Id) ->
 
 get_conversation_info(SrvId, Id, Conv) ->
     case nkdomain_lib:find(SrvId, Conv) of
-        {ok, _Type, ConvId, _Pid} ->
+        #obj_id_ext{obj_id=ConvId} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, get_conversation_info, ConvId});
         {error, Error} ->
             {error, Error}
@@ -148,7 +148,7 @@ get_conversation_info(SrvId, Id, Conv) ->
 
 set_active_conversation(SrvId, Id, Conv) ->
     case nkdomain_lib:find(SrvId, Conv) of
-        {ok, _Type, ConvId, _Pid} ->
+        #obj_id_ext{obj_id=ConvId} ->
             nkdomain_obj:sync_op(SrvId, Id, {?MODULE, set_active_conv, ConvId});
         {error, Error} ->
             {error, Error}

@@ -146,7 +146,7 @@ object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}
 syntax_check_file(file_id, File, Ctx) ->
     #{domain_srv_id:=SrvId} = Ctx,
     case nkdomain_lib:find(SrvId, File) of
-        {ok, ?DOMAIN_FILE, FileId, _Pid} ->
+        #obj_id_ext{type=?DOMAIN_FILE, obj_id=FileId} ->
             {ok, FileId};
         _ ->
             {error, {file_not_found, File}}
