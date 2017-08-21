@@ -853,8 +853,13 @@ do_remove_sessions(_MemberId, [], #?STATE{} = State) ->
     State;
 
 do_remove_sessions(MemberId, [#chat_session{session_id=SessId}|Rest], State) ->
-    {ok, State2} = do_remove_session(MemberId, SessId, State),
-    do_remove_sessions(MemberId, Rest, State2).
+    case do_remove_session(MemberId, SessId, State) of
+        {ok, State2} ->
+            do_remove_sessions(MemberId, Rest, State2);
+        {error, Error} ->
+            lager:error("NKLOG do_remove_sessions ~p", [Error]),
+            do_remove_sessions(MemberId, Rest, State)
+    end.
 
 
 %% @private
