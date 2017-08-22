@@ -518,9 +518,7 @@ object_sync_op({?MODULE, get_info}, _From, State) ->
 object_sync_op({?MODULE, add_member, MemberId}, _From, State) ->
     case do_add_member(MemberId, State) of
         {ok, State2} ->
-            State3 = do_event({member_added, MemberId}, State2),
-            State4 = do_event({added_to_conversation, MemberId}, State3),
-            {reply_and_save, {ok, MemberId}, State4};
+            {reply_and_save, {ok, MemberId}, State2};
         {error, Error} ->
             {reply, {error, Error}, State}
     end;
@@ -783,7 +781,9 @@ do_add_member(MemberId, State) ->
                 added_time = nkdomain_util:timestamp()
             },
             State2 = set_member(MemberId, Member, State),
-            set_obj_name_members(State2);
+            State3 = set_obj_name_members(State2),
+            State4 = do_event({member_added, MemberId}, State3),
+            do_event({added_to_conversation, MemberId}, State4);
         {true, _} ->
             {error, member_already_present}
     end.
