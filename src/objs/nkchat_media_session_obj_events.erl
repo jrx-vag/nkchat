@@ -58,6 +58,12 @@ event({call_created, InviteId, CallId, _CallOpts}, State) ->
 event({call_hangup, CallId, Reason}, State) ->
     {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
 
+event({new_candidate, CallId, Candidate}, State) ->
+    {event, {new_candidate, #{call_id=>CallId, candidate=>Candidate}}, State};
+
+event({member_status, CallId, MemberId, Status}, State) ->
+    {event, {member_status, #{call_id=>CallId, member_id=>MemberId, status=>Status}}, State};
+
 event(_Event, #?STATE{parent_id=ParentId}=State) ->
     lager:warning("NKLOG Media Event (~s) ~p", [ParentId, _Event]),
     {ok, State}.

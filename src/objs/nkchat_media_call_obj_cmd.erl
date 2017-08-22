@@ -33,46 +33,30 @@
 %% API
 %% ===================================================================
 
-cmd(<<"add_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:add_member(SrvId, ConvId, MemberId) of
-        {ok, MemberObjId} ->
-            {ok, #{<<"member_id">>=>MemberObjId}};
-        {error, Error} ->
-            {error, Error}
-    end;
-
-cmd(<<"remove_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:remove_member(SrvId, ConvId, MemberId) of
-        ok ->
-            {ok, #{}};
-        {error, Error} ->
-            {error, Error}
-    end;
-
-%%cmd(<<"make_invite_token">>, #nkreq{data=#{id:=Conv, member_id:=MemberId}, srv_id=SrvId}=Req) ->
-%%    {ok, DomainId} = nkdomain_api_util:get_id(?DOMAIN_DOMAIN, none, #{}, Req),
-%%    {ok, UserId} = nkdomain_api_util:get_id(?DOMAIN_USER, none, #{}, Req),
-%%    case nkchat_conversation_obj:make_invite_token(SrvId, Conv, DomainId, UserId, MemberId) of
-%%        {ok, TokenId} ->
-%%            {ok, #{<<"token">> => TokenId}};
+%%cmd(<<"add_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
+%%    case nkchat_media_call_obj:add_member(SrvId, ConvId, MemberId) of
+%%        {ok, MemberObjId} ->
+%%            {ok, #{<<"member_id">>=>MemberObjId}};
+%%        {error, Error} ->
+%%            {error, Error}
+%%    end;
+%%
+%%cmd(<<"remove_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
+%%    case nkchat_media_call_obj:remove_member(SrvId, ConvId, MemberId) of
+%%        ok ->
+%%            {ok, #{}};
 %%        {error, Error} ->
 %%            {error, Error}
 %%    end;
 
-%%cmd(<<"accept_invite_token">>, #nkreq{data=#{token:=Token}, srv_id=SrvId}) ->
-%%    nkchat_conversation_obj:accept_token(SrvId, Token);
-%%
-%%cmd(<<"reject_invite_token">>, #nkreq{data=#{token:=Token}, srv_id=SrvId}) ->
-%%    nkchat_conversation_obj:reject_token(SrvId, Token);
-
-cmd(<<"find_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+cmd(<<"find_member_calls">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
         {ok, DomainId} ->
             case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, Req) of
                 {ok, MemberId} ->
-                    case nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, MemberId) of
+                    case nkchat_media_call_obj:find_member_calls(SrvId, DomainId, MemberId) of
                         {ok, List} ->
-                            List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type}<-List],
+                            List2 = [#{<<"call_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type} <-List],
                             {ok, #{<<"data">>=>List2}};
                         {error, Error} ->
                             {error, Error}
@@ -84,13 +68,13 @@ cmd(<<"find_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
             {error, Error}
     end;
 
-cmd(<<"find_conversations_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+cmd(<<"find_calls_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
         {ok, DomainId} ->
             #{member_ids:=MemberIds} = Data,
-            case nkchat_conversation_obj:find_conversations_with_members(SrvId, DomainId, MemberIds) of
+            case nkchat_media_call_obj:find_calls_with_members(SrvId, DomainId, MemberIds) of
                 {ok, List} ->
-                    List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type}<-List],
+                    List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type} <-List],
                     {ok, #{<<"data">>=>List2}};
                 {error, Error} ->
                     {error, Error}
@@ -99,22 +83,15 @@ cmd(<<"find_conversations_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) 
             {error, Error}
     end;
 
-cmd(<<"get_messages">>, #nkreq{data=#{id:=ConvId}=Data, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:get_messages(SrvId, ConvId, Data) of
-        {ok, Reply} ->
-            {ok, Reply};
-        {error, Error} ->
-            {error, Error}
-    end;
+cmd(<<"send_candidate">>, #nkreq{data=Data, srv_id=SrvId, user_id=MemberId}) ->
+    #{id:=CallId, candidate:=Candidate} = Data,
+    nkchat_media_call_obj:send_candidate(SrvId, CallId, MemberId, Candidate);
 
-cmd(<<"get_last_messages">>, #nkreq{data=#{id:=ConvId}, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:get_last_messages(SrvId, ConvId) of
-        {ok, Reply} ->
-            {ok, Reply};
-        {error, Error} ->
-            {error, Error}
-    end;
+cmd(<<"set_status">>, #nkreq{data=#{id:=CallId}=Data, srv_id=SrvId, user_id=MemberId}) ->
+    Opts = maps:with([audio, video], Data),
+    nkchat_media_call_obj:set_status(SrvId, CallId, MemberId, Opts);
 
 cmd(Cmd, Req) ->
+    lager:error("NKLOG CALL API ~p", [Cmd]),
     nkdomain_obj_api:api(Cmd, ?CHAT_CONVERSATION, Req).
 

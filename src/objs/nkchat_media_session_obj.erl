@@ -52,13 +52,17 @@
         call_name => binary(),
         sdp => binary(),
         trickle_ice => boolean(),
-        ttl => integer()
+        ttl => integer(),
+        audio => boolean,
+        video => boolean
     }.
 
 -type accept_opts() ::
     #{
         sdp => binary(),
-        trickle_ice => boolean()
+        trickle_ice => boolean(),
+        audio => boolean,
+        video => boolean
     }.
 
 
@@ -70,7 +74,9 @@
     {call_hangup, CallId::binary(), Reason::nkservice:error()} |
     {member_added,  CallId::binary(), Member::binary(), Roles::[binary()]} |
     {member_removed,  CallId::binary(), Member::binary(), Roles::[binary()]} |
-    {member_down,  CallId::binary(), Member::binary(), Roles::[binary()]}.
+    {member_down, CallId::binary(), Member::binary(), Roles::[binary()]} |
+    {new_candidate, CallId::binary(), nkchat_media_call_obj:candidate()} |
+    {member_status, CallId::binary(), Member::binary(), nkchat_media_call_obj:status()}.
 
 
 -type start_opts() :: #{
@@ -338,7 +344,7 @@ object_sync_op({?MODULE, accept_invite, InviteId, Data, AcceptOpts}, _From, Stat
             case nkdomain_obj:sync_op(SrvId, SessId, {?MODULE, remote_accept_invite, InviteId, AcceptOpts}) of
                 {ok, CallId, CallPid} ->
                     State2 = do_event({call_created, InviteId, CallId, #{}}, State),
-                    ok = nkchat_media_call_obj:add_member(SrvId, CallPid, UserId, callee, SessId, #{}),
+                    ok = nkchat_media_call_obj:add_member(SrvId, CallPid, UserId, callee, SessId, AcceptOpts),
                     State3 = add_call(CallId, CallPid, callee, State2),
                     {reply, {ok, CallId}, State3};
                 {error, Error} ->
@@ -370,9 +376,9 @@ object_sync_op({?MODULE, reject_invite, InviteId, Data}, _From, State) ->
 
 object_sync_op({?MODULE, remote_accept_invite, InviteId, AcceptOpts}, _From, State) ->
     Invites = get_invites(State),
-    case lists:keymember(InviteId, #invite.id, Invites) of
-        true ->
-            case do_accept_invite(InviteId, AcceptOpts, State) of
+    case lists:keyfind(InviteId, #invite.id, Invites) of
+        #invite{invite_opts=InviteOpts} ->
+            case do_accept_invite(InviteId, InviteOpts, AcceptOpts, State) of
                 {ok, CallId, CallPid, State2} ->
                     {reply, {ok, CallId, CallPid}, State2};
                 {error, Error, State3} ->
@@ -513,14 +519,14 @@ do_invite(CalleeId, InviteOpts, State) ->
 
 
 %% @private
-do_accept_invite(InviteId, AcceptOpts, State) ->
+do_accept_invite(InviteId, InviteOpts, AcceptOpts, State) ->
     #?STATE{srv_id=SrvId, domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
     State2 = rm_invite(InviteId, State),
     case nkchat_media_call_obj:create(SrvId, DomainId, <<>>, CallerId, one2one) of
         {ok, CallId, CallPid} ->
             State3 = do_event({invite_accepted, InviteId, CallId, AcceptOpts}, State2),
             State4 = do_event({call_created, InviteId, CallId, #{}}, State3),
-            ok = nkchat_media_call_obj:add_member(SrvId, CallPid, CallerId, caller, SessId, #{}),
+            ok = nkchat_media_call_obj:add_member(SrvId, CallPid, CallerId, caller, SessId, InviteOpts),
             State5 = add_call(CallId, CallPid, caller, State4),
             {ok, CallId, CallPid, State5};
         {error, Error} ->
@@ -528,7 +534,6 @@ do_accept_invite(InviteId, AcceptOpts, State) ->
             State3 = do_event({invite_removed, InviteId, internal_error}, State2),
             {error, internal_error, State3}
     end.
-
 
 
 %% @private
@@ -543,6 +548,12 @@ do_call_event({member_removed, MemberId, Roles}, CallId, State) ->
 
 do_call_event({member_down, MemberId, Roles}, CallId, State) ->
     do_event({member_down, CallId, MemberId, Roles}, State);
+
+do_call_event({new_candidate, Candidate}, CallId, State) ->
+    do_event({new_candidate, CallId, Candidate}, State);
+
+do_call_event({member_status, MemberId, Status}, CallId, State) ->
+    do_event({member_status, CallId, MemberId, Status}, State);
 
 do_call_event(_Event, _CallId, State) ->
     lager:error("SESS EV2: ~p", [_Event]),

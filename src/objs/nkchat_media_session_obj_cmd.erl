@@ -105,7 +105,7 @@ cmd(<<"get_call_info">>, #nkreq{data=#{conversation_id:=ConvId}=Data, srv_id=Srv
 cmd(<<"invite">>, #nkreq{data=#{user_id:=UserId}=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
         {ok, Id} ->
-            Opts = maps:with([call_name, sdp, trickle_ice, ttl], Data),
+            Opts = maps:with([call_name, sdp, trickle_ice, ttl, audio, video], Data),
             case nkchat_media_session_obj:invite(SrvId, Id, UserId, Opts) of
                 {ok, TokenId} ->
                     {ok, #{<<"invite_id">> => TokenId}};
@@ -128,7 +128,7 @@ cmd(<<"cancel_invite">>, #nkreq{data=#{invite_id:=InvId}=Data, srv_id=SrvId}=Req
 cmd(<<"accept_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
         {ok, Id} ->
-            Opts = maps:with([sdp, trickle_ice], Data),
+            Opts = maps:with([sdp, trickle_ice, audio, video], Data),
             case nkchat_media_session_obj:accept_invite(SrvId, Id, InviteId, Opts) of
                 {ok, CallId} ->
                     {ok, #{call_id=>CallId}};

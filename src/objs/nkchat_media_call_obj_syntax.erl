@@ -47,31 +47,31 @@ api(<<"remove_member">>, Syntax) ->
         '__mandatory' => [id, member_id]
     };
 
-api(<<"find_member_conversations">>, Syntax) ->
+api(<<"find_member_calls">>, Syntax) ->
     Syntax#{
         domain_id => binary,
         member_id => binary
     };
 
-api(<<"find_conversations_with_members">>, Syntax) ->
+api(<<"find_calls_with_members">>, Syntax) ->
     Syntax#{
         domain_id => binary,
         member_ids => {list, binary},
         '__mandatory' => [member_ids]
     };
 
-api(<<"get_messages">>, Syntax) ->
+api(<<"send_candidate">>, Syntax) ->
     Syntax#{
         id => binary,
-        size => integer,
-        from => integer,
-        start_date => integer,
-        '__mandatory' => [id]
+        candidate => binary,
+        '__mandatory' => [id, candidate]
     };
 
-api(<<"get_last_messages">>, Syntax) ->
+api(<<"set_status">>, Syntax) ->
     Syntax#{
         id => binary,
+        audio => boolean,
+        video => boolean,
         '__mandatory' => [id]
     };
 

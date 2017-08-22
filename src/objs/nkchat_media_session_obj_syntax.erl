@@ -59,6 +59,8 @@ api(<<"invite">>, Syntax) ->
         sdp => binary,
         ttl => {integer, 1, 5*60},          % Secs
         trickle_ice => boolean,
+        audio => boolean,
+        video => boolean,
         '__mandatory' => [user_id, sdp]
     };
 
@@ -82,6 +84,8 @@ api(<<"accept_invite">>, Syntax) ->
         invite_id =>  binary,
         sdp => binary,
         trickle_ice => boolean,
+        audio => boolean,
+        video => boolean,
         '__mandatory' => [invite_id, sdp]
     };
 

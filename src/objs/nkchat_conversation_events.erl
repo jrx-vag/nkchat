@@ -24,7 +24,6 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([event/2]).
--export_type([events/0]).
 
 -include_lib("nkdomain/include/nkdomain.hrl").
 
@@ -32,15 +31,6 @@
 %% Types
 %% ===================================================================
 
-
--type events() ::
-    {message_created, nkdomain:obj()} |
-    {message_updated, nkdomain:obj()} |
-    {message_deleted, nkdomain:obj_id()} |
-    {added_member, nkdomain:obj_id()} |
-    {removed_member, nkdomain:obj_id()} |
-    {added_session, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
-    {removed_session, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()}.
 
 
 %% ===================================================================
@@ -50,28 +40,28 @@
 
 %% @private
 event({message_created, #{obj_id:=MsgId}}, State) ->
-    {event, message_created, #{message_id=>MsgId}, State};
+    {event, {message_created, #{message_id=>MsgId}}, State};
 
 event({message_updated, #{obj_id:=MsgId}}, State) ->
-    {event, message_updated, #{message_id=>MsgId}, State};
+    {event, {message_updated, #{message_id=>MsgId}}, State};
 
 event({message_deleted, MsgId}, State) ->
-    {event, message_deleted, #{message_id=>MsgId}, State};
+    {event, {message_deleted, #{message_id=>MsgId}}, State};
 
 event({added_member, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=State) ->
     %% TODO: use nkdomain_obj_util:event?
     nkdomain_obj_util:send_event(added_to_conversation, MemberId, #{conversation_id=>ConvId}, State),
-    {event, added_member, #{member_id=>MemberId}, State};
+    {event, {added_member, #{member_id=>MemberId}}, State};
 
 event({removed_member, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=State) ->
     nkdomain_obj_util:send_event(removed_from_conversation, MemberId, #{conversation_id=>ConvId}, State),
-    {event, removed_member, #{member_id=>MemberId}, State};
+    {event, {removed_member, #{member_id=>MemberId}}, State};
 
 event({added_session, UserId, SessId}, State) ->
-    {event, added_session, #{member_id=>UserId, session_id=>SessId}, State};
+    {event, {added_session, #{member_id=>UserId, session_id=>SessId}}, State};
 
 event({removed_session, UserId, SessId}, State) ->
-    {event, removed_session, #{member_id=>UserId, session_id=>SessId}, State};
+    {event, {removed_session, #{member_id=>UserId, session_id=>SessId}}, State};
 
 event(_Event, State) ->
     {ok, State}.

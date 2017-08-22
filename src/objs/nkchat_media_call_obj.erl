@@ -27,7 +27,7 @@
 -export([create/5, hangup_call/3, hangup_call_async/3]).
 -export([add_member/6, remove_member/3, get_member_info/3, get_info/1]).
 -export([find_member_calls/3, find_calls_with_members/3]).
-%%-export([add_invite_op/3]).
+-export([send_candidate/4, set_status/4]).
 -export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
@@ -51,12 +51,23 @@
 
 -type role() :: binary().
 
+-type status() ::
+    #{
+        audio => boolean,
+        video => boolean
+    }.
+
+-type candidate() :: binary().
+
 
 -type event() ::
     {member_added, Member::nkdomain:obj_id(), [Role::role()], SessId::nkdomain:obj_id(), pid()} |
     {member_removed, Member::nkdomain:obj_id(), [Role::role()], SessId::nkdomain:obj_id()} |
     {member_down, Member::nkdomain:obj_id(), [Role::role()]} |
-    {call_hangup, Reason::term()}.
+    {call_hangup, Reason::term()} |
+    {new_candidate, binary()} |
+    {member_status, Member::nkdomain:obj_id(), status()}.
+
 
 %% ===================================================================
 %% Public
@@ -100,16 +111,16 @@ hangup_call_async(SrvId, Id, Reason) ->
     nkdomain_obj:async_op(SrvId, Id, {?MODULE, hangup_call, Reason}).
 
 
--spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id(), [role()], nkdomain:obj_id(), map()) ->
+-spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id(), [role()], nkdomain:obj_id(), status()) ->
     ok | {error, term()}.
 
 add_member(SrvId, Id, Member, Role, SessId, Opts) when is_binary(Role); is_atom(Role) ->
     add_member(SrvId, Id, Member, [nklib_util:to_binary(Role)], SessId, Opts);
 
-add_member(SrvId, Id, Member, Roles, SessId, Opts) when is_list(Roles) ->
+add_member(SrvId, Id, Member, Roles, SessId, Status) when is_list(Roles) ->
     case nkdomain_lib:find(SrvId, Member) of
         #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
-            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, add_member, MemberId, Roles, SessId, self(), Opts});
+            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, add_member, MemberId, Roles, SessId, self(), Status});
         #obj_id_ext{} ->
             {error, member_invalid};
         {error, object_not_found} ->
@@ -201,32 +212,21 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
     end.
 
 
-%%%% @doc
-%%add_invite_op(SrvId, CallId, Callee, Base) ->
-%%    case nkdomain_lib:find(SrvId, Callee) of
-%%        #obj_id_ext{obj_id=CalleeId} ->
-%%            nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, add_invite_op, CalleeId, Base});
-%%        {error, Error} ->
-%%            {error, Error}
-%%    end.
+%% @doc
+-spec send_candidate(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id(), candidate()) ->
+    ok | {error, term()}.
+
+send_candidate(SrvId, CallId, MemberId, Candidate) ->
+    nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, send_candidate, MemberId, Candidate}).
 
 
-%%%% @doc
-%%perform_op(SrvId, #{?MEDIA_CALL:=#{<<"add_member_op">>:=Op}}) ->
-%%    #{
-%%        <<"conversation_id">> := CallId,
-%%        <<"member_id">> := MemberId,
-%%        <<"user_id">> := _UserId
-%%    } = Op,
-%%    case add_member(SrvId, CallId, MemberId) of
-%%        {ok, _MemberId} ->
-%%            ok;
-%%        {error, Error} ->
-%%            {error, Error}
-%%    end;
-%%
-%%perform_op(_SrvId, _Data) ->
-%%    {error, operation_token_invalid}.
+%% @doc
+-spec set_status(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id(), status()) ->
+    ok | {error, term()}.
+
+set_status(SrvId, CallId, MemberId, Status) ->
+    nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, set_status, MemberId, Status}).
+
 
 
 %% =================================================================
@@ -237,7 +237,8 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
     added_time :: nkdomain:timestamp(),
     roles :: [role()],
     session_id :: nkdomain:obj_id(),
-    session_pid :: pid()
+    session_pid :: pid(),
+    status :: status()
 }).
 
 -record(session, {
@@ -312,17 +313,17 @@ object_create(SrvId, Obj) ->
 
 %% @private
 object_send_event(Event, State) ->
-    nkchat_conversation_obj_events:event(Event, State).
+    nkchat_media_call_events:event(Event, State).
 
 
 %% @private
 object_api_syntax(Cmd, Syntax) ->
-    nkchat_conversation_obj_syntax:api(Cmd, Syntax).
+    nkchat_media_call_obj_syntax:api(Cmd, Syntax).
 
 
 %% @private
 object_api_cmd(Cmd, Req) ->
-    nkchat_conversation_obj_api:cmd(Cmd, Req).
+    nkchat_media_call_obj_cmd:cmd(Cmd, Req).
 
 
 %% @private
@@ -419,6 +420,36 @@ object_sync_op({?MODULE, hangup_call, Reason}, _From, State) ->
     State2 = do_event_all_sessions({call_hangup, Reason}, State),
     {stop, normal, ok, State2};
 
+object_sync_op({?MODULE, send_candidate, MemberId, Candidate}, _From, State) ->
+    Members = get_members(State),
+    Reply = case maps:find(MemberId, Members) of
+        error ->
+            {error, member_not_found};
+        {ok, _Member} ->
+            Members2 = maps:remove(MemberId, Members),
+            case maps:to_list(Members2) of
+                [{_, #member{session_pid=Pid}}] ->
+                    do_event_session(Pid, {new_candidate, Candidate}, State),
+                    ok;
+                O ->
+                    {error, {call_is_not_one2one, O}}
+            end
+    end,
+    {reply, Reply, State};
+
+object_sync_op({?MODULE, set_status, MemberId, Status}, _From, State) ->
+    Members = get_members(State),
+    case maps:find(MemberId, Members) of
+        error ->
+            {reply, {error, member_not_found}, State};
+        {ok, #member{status=Status0}=Member} ->
+            Member2 = Member#member{status=maps:merge(Status0, Status)},
+            State2 = set_members(Members#{MemberId => Member2}, State),
+            #?STATE{} = State2,
+            State3 = do_event_all_sessions({member_status, MemberId, Status}, State2),
+            {reply, ok, State3}
+    end;
+
 object_sync_op(_Op, _From, _State) ->
     continue.
 
@@ -441,23 +472,6 @@ object_link_down(_Link, State) ->
     {ok, State}.
 
 
-%%%% @private
-%%object_event({member_added, MemberId, Roles, _SessId, _Pid}, State) ->
-%%    {ok, do_event_all_sessions({member_added, MemberId, Roles}, State)};
-%%
-%%object_event({member_removed, MemberId, Roles, _SessId}, State) ->
-%%    {ok, do_event_all_sessions({member_removed, MemberId, Roles}, State)};
-%%
-%%object_event({member_down, MemberId, Roles}, State) ->
-%%    {ok, do_event_all_sessions({member_down, MemberId, Roles}, State)};
-%%
-%%object_event({call_hangup, Reason}, State) ->
-%%    {ok, do_event_all_sessions({call_hangup, Reason}, State)};
-%%
-%%object_event(_Event, State) ->
-%%    {ok, State}.
-
-
 %% @private
 object_handle_info({?MODULE, member_down_check, MemberId}, State) ->
     Members = get_members(State),
@@ -477,28 +491,8 @@ object_handle_info(_Info, _State) ->
 %% Internal
 %% ===================================================================
 
-%%do_one2one_invite(_CalleeId, Base, State) ->
-%%    #?STATE{id=#obj_id_ext{obj_id=CallId}} = State,
-%%    Members = get_members(State),
-%%    case maps:to_list(Members) of
-%%        [{CallerId, #member{call_opts=#{sdp:=SDP}}}] ->
-%%            Op = Base#{
-%%                ?MEDIA_CALL => #{
-%%                    <<"invite_op">> => #{
-%%                        <<"call_id">> => CallId,
-%%                        <<"caller_id">> =>  CallerId,
-%%                        <<"sdp">> => SDP
-%%                    }
-%%                }
-%%            },
-%%            {ok, Op};
-%%        _ ->
-%%            {error, operation_invalid}
-%%    end.
-
-
 %% @private
-do_add_member(MemberId, Roles, SessId, Pid, _Opts, State) ->
+do_add_member(MemberId, Roles, SessId, Pid, Status, State) ->
     Members = get_members(State),
     case maps:find(MemberId, Members) of
         error ->
@@ -506,7 +500,8 @@ do_add_member(MemberId, Roles, SessId, Pid, _Opts, State) ->
                 roles = Roles,
                 added_time = nkdomain_util:timestamp(),
                 session_id = SessId,
-                session_pid = Pid
+                session_pid = Pid,
+                status = Status
             },
             Members2 = Members#{MemberId => Member},
             State2 = set_members(Members2, State),
@@ -575,19 +570,26 @@ do_event(Event, State) ->
 
 
 %% @private
-do_event_all_sessions(Event, #?STATE{id=#obj_id_ext{obj_id=CallId}}=State) ->
+do_event_all_sessions(Event, State) ->
     Members = get_members(State),
-    do_event_all_sessions(CallId, maps:to_list(Members), Event, State),
-    do_event(Event, State).
+    State2 = do_event_all_sessions(maps:to_list(Members), Event, State),
+    do_event(Event, State2).
 
 
 %% @private
-do_event_all_sessions(_CallId, [], _Event, State) ->
+do_event_all_sessions([], _Event, State) ->
     State;
 
-do_event_all_sessions(CallId, [{_MemberId, #member{session_pid=Pid}}|Rest], Event, State) ->
-    nkchat_media_session_obj:call_event(Pid, CallId, Event),
-    do_event_all_sessions(CallId, Rest, Event, State).
+do_event_all_sessions([{_MemberId, #member{session_pid=Pid}}|Rest], Event, #?STATE{}=State) ->
+    do_event_session(Pid, Event, State),
+    do_event_all_sessions(Rest, Event, State).
+
+
+%% @private
+do_event_session(Pid, Event, #?STATE{id=#obj_id_ext{obj_id=CallId}}) ->
+    nkchat_media_session_obj:call_event(Pid, CallId, Event).
+
+
 
 
 %% @private
