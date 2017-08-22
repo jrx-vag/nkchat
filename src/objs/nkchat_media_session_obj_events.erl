@@ -41,7 +41,7 @@ event({invite_removed, InviteId, Reason}, State) ->
     {event, {invite_removed, #{invite_id=>InviteId, reason=>Reason}}, State};
 
 event({invite_accepted, InviteId, CallId, AcceptOpts}, State) ->
-    {event, {invite_accepted, #{invite_id=>InviteId, call_id=>CallId, call_opts=>AcceptOpts}}, State};
+    {event, {invite_accepted, #{invite_id=>InviteId, call_id=>CallId, call_data=>AcceptOpts}}, State};
 
 event({member_added, CallId, MemberId, Roles}, State) ->
     {event, {member_added, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
