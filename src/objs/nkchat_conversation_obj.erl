@@ -781,9 +781,14 @@ do_add_member(MemberId, State) ->
                 added_time = nkdomain_util:timestamp()
             },
             State2 = set_member(MemberId, Member, State),
-            State3 = set_obj_name_members(State2),
-            State4 = do_event({member_added, MemberId}, State3),
-            do_event({added_to_conversation, MemberId}, State4);
+            case set_obj_name_members(State2) of
+                {ok, State3} ->
+                    State4 = do_event({member_added, MemberId}, State3),
+                    State5 = do_event({added_to_conversation, MemberId}, State4),
+                    {ok, State5};
+                {error, Error} ->
+                    {error, Error}
+            end;
         {true, _} ->
             {error, member_already_present}
     end.
