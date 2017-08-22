@@ -306,8 +306,12 @@ object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #?STATE{session=
     #session{user_id=UserId} = Session,
     case get_conv_pid(ConvId, State) of
         {ok, Pid} ->
-            {ok, Info} = nkchat_conversation_obj:get_member_info(any, Pid, UserId),
-            {reply, {ok, Info}, State};
+            case nkchat_conversation_obj:get_member_info(any, Pid, UserId) of
+                {ok, Info} -> 
+                    {reply, {ok, Info}, State};
+                {error, Error} ->
+                    {reply, {error, Error}, State}
+            end;
         not_found ->
             {reply, {error, conversation_not_found}, State}
     end;
