@@ -23,7 +23,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([start/4, get_calls/2, get_call_info/3]).
+-export([start/4, get_calls/2, get_call_info/3, launch_notifications/2]).
 -export([invite/4, cancel_invite/3, accept_invite/4, reject_invite/3, call_hangup/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_cmd/2]).
@@ -135,6 +135,11 @@ cancel_invite(SrvId, Id, InviteId) ->
         {error, Error} ->
             {error, Error}
     end.
+
+
+%% @doc
+launch_notifications(SrvId, Id) ->
+    nkdomain_obj:async_op(SrvId, Id, {?MODULE, launch_notifications}).
 
 
 %% @doc
@@ -424,6 +429,11 @@ object_sync_op(_Op, _From, _State) ->
 object_async_op({?MODULE, call_event, CallId, Event}, State) ->
     State2 = do_call_event(Event, CallId, State),
     {noreply, State2};
+
+object_async_op({?MODULE, launch_notifications}, State) ->
+    #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
+    nkdomain_user_obj:launch_session_notifications(SrvId, UserId, SessId),
+    {noreply, State};
 
 object_async_op({?MODULE, notify_fun, {token_created, InviteId, Msg}}, State) ->
     #{

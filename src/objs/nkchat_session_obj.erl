@@ -23,7 +23,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([start/4, get_conversations/2, get_conversation_info/3]).
+-export([start/4, get_conversations/2, get_conversation_info/3, launch_notifications/2]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
 -export([conversation_event/4, send_invitation/5, accept_invitation/3, reject_invitation/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
@@ -97,6 +97,11 @@ start(SrvId, DomainId, UserId, Opts) ->
         {error, Error} ->
             {error, Error}
     end.
+
+
+%% @doc
+launch_notifications(SrvId, Id) ->
+    nkdomain_obj:async_op(SrvId, Id, {?MODULE, launch_notifications}).
 
 
 %% @doc
@@ -417,6 +422,11 @@ object_async_op({?MODULE, notify_fun, {token_created, TokenId, Msg}}, State) ->
             ?LLOG(warning, "unexpected notify: ~p", [Msg], State),
             {noreply, State}
     end;
+
+object_async_op({?MODULE, launch_notifications}, State) ->
+    #?STATE{srv_id=SrvId, id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
+    nkdomain_user_obj:launch_session_notifications(SrvId, UserId, SessId),
+    {noreply, State};
 
 object_async_op({?MODULE, notify_fun, {token_removed, TokenId, Reason}}, State) ->
     State2 = do_event({remove_notification, TokenId, Reason}, State),

@@ -96,5 +96,10 @@ api(<<"reject_invite">>, Syntax) ->
         '__mandatory' => [invite_id]
     };
 
+api(<<"launch_notifications">>, Syntax) ->
+    Syntax#{
+        id => binary
+    };
+
 api(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_SESSION, Syntax).

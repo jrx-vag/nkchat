@@ -82,6 +82,14 @@ cmd(<<"stop">>, #nkreq{data=Data, srv_id=SrvId, user_state=_UserState}=Req) ->
             {error, Error}
     end;
 
+cmd(<<"launch_notifications">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
+        {ok, Id} ->
+            nkchat_session_obj:launch_notifications(SrvId, Id);
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(<<"get_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
