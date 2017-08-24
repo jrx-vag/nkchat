@@ -60,7 +60,7 @@ event({call_hangup, CallId, Reason}, State) ->
     {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
 
 event({new_candidate, CallId, #sdp_candidate{mid=MId, index=Index, candidate=Candidate}}, State) ->
-    {event, {new_candidate, #{call_id=>CallId, sdp_mid=>MId, sdp_line_index=>Index, sdp_candidate=>Candidate}}, State};
+    {event, {new_candidate, #{call_id=>CallId, sdp_mid=>MId, sdp_line_index=>Index, candidate=>Candidate}}, State};
 
 event({member_status, CallId, MemberId, Status}, State) ->
     {event, {member_status, #{call_id=>CallId, member_id=>MemberId, status=>Status}}, State};

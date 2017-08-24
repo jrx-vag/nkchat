@@ -65,8 +65,8 @@ api(<<"send_candidate">>, Syntax) ->
         id => binary,
         sdp_mid => binary,
         sdp_line_index => binary,
-        sdp_candidate => binary,
-        '__mandatory' => [id, sdp_mid, sdp_line_index, sdp_candidate]
+        candidate => binary,
+        '__mandatory' => [id, sdp_mid, sdp_line_index, candidate]
     };
 
 api(<<"send_candidate_end">>, Syntax) ->

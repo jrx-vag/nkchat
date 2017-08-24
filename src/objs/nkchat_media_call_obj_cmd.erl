@@ -84,7 +84,7 @@ cmd(<<"find_calls_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
     end;
 
 cmd(<<"send_candidate">>, #nkreq{data=Data, srv_id=SrvId, user_id=MemberId}) ->
-    #{id:=CallId, sdp_mid:=MId, sdp_line_index:=Index, sdp_candidate:=Line} = Data,
+    #{id:=CallId, sdp_mid:=MId, sdp_line_index:=Index, candidate:=Line} = Data,
     Candidate = #sdp_candidate{mid=MId, index=Index, candidate=Line},
     nkchat_media_call_obj:send_candidate(SrvId, CallId, MemberId, Candidate);
 

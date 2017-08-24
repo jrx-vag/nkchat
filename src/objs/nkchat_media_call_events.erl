@@ -49,7 +49,7 @@ event({member_down, MemberId, Roles}, State) ->
     {event, {member_down, #{member_id=>MemberId, roles=>Roles}}, State};
 
 event({new_candidate, #sdp_candidate{mid=MId, index=Index, candidate=Candidate}}, State) ->
-    {event, {new_candidate, #{sdp_mid=>MId, sdp_line_index=>Index, sdp_candidate=>Candidate}}, State};
+    {event, {new_candidate, #{sdp_mid=>MId, sdp_line_index=>Index, candidate=>Candidate}}, State};
 
 event({member_status, MemberId, Status}, State) ->
     {event, {member_status, #{member_id=>MemberId, status=>Status}}, State};
