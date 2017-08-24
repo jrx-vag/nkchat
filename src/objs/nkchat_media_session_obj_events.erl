@@ -24,6 +24,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -export([event/2]).
 
+-include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
 
 
@@ -58,8 +59,8 @@ event({call_created, InviteId, CallId, _CallOpts}, State) ->
 event({call_hangup, CallId, Reason}, State) ->
     {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
 
-event({new_candidate, CallId, Candidate}, State) ->
-    {event, {new_candidate, #{call_id=>CallId, candidate=>Candidate}}, State};
+event({new_candidate, CallId, #sdp_candidate{mid=MId, index=Index, candidate=Candidate}}, State) ->
+    {event, {new_candidate, #{call_id=>CallId, sdp_mid=>MId, sdp_line_index=>Index, sdp_candidate=>Candidate}}, State};
 
 event({member_status, CallId, MemberId, Status}, State) ->
     {event, {member_status, #{call_id=>CallId, member_id=>MemberId, status=>Status}}, State};

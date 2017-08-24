@@ -37,7 +37,11 @@
 %% Records
 %% ===================================================================
 
-
+-record(sdp_candidate, {
+    mid = <<>>,
+    index = <<>>,
+    candidate = <<>>              %% <<>> means end
+}).
 
 
 -endif.

@@ -57,15 +57,13 @@
         video => boolean
     }.
 
--type candidate() :: binary().
-
 
 -type event() ::
     {member_added, Member::nkdomain:obj_id(), [Role::role()], SessId::nkdomain:obj_id(), pid()} |
     {member_removed, Member::nkdomain:obj_id(), [Role::role()], SessId::nkdomain:obj_id()} |
     {member_down, Member::nkdomain:obj_id(), [Role::role()]} |
     {call_hangup, Reason::term()} |
-    {new_candidate, binary()} |
+    {new_candidate, #sdp_candidate{}} |     %% sdp_candidate.candidate = <<>> for end
     {member_status, Member::nkdomain:obj_id(), status()}.
 
 
@@ -213,7 +211,7 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
 
 
 %% @doc
--spec send_candidate(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id(), candidate()) ->
+-spec send_candidate(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id(), #sdp_candidate{}) ->
     ok | {error, term()}.
 
 send_candidate(SrvId, CallId, MemberId, Candidate) ->

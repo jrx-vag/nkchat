@@ -63,8 +63,16 @@ api(<<"find_calls_with_members">>, Syntax) ->
 api(<<"send_candidate">>, Syntax) ->
     Syntax#{
         id => binary,
-        candidate => binary,
-        '__mandatory' => [id, candidate]
+        sdp_mid => binary,
+        sdp_line_index => binary,
+        sdp_candidate => binary,
+        '__mandatory' => [id, sdp_mid, sdp_line_index, sdp_candidate]
+    };
+
+api(<<"send_candidate_end">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        '__mandatory' => [id]
     };
 
 api(<<"set_status">>, Syntax) ->

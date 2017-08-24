@@ -84,8 +84,14 @@ cmd(<<"find_calls_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
     end;
 
 cmd(<<"send_candidate">>, #nkreq{data=Data, srv_id=SrvId, user_id=MemberId}) ->
-    #{id:=CallId, candidate:=Candidate} = Data,
+    #{id:=CallId, sdp_mid:=MId, sdp_line_index:=Index, sdp_candidate:=Line} = Data,
+    Candidate = #sdp_candidate{mid=MId, index=Index, candidate=Line},
     nkchat_media_call_obj:send_candidate(SrvId, CallId, MemberId, Candidate);
+
+cmd(<<"send_candidate_end">>, #nkreq{data=Data, srv_id=SrvId, user_id=MemberId}) ->
+    #{id:=CallId} = Data,
+    nkchat_media_call_obj:send_candidate(SrvId, CallId, MemberId, #sdp_candidate{});
+
 
 cmd(<<"set_status">>, #nkreq{data=#{id:=CallId}=Data, srv_id=SrvId, user_id=MemberId}) ->
     Opts = maps:with([audio, video], Data),
