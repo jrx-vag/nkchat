@@ -31,7 +31,7 @@
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2]).
 -export([object_admin_info/0]).
--export([notify_fun/5]).
+-export([notify_fun/2]).
 
 -export_type([meta/0, event/0]).
 
@@ -198,9 +198,12 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
 
 
 %% @private To be called from nkdomain_user_obj
-notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
+-spec notify_fun(pid(), nkdomain_user_obj:notify_msg()) ->
+    any.
+
+notify_fun(Pid, Notify) ->
     % lager:error("NKLOG SESS FUN ~p ~p", [Op, Msg]),
-    nkdomain_obj:async_op(any, Pid, {?MODULE, notify, TokenId, Msg, Op}).
+    nkdomain_obj:async_op(any, Pid, {?MODULE, notify_fun, Notify}).
 
 
 
@@ -286,7 +289,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         end,
         State2,
         Convs1),
-    Opts = #{notify_fun => fun ?MODULE:notify_fun/5},
+    Opts = #{notify_fun => fun ?MODULE:notify_fun/2},
     ok = nkdomain_user_obj:register_session(SrvId, UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State3),
     {ok, State4}.
@@ -397,7 +400,7 @@ object_async_op({?MODULE, conversation_event, ConvId, Event}, State) ->
             {noreply, State}
     end;
 
-object_async_op({?MODULE, notify, TokenId, Msg, Op}, State) ->
+object_async_op({?MODULE, notify_fun, {token_created, TokenId, Msg}}, State) ->
     case Msg of
         #{
             ?CHAT_SESSION := #{
@@ -408,17 +411,16 @@ object_async_op({?MODULE, notify, TokenId, Msg, Op}, State) ->
                 }
             }
         } ->
-            Event = case Op of
-                created ->
-                    {invited_to_conversation, TokenId, UserId, ConvId};
-                {removed, Reason} ->
-                    {remove_notification, TokenId, Reason}
-            end,
-            {noreply, do_event(Event, State)};
+            State2 = do_event({invited_to_conversation, TokenId, UserId, ConvId}, State),
+            {noreply, State2};
         _ ->
             ?LLOG(warning, "unexpected notify: ~p", [Msg], State),
             {noreply, State}
     end;
+
+object_async_op({?MODULE, notify_fun, {token_removed, TokenId, Reason}}, State) ->
+    State2 = do_event({remove_notification, TokenId, Reason}, State),
+    {noreply, State2};
 
 object_async_op(_Op, _State) ->
     continue.

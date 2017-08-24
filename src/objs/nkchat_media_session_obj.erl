@@ -30,7 +30,7 @@
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2]).
 -export([object_admin_info/0, object_link_down/2, object_handle_info/2]).
--export([call_event/3, notify_fun/5]).
+-export([call_event/3, notify_fun/2]).
 
 -export_type([event/0]).
 
@@ -195,9 +195,12 @@ call_event(Pid, CallId, Event) ->
 
 
 %% @private To be called from nkdomain_user_obj
-notify_fun(_SessId, Pid, TokenId, Msg, Op) ->
+-spec notify_fun(pid(), nkdomain_user_obj:notify_msg()) ->
+    any.
+
+notify_fun(Pid, Notify) ->
     % lager:error("NKLOG SESS FUN ~p ~p", [Op, Msg]),
-    nkdomain_obj:async_op(any, Pid, {?MODULE, notify_fun, TokenId, Msg, Op}).
+    nkdomain_obj:async_op(any, Pid, {?MODULE, notify_fun, Notify}).
 
 
 
@@ -291,7 +294,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
 %%        end,
 %%        State2,
 %%        Calls1),
-    Opts = #{notify_fun => fun ?MODULE:notify_fun/5},
+    Opts = #{notify_fun => fun ?MODULE:notify_fun/2},
     ok = nkdomain_user_obj:register_session(SrvId, UserId, DomainId, ?MEDIA_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State2),
     {ok, State4}.
@@ -422,29 +425,23 @@ object_async_op({?MODULE, call_event, CallId, Event}, State) ->
     State2 = do_call_event(Event, CallId, State),
     {noreply, State2};
 
-object_async_op({?MODULE, notify_fun, InviteId, Msg, Op}, State) ->
-    case Msg of
-        #{
-            ?MEDIA_SESSION := #{
-                <<"invite_op">> := #{
-                    <<"caller_id">> := CallerId,
-                    <<"caller_session_id">> := _SessId,
-                    <<"callee_id">> := _CalleeId,
-                    <<"invite_opts">> := InviteOpts
-                }
+object_async_op({?MODULE, notify_fun, {token_created, InviteId, Msg}}, State) ->
+    #{
+        ?MEDIA_SESSION := #{
+            <<"invite_op">> := #{
+                <<"caller_id">> := CallerId,
+                <<"caller_session_id">> := _SessId,
+                <<"callee_id">> := _CalleeId,
+                <<"invite_opts">> := InviteOpts
             }
-        } ->
-            State2 = case Op of
-                created ->
-                    do_event({invite, InviteId, CallerId, InviteOpts}, State);
-                {removed, Reason} ->
-                    do_event({invite_removed, InviteId, Reason}, State)
-            end,
-            {noreply, State2};
-        _ ->
-            ?LLOG(warning, "unexpected notify: ~p", [Msg], State),
-            {noreply, State}
-    end;
+        }
+    } = Msg,
+    State2 = do_event({invite, InviteId, CallerId, InviteOpts}, State),
+    {noreply, State2};
+
+object_async_op({?MODULE, notify_fun, {token_removed, InviteId, Reason}}, State) ->
+    State2 = do_event({invite_removed, InviteId, Reason}, State),
+    {noreply, State2};
 
 object_async_op(_Op, _State) ->
     continue.
