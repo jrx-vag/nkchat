@@ -65,8 +65,8 @@ event({new_candidate, CallId, #sdp_candidate{mid=MId, index=Index, candidate=Can
 event({member_status, CallId, MemberId, Status}, State) ->
     {event, {member_status, #{call_id=>CallId, member_id=>MemberId, status=>Status}}, State};
 
-event(_Event, #?STATE{parent_id=ParentId}=State) ->
-    lager:warning("NKLOG Media Event (~s) ~p", [ParentId, _Event]),
+event(_Event, #?STATE{parent_id=_ParentId}=State) ->
+    %%lager:warning("NKLOG Media Event (~s) ~p", [_ParentId, _Event]),
     {ok, State}.
 
 
