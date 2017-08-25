@@ -100,5 +100,10 @@ api(<<"launch_notifications">>, Syntax) ->
         id => binary
     };
 
+api(<<"wakeup">>, Syntax) ->
+    Syntax#{
+        id => binary
+    };
+
 api(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_SESSION, Syntax).

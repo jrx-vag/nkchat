@@ -25,11 +25,11 @@
 
 -export([start/4, get_conversations/2, get_conversation_info/3, launch_notifications/2]).
 -export([set_active_conversation/3, add_conversation/3, remove_conversation/3]).
--export([conversation_event/4, send_invitation/5, accept_invitation/3, reject_invitation/3]).
+-export([conversation_event/4, send_invitation/5, accept_invitation/3, reject_invitation/3, wakeup/2]).
 -export([object_info/0, object_es_mapping/0, object_parse/3,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
-         object_sync_op/3, object_async_op/2]).
+         object_sync_op/3, object_async_op/2, object_handle_info/2]).
 -export([object_admin_info/0]).
 -export([notify_fun/2, presence_fun/2]).
 
@@ -40,6 +40,7 @@
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
 -include_lib("nkevent/include/nkevent.hrl").
 
+-define(INACTIVITY_TIMER, 10).
 
 %% ===================================================================
 %% Types
@@ -194,6 +195,11 @@ reject_invitation(SrvId, _SessId, TokenId) ->
     end.
 
 
+%% @doc
+wakeup(SrvId, Id) ->
+    nkdomain_obj:async_op(SrvId, Id, {?MODULE, wakeup}).
+
+
 %% @doc Called from nkchat_conversation_obj
 -spec conversation_event(nkservice:id(), nkdomain:obj_id(), meta(), term()) ->
     ok.
@@ -219,10 +225,20 @@ presence_fun(_UserId, []) ->
     lager:notice("NKLOG Chat Presence down"),
     {ok, #{status=><<"offline">>}};
 
-presence_fun(_UserId, _List) ->
-    lager:notice("NKLOG Chat Presence up: ~p", [_List]),
-    {ok, #{status=><<"online">>}}.
-
+presence_fun(_UserId, List) ->
+    lager:notice("NKLOG Chat Presence up: ~p", [List]),
+    Status = case lists:member(<<"online">>, List) of
+        true ->
+            <<"online">>;
+        false ->
+            case lists:member(<<"inactive">>, List) of
+                true ->
+                    <<"inactive">>;
+                false ->
+                    <<"offline">>
+            end
+    end,
+    {ok, #{status=>Status}}.
 
 
 %% ===================================================================
@@ -232,7 +248,9 @@ presence_fun(_UserId, _List) ->
 -record(session, {
     user_id :: nkdomain:obj_id(),
     conv_pids :: #{nkdomain:obj_id() => {Data::map(), pid()}},
-    active_id :: undefined | nkdomain:obj_id()
+    active_id :: undefined | nkdomain:obj_id(),
+    user_is_active :: boolean(),
+    timer :: reference()
 }).
 
 
@@ -291,7 +309,8 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     #{parent_id := UserId} = Obj,
     Session = #session{
         user_id = UserId,
-        conv_pids = #{}
+        conv_pids = #{},
+        user_is_active = true
     },
     State2 = State#?STATE{session=Session},
     {ok, Convs1} = nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, UserId),
@@ -314,7 +333,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     },
     ok = nkdomain_user_obj:register_session(SrvId, UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State3),
-    {ok, State4}.
+    {ok, restart_timer(State4)}.
 
 
 %% @private
@@ -342,11 +361,12 @@ object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #?STATE{session=
     end;
 
 object_sync_op({?MODULE, set_active_conv, ConvId}, _From, State) ->
-    case get_conv_pid(ConvId, State) of
+    State2 = set_user_active(State),
+    case get_conv_pid(ConvId, State2) of
         {ok, _} ->
-            {reply, ok, do_set_active_conv(ConvId, State)};
+            {reply, ok, do_set_active_conv(ConvId, State2)};
         not_found ->
-            {reply, {error, conversation_not_found}, State}
+            {reply, {error, conversation_not_found}, State2}
     end;
 
 object_sync_op({?MODULE, add_conv, ConvId}, _From, State) ->
@@ -445,6 +465,9 @@ object_async_op({?MODULE, launch_notifications}, State) ->
     nkdomain_user_obj:launch_session_notifications(SrvId, UserId, SessId),
     {noreply, State};
 
+object_async_op({?MODULE, wakeup}, State) ->
+    {noreply, set_user_active(State)};
+
 object_async_op({?MODULE, notify_fun, {token_removed, TokenId, Reason}}, State) ->
     State2 = do_event({remove_notification, TokenId, Reason}, State),
     {noreply, State2};
@@ -452,6 +475,14 @@ object_async_op({?MODULE, notify_fun, {token_removed, TokenId, Reason}}, State) 
 object_async_op(_Op, _State) ->
     continue.
 
+
+%% @private
+object_handle_info({?MODULE, inactivity}, State) ->
+    State2 = set_user_active(false, State),
+    {noreply, State2};
+
+object_handle_info(_Msg, _State) ->
+    continue.
 
 
 %% ===================================================================
@@ -564,3 +595,38 @@ get_conv_pid(ConvId, #?STATE{session=Session}) ->
 %% @private
 do_event(Event, State) ->
     nkdomain_obj_util:event(Event, State).
+
+
+
+%% @private
+set_user_active(State) ->
+    set_user_active(true, State).
+
+
+%% @private
+set_user_active(Active, #?STATE{session=#session{user_is_active=Active}} = State) ->
+    State;
+
+set_user_active(Active, #?STATE{srv_id=SrvId, id=Id, parent_id=UserId, session=Session} = State) ->
+    #obj_id_ext{obj_id=SessId} = Id,
+    Presence = case Active of
+        true -> <<"online">>;
+        false -> <<"inactive">>
+    end,
+    nkdomain_user_obj:update_presence(SrvId, UserId, SessId, Presence),
+    Session2 = Session#session{user_is_active=Active},
+    State2 = State#?STATE{session=Session2},
+    case Active of
+        true ->
+            restart_timer(State2);
+        false ->
+            State2
+    end.
+
+
+%% @private
+restart_timer(#?STATE{session=#session{timer=Timer}=Session}=State) ->
+    nklib_util:cancel_timer(Timer),
+    Timer2 = erlang:send_after(?INACTIVITY_TIMER*1000, self(), {?MODULE, inactivity}),
+    Session2 = Session#session{timer=Timer2},
+    State#?STATE{session=Session2}.

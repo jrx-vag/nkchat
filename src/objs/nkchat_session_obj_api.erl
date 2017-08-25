@@ -185,6 +185,14 @@ cmd(<<"reject_invitation">>, #nkreq{data=#{token:=TokenId}=Data, srv_id=SrvId}=R
             {error, Error}
     end;
 
+cmd(<<"wakeup">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
+        {ok, Id} ->
+            nkchat_session_obj:wakeup(SrvId, Id);
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(Cmd, Req) ->
     nkdomain_obj_api:api(Cmd, ?CHAT_SESSION, Req).
 
