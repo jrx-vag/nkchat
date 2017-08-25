@@ -89,9 +89,9 @@ cmd(<<"find_conversations_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) 
         {ok, DomainId} ->
             #{member_ids:=MemberIds} = Data,
             case nkchat_conversation_obj:find_conversations_with_members(SrvId, DomainId, MemberIds) of
-                {ok, List} ->
+                {ok, Total, List} ->
                     List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type}<-List],
-                    {ok, #{<<"data">>=>List2}};
+                    {ok, #{<<"total">> => Total, <<"data">>=>List2}};
                 {error, Error} ->
                     {error, Error}
             end;
