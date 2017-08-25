@@ -197,11 +197,11 @@ find_conversations_with_members(SrvId, Domain, MemberIds) ->
                 size => 9999
             },
             case nkdomain:search(SrvId, Search2) of
-                {ok, _N, List, _Meta} ->
+                {ok, N, List, _Meta} ->
                     List2 = lists:map(
                         fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
                         List),
-                    {ok, List2};
+                    {ok, N, List2};
                 {error, Error} ->
                     {error, Error}
             end;
