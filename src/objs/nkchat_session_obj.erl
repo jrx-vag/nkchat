@@ -31,7 +31,7 @@
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2]).
 -export([object_admin_info/0]).
--export([notify_fun/2]).
+-export([notify_fun/2, presence_fun/2]).
 
 -export_type([meta/0, event/0]).
 
@@ -211,6 +211,19 @@ notify_fun(Pid, Notify) ->
     nkdomain_obj:async_op(any, Pid, {?MODULE, notify_fun, Notify}).
 
 
+%% @private To be called from nkdomain_user_obj
+-spec presence_fun(nkdomain:user_id(), [nkdomain_user_obj:session_presence()]) ->
+    {ok, nkdomain_user_obj:user_presence()}.
+
+presence_fun(_UserId, []) ->
+    lager:notice("NKLOG Chat Presence down"),
+    {ok, <<"offline">>};
+
+presence_fun(_UserId, _List) ->
+    lager:notice("NKLOG Chat Presence up: ~p", [_List]),
+    {ok, <<"online">>}.
+
+
 
 %% ===================================================================
 %% nkdomain_obj behaviour
@@ -294,7 +307,11 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         end,
         State2,
         Convs1),
-    Opts = #{notify_fun => fun ?MODULE:notify_fun/2},
+    Opts = #{
+        notify_fun => fun ?MODULE:notify_fun/2,
+        presence_fun => fun ?MODULE:presence_fun/2,
+        presence => <<"online">>
+    },
     ok = nkdomain_user_obj:register_session(SrvId, UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State3),
     {ok, State4}.
