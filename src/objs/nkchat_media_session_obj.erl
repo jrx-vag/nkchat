@@ -414,7 +414,7 @@ object_sync_op({?MODULE, call_hangup, CallId}, _From, #?STATE{srv_id=SrvId}=Stat
         #call{pid=Pid, role=Role} ->
             Reason = case Role of
                 caller -> caller_hangup;
-                callee -> calee_hangup
+                callee -> callee_hangup
             end,
             Reply = nkchat_media_call_obj:hangup_call(SrvId, Pid, Reason),
             {reply, Reply, State};
