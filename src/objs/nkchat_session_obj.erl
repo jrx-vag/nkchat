@@ -217,11 +217,11 @@ notify_fun(Pid, Notify) ->
 
 presence_fun(_UserId, []) ->
     lager:notice("NKLOG Chat Presence down"),
-    {ok, <<"offline">>};
+    {ok, #{status=><<"offline">>}};
 
 presence_fun(_UserId, _List) ->
     lager:notice("NKLOG Chat Presence up: ~p", [_List]),
-    {ok, <<"online">>}.
+    {ok, #{status=><<"online">>}}.
 
 
 
