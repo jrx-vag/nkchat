@@ -216,7 +216,7 @@ table_filter([_|Rest], Filter, Acc) ->
 table_iter([], _Pos, Acc, _Session) ->
     lists:reverse(Acc);
 
-table_iter([Entry|Rest], Pos, Acc, #admin_session{srv_id=SrvId}=Session) ->
+table_iter([Entry|Rest], Pos, Acc, Session) ->
     #{
         <<"obj_id">> := ObjId,
         <<"parent_id">> := ParentId,
@@ -234,13 +234,13 @@ table_iter([Entry|Rest], Pos, Acc, #admin_session{srv_id=SrvId}=Session) ->
         true -> <<"">>;
         false -> <<"webix_cell_disabled">>
     end,
-    Conv = case nkdomain_lib:find(SrvId, ParentId) of
+    Conv = case nkdomain_lib:find(ParentId) of
         #obj_id_ext{path=ConvPath} ->
             nkdomain_admin_util:obj_url(ParentId, ConvPath);
         _ ->
             <<>>
     end,
-    User = case nkdomain:get_name(SrvId, CreatedBy) of
+    User = case nkdomain:get_name(CreatedBy) of
         {ok, #{name:=UserName}} ->
             nkdomain_admin_util:obj_url(CreatedBy, UserName);
         _ ->
@@ -250,7 +250,7 @@ table_iter([Entry|Rest], Pos, Acc, #admin_session{srv_id=SrvId}=Session) ->
         <<>> ->
             <<>>;
         _ ->
-            case nkdomain:get_obj(SrvId, MessageFileId) of
+            case nkdomain:get_obj(MessageFileId) of
                 {ok, #{name:=FileName, ?DOMAIN_FILE:=FileObj}} ->
                     #{content_type:=CT, size:=Size} = FileObj,
                     FileTxt = <<FileName/binary, $(, CT/binary, ", ",

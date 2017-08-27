@@ -27,8 +27,8 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/4, update/3]).
--export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2, object_event/2]).
+-export([create/3, update/2]).
+-export([object_info/0, object_es_mapping/0, object_parse/3, object_create/1, object_event/2]).
 -export([object_admin_info/0]).
 -export([syntax_check_file/3]).
 
@@ -41,7 +41,7 @@
 %% Public
 %% ===================================================================
 
-create(SrvId, DomainId, ConvId, Text) ->
+create(DomainId, ConvId, Text) ->
     Obj = #{
         type => ?CHAT_MESSAGE,
         domain_id => DomainId,
@@ -51,11 +51,11 @@ create(SrvId, DomainId, ConvId, Text) ->
             text => Text
         }
     },
-    object_create(SrvId, Obj).
+    object_create(Obj).
 
 
-update(SrvId, MsgId, Text) ->
-    nkdomain:update(SrvId, MsgId, #{?CHAT_MESSAGE => #{text => Text}}).
+update(MsgId, Text) ->
+    nkdomain:update(MsgId, #{?CHAT_MESSAGE => #{text => Text}}).
 
 
 
@@ -106,30 +106,30 @@ object_parse(_SrvId, _Mode, _Obj) ->
 
 
 %% @doc
-object_create(SrvId, #{parent_id:=ConvId}=Obj) ->
-    case nkdomain:get_domain_id(SrvId, ConvId) of
+object_create(#{parent_id:=ConvId}=Obj) ->
+    case nkdomain:get_domain_id(ConvId) of
         {ok, DomainId} ->
-            nkdomain_obj_make:create(SrvId, Obj#{domain_id=>DomainId});
+            nkdomain_obj_make:create(Obj#{domain_id=>DomainId});
         _ ->
             {error, {could_not_load_parent, ConvId}}
     end;
 
-object_create(_SrvId, _Obj) ->
+object_create(_Obj) ->
     {error, {missing_field, <<"parent_id">>}}.
 
 
 %% @private
-object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}=State) ->
+object_event(Event, #?STATE{id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=State) ->
     #{parent_id:=ConvId} = Obj,
     case Event of
         created ->
             Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),
-            ok = nkchat_conversation_obj:message_event(SrvId, ConvId, {created, Msg});
+            ok = nkchat_conversation_obj:message_event(ConvId, {created, Msg});
         deleted ->
-            ok = nkchat_conversation_obj:message_event(SrvId, ConvId, {deleted, ObjId});
+            ok = nkchat_conversation_obj:message_event(ConvId, {deleted, ObjId});
         {updated, _} ->
             Msg = maps:with([obj_id, created_by, created_time, updated_time, ?CHAT_MESSAGE], Obj),
-            ok = nkchat_conversation_obj:message_event(SrvId, ConvId, {updated, Msg});
+            ok = nkchat_conversation_obj:message_event(ConvId, {updated, Msg});
         _ ->
             ok
     end,
@@ -143,9 +143,8 @@ object_event(Event, #?STATE{id=#obj_id_ext{srv_id=SrvId, obj_id=ObjId}, obj=Obj}
 %% Internal
 %% ===================================================================
 
-syntax_check_file(file_id, File, Ctx) ->
-    #{domain_srv_id:=SrvId} = Ctx,
-    case nkdomain_lib:find(SrvId, File) of
+syntax_check_file(file_id, File, _Ctx) ->
+    case nkdomain_lib:find(File) of
         #obj_id_ext{type=?DOMAIN_FILE, obj_id=FileId} ->
             {ok, FileId};
         _ ->

@@ -33,16 +33,16 @@
 %% API
 %% ===================================================================
 
-cmd(<<"add_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:add_member(SrvId, ConvId, MemberId) of
+cmd(<<"add_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}}) ->
+    case nkchat_conversation_obj:add_member(ConvId, MemberId) of
         {ok, MemberObjId} ->
             {ok, #{<<"member_id">>=>MemberObjId}};
         {error, Error} ->
             {error, Error}
     end;
 
-cmd(<<"remove_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:remove_member(SrvId, ConvId, MemberId) of
+cmd(<<"remove_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}}) ->
+    case nkchat_conversation_obj:remove_member(ConvId, MemberId) of
         ok ->
             {ok, #{}};
         {error, Error} ->
@@ -65,12 +65,12 @@ cmd(<<"remove_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}, srv_id=
 %%cmd(<<"reject_invite_token">>, #nkreq{data=#{token:=Token}, srv_id=SrvId}) ->
 %%    nkchat_conversation_obj:reject_token(SrvId, Token);
 
-cmd(<<"find_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+cmd(<<"find_member_conversations">>, #nkreq{data=Data}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
         {ok, DomainId} ->
             case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, Req) of
                 {ok, MemberId} ->
-                    case nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, MemberId) of
+                    case nkchat_conversation_obj:find_member_conversations(DomainId, MemberId) of
                         {ok, List} ->
                             List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type}<-List],
                             {ok, #{<<"data">>=>List2}};
@@ -84,11 +84,11 @@ cmd(<<"find_member_conversations">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
             {error, Error}
     end;
 
-cmd(<<"find_conversations_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) ->
+cmd(<<"find_conversations_with_members">>, #nkreq{data=Data}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
         {ok, DomainId} ->
             #{member_ids:=MemberIds} = Data,
-            case nkchat_conversation_obj:find_conversations_with_members(SrvId, DomainId, MemberIds) of
+            case nkchat_conversation_obj:find_conversations_with_members(DomainId, MemberIds) of
                 {ok, Total, List} ->
                     List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type}<-List],
                     {ok, #{<<"total">> => Total, <<"data">>=>List2}};
@@ -99,16 +99,16 @@ cmd(<<"find_conversations_with_members">>, #nkreq{data=Data, srv_id=SrvId}=Req) 
             {error, Error}
     end;
 
-cmd(<<"get_messages">>, #nkreq{data=#{id:=ConvId}=Data, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:get_messages(SrvId, ConvId, Data) of
+cmd(<<"get_messages">>, #nkreq{data=#{id:=ConvId}=Data}) ->
+    case nkchat_conversation_obj:get_messages(ConvId, Data) of
         {ok, Reply} ->
             {ok, Reply};
         {error, Error} ->
             {error, Error}
     end;
 
-cmd(<<"get_last_messages">>, #nkreq{data=#{id:=ConvId}, srv_id=SrvId}) ->
-    case nkchat_conversation_obj:get_last_messages(SrvId, ConvId) of
+cmd(<<"get_last_messages">>, #nkreq{data=#{id:=ConvId}}) ->
+    case nkchat_conversation_obj:get_last_messages(ConvId) of
         {ok, Reply} ->
             {ok, Reply};
         {error, Error} ->

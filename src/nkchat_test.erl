@@ -49,7 +49,7 @@ test() ->
 
 
 clear() ->
-    nkdomain:delete_all_childs(root, ?DOM),
+    nkdomain:delete_all_childs(?DOM),
     nkdomain_domain_obj:create(root, "/", "chattest", "Chat test"),
     ok.
 
@@ -107,7 +107,7 @@ create(Pid) ->
     {error, {<<"member_not_found">>, _}} = cmd_conversation(Pid, add_member, #{id=>C2, member_id=><<"a">>}),
     {error, {<<"conversation_not_found">>, _}} = cmd_conversation(Pid, add_member, #{id=><<"a">>, member_id=>U2}),
 
-    {ok, ?DOMAIN_DOMAIN, D, _Path, _Pid} = nkdomain:find(root, ?DOM),
+    {ok, ?DOMAIN_DOMAIN, D, _Path, _Pid} = nkdomain:find(?DOM),
     {ok, #{
         <<"_is_enabled">> := true,
         ?CHAT_CONVERSATION := #{<<"members">> := [#{<<"member_id">>:=C3U1}, #{<<"member_id">>:=C3U2}]},
@@ -151,9 +151,9 @@ base_msgs(Pid, Ref) ->
     {ok, #{}} = cmd(Pid, event, subscribe, #{class=>domain, subclass=>conversation,
                     type=>[message_created, message_deleted]}),
 
-    {ok, _, C1, <<"/chattest/conversations/conv1">>, _} = nkdomain:find(root, <<"/chattest/conversations/conv1">>),
-    {ok, _, C2, <<"/chattest/conversations/conv2">>, _} = nkdomain:find(root, <<"/chattest/conversations/conv2">>),
-    {ok, _, _C3, <<"/chattest/conversations/conv3">>, _} = nkdomain:find(root, <<"/chattest/conversations/conv3">>),
+    {ok, _, C1, <<"/chattest/conversations/conv1">>, _} = nkdomain:find(<<"/chattest/conversations/conv1">>),
+    {ok, _, C2, <<"/chattest/conversations/conv2">>, _} = nkdomain:find(<<"/chattest/conversations/conv2">>),
+    {ok, _, _C3, <<"/chattest/conversations/conv3">>, _} = nkdomain:find(<<"/chattest/conversations/conv3">>),
     BC1 = #{conversation_id=><<"/chattest/conversations/conv1">>},
     BC2 = #{conversation_id=><<"/chattest/conversations/conv2">>},
 
@@ -182,7 +182,7 @@ session1(Pid, _Ref) ->
     {error, {<<"object_not_started">>, _}} = cmd_session(Pid, stop, #{}),
     {error, {<<"session_not_found">>, _}} = cmd_session(Pid, stop, #{id=><<"a">>}),
     {ok, #{<<"obj_id">>:=S, <<"conversations">>:=[]}} = cmd_session(Pid, start, #{id=>S}),
-    {ok, _, _, _, _SPid} = nkdomain:find(root, S),
+    {ok, _, _, _, _SPid} = nkdomain:find(S),
 
     % Adds C1 and C3
     {ok, #{<<"conversation_id">>:=_C1}} =

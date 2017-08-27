@@ -24,11 +24,11 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/5, hangup_call/3, hangup_call_async/3]).
--export([add_member/6, remove_member/3, get_member_info/3, get_info/1]).
--export([find_member_calls/3, find_calls_with_members/3]).
--export([send_candidate/4, set_status/4]).
--export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2,
+-export([create/4, hangup_call/2, hangup_call_async/2]).
+-export([add_member/5, remove_member/2, get_member_info/2, get_info/1]).
+-export([find_member_calls/2, find_calls_with_members/2]).
+-export([send_candidate/3, set_status/3]).
+-export([object_info/0, object_es_mapping/0, object_parse/3, object_create/1,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
          object_link_down/2, object_handle_info/2]).
@@ -73,7 +73,7 @@
 
 
 %% @doc
-create(SrvId, Domain, Name, User, Type) ->
+create(Domain, Name, User, Type) ->
     Obj = #{
         type => ?MEDIA_CALL,
         domain_id => Domain,
@@ -84,7 +84,7 @@ create(SrvId, Domain, Name, User, Type) ->
             type => Type
         }
     },
-    case nkdomain_obj_make:create(SrvId, Obj) of
+    case nkdomain_obj_make:create(Obj) of
         {ok, #obj_id_ext{obj_id=CallId, pid=Pid}, _} ->
             {ok, CallId, Pid};
         {error, Error} ->
@@ -94,31 +94,31 @@ create(SrvId, Domain, Name, User, Type) ->
 
 
 %% @doc
--spec hangup_call(nkservice:id(), nkdomain:id(), nkservice:error()) ->
+-spec hangup_call(nkdomain:id(), nkservice:error()) ->
     ok | {error, term()}.
 
-hangup_call(SrvId, Id, Reason) ->
-    nkdomain_obj:sync_op(SrvId, Id, {?MODULE, hangup_call, Reason}).
+hangup_call(Id, Reason) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, hangup_call, Reason}).
 
 
 %% @doc
--spec hangup_call_async(nkservice:id(), nkdomain:id(), nkservice:error()) ->
+-spec hangup_call_async(nkdomain:id(), nkservice:error()) ->
     ok | {error, term()}.
 
-hangup_call_async(SrvId, Id, Reason) ->
-    nkdomain_obj:async_op(SrvId, Id, {?MODULE, hangup_call, Reason}).
+hangup_call_async(Id, Reason) ->
+    nkdomain_obj:async_op(Id, {?MODULE, hangup_call, Reason}).
 
 
--spec add_member(nkservice:id(), nkdomain:id(), nkdomain:id(), [role()], nkdomain:obj_id(), status()) ->
+-spec add_member(nkdomain:id(), nkdomain:id(), [role()], nkdomain:obj_id(), status()) ->
     ok | {error, term()}.
 
-add_member(SrvId, Id, Member, Role, SessId, Opts) when is_binary(Role); is_atom(Role) ->
-    add_member(SrvId, Id, Member, [nklib_util:to_binary(Role)], SessId, Opts);
+add_member(Id, Member, Role, SessId, Opts) when is_binary(Role); is_atom(Role) ->
+    add_member(Id, Member, [nklib_util:to_binary(Role)], SessId, Opts);
 
-add_member(SrvId, Id, Member, Roles, SessId, Status) when is_list(Roles) ->
-    case nkdomain_lib:find(SrvId, Member) of
+add_member(Id, Member, Roles, SessId, Status) when is_list(Roles) ->
+    case nkdomain_lib:find(Member) of
         #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
-            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, add_member, MemberId, Roles, SessId, self(), Status});
+            nkdomain_obj:sync_op(Id, {?MODULE, add_member, MemberId, Roles, SessId, self(), Status});
         #obj_id_ext{} ->
             {error, member_invalid};
         {error, object_not_found} ->
@@ -129,24 +129,24 @@ add_member(SrvId, Id, Member, Roles, SessId, Status) when is_list(Roles) ->
 
 
 %% @doc
--spec remove_member(nkservice:id(), nkdomain:id(), nkdomain:id()) ->
+-spec remove_member(nkdomain:id(), nkdomain:id()) ->
     ok | {error, term()}.
 
-remove_member(SrvId, Id, Member) ->
-    case nkdomain_lib:find(SrvId, Member) of
+remove_member(Id, Member) ->
+    case nkdomain_lib:find(Member) of
         #obj_id_ext{obj_id=MemberId} ->
-            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, remove_member, MemberId});
+            nkdomain_obj:sync_op(Id, {?MODULE, remove_member, MemberId});
         _ ->
-            nkdomain_obj:sync_op(SrvId, Id, {?MODULE, remove_member, Member})
+            nkdomain_obj:sync_op(Id, {?MODULE, remove_member, Member})
     end.
 
 
 %% @private
--spec get_member_info(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id()) ->
+-spec get_member_info(nkdomain:obj_id(), nkdomain:obj_id()) ->
     {ok, map()} | {error, term()}.
 
-get_member_info(SrvId, CallId, MemberId) ->
-    nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, get_member_info, MemberId}).
+get_member_info(CallId, MemberId) ->
+    nkdomain_obj:sync_op(CallId, {?MODULE, get_member_info, MemberId}).
 
 
 %% @private
@@ -154,8 +154,8 @@ get_info(Pid) ->
     nkdomain_obj:sync_op(any, Pid, {?MODULE, get_info}).
 
 %% @doc
-find_member_calls(SrvId, Domain, MemberId) ->
-    case nkdomain_lib:find(SrvId, Domain) of
+find_member_calls(Domain, MemberId) ->
+    case nkdomain_lib:find(Domain) of
         #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
             Filters = #{
                 type => ?MEDIA_CALL,
@@ -167,7 +167,7 @@ find_member_calls(SrvId, Domain, MemberId) ->
                 filters => Filters,
                 size => 9999
             },
-            case nkdomain:search(SrvId, Search2) of
+            case nkdomain:search(Search2) of
                 {ok, _N, List, _Meta} ->
                     List2 = lists:map(
                         fun(#{<<"obj_id">>:=CallId, ?MEDIA_CALL:=#{<<"type">>:=Type}}) -> {CallId, Type} end,
@@ -182,8 +182,8 @@ find_member_calls(SrvId, Domain, MemberId) ->
 
 
 %% @doc
-find_calls_with_members(SrvId, Domain, MemberIds) ->
-    case nkdomain_lib:find(SrvId, Domain) of
+find_calls_with_members(Domain, MemberIds) ->
+    case nkdomain_lib:find(Domain) of
         #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
             Hash = get_members_hash(MemberIds),
             Filters = #{
@@ -196,7 +196,7 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
                 filters => Filters,
                 size => 9999
             },
-            case nkdomain:search(SrvId, Search2) of
+            case nkdomain:search(Search2) of
                 {ok, _N, List, _Meta} ->
                     List2 = lists:map(
                         fun(#{<<"obj_id">>:=CallId, ?MEDIA_CALL:=#{<<"type">>:=Type}}) -> {CallId, Type} end,
@@ -211,19 +211,19 @@ find_calls_with_members(SrvId, Domain, MemberIds) ->
 
 
 %% @doc
--spec send_candidate(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id(), #sdp_candidate{}) ->
+-spec send_candidate(nkdomain:obj_id(), nkdomain:obj_id(), #sdp_candidate{}) ->
     ok | {error, term()}.
 
-send_candidate(SrvId, CallId, MemberId, Candidate) ->
-    nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, send_candidate, MemberId, Candidate}).
+send_candidate(CallId, MemberId, Candidate) ->
+    nkdomain_obj:sync_op(CallId, {?MODULE, send_candidate, MemberId, Candidate}).
 
 
 %% @doc
--spec set_status(nkservice:id(), nkdomain:obj_id(), nkdomain:obj_id(), status()) ->
+-spec set_status(nkdomain:obj_id(), nkdomain:obj_id(), status()) ->
     ok | {error, term()}.
 
-set_status(SrvId, CallId, MemberId, Status) ->
-    nkdomain_obj:sync_op(SrvId, CallId, {?MODULE, set_status, MemberId, Status}).
+set_status(CallId, MemberId, Status) ->
+    nkdomain_obj:sync_op(CallId, {?MODULE, set_status, MemberId, Status}).
 
 
 
@@ -303,10 +303,10 @@ object_parse(_SrvId, _Mode, _Obj) ->
 
 
 %% @doc
-object_create(SrvId, Obj) ->
+object_create(Obj) ->
     #{?MEDIA_CALL := Call} = Obj,
     Obj2 = Obj#{?MEDIA_CALL => Call#{members => []}},
-    nkdomain_obj_make:create(SrvId, Obj2).
+    nkdomain_obj_make:create(Obj2).
 
 
 %% @private
@@ -522,7 +522,7 @@ do_remove_member(MemberId, State) ->
             State4 = set_members(Members2, State3),
             case map_size(Members2) of
                 0 ->
-                    hangup_call_async(any, self(), no_members);
+                    hangup_call_async(self(), no_members);
                 _ ->
                     ok
             end,
