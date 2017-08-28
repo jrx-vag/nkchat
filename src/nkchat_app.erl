@@ -6,6 +6,7 @@
 
 -define(APP, nkchat).
 
+-include_lib("nkdomain/include/nkdomain.hrl").
 -include("nkchat.hrl").
 
 
@@ -29,7 +30,7 @@ start(_Type, _Args) ->
             {ok, Vsn} = application:get_key(?APP, vsn),
             lager:info("NkCHAT v~s has started.", [Vsn]),
             nkchat_i18n:reload(),
-            register_types(),
+            register_types(?NKSRV),
             {ok, Pid};
         {error, Error} ->
             lager:error("Config error: ~p", [Error]),
@@ -44,12 +45,12 @@ stop(_) ->
 
 
 %% @private
-register_types() ->
-    ok = nkdomain_all_types:register(nkchat_conversation_obj),
-    ok = nkdomain_all_types:register(nkchat_message_obj),
-    ok = nkdomain_all_types:register(nkchat_session_obj),
-    ok = nkdomain_all_types:register(nkchat_media_call_obj),
-    ok = nkdomain_all_types:register(nkchat_media_session_obj).
+register_types(SrvId) ->
+    ok = nkdomain_all_types:register(SrvId, nkchat_conversation_obj),
+    ok = nkdomain_all_types:register(SrvId, nkchat_message_obj),
+    ok = nkdomain_all_types:register(SrvId, nkchat_session_obj),
+    ok = nkdomain_all_types:register(SrvId, nkchat_media_call_obj),
+    ok = nkdomain_all_types:register(SrvId, nkchat_media_session_obj).
 
 
 %% Config Management
