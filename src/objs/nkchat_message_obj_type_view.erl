@@ -23,7 +23,7 @@
 -module(nkchat_message_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([view/1, subview/2, table_data/2]).
+-export([view/1, subview/2, table_data/2, element_updated/3]).
 
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
@@ -273,3 +273,15 @@ table_iter([Entry|Rest], Pos, Acc, #admin_session{srv_id=SrvId}=Session) ->
         <<"$css">> => Css
     },
     table_iter(Rest, Pos+1, [Data|Acc], Session).
+
+%% @private
+element_updated(_ObjId, Value, _Session) ->
+    #{
+        <<"text">> := Text
+    } = Value,
+    Update = #{
+        ?CHAT_MESSAGE => #{
+            text => Text
+        }
+    },
+    {ok, Update}.
