@@ -27,8 +27,8 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/3, update/2]).
--export([object_info/0, object_es_mapping/0, object_parse/3, object_create/1, object_event/2]).
+-export([create/4, create_by/5, update/3]).
+-export([object_info/0, object_es_mapping/0, object_parse/3, object_create/2, object_event/2]).
 -export([object_admin_info/0]).
 -export([syntax_check_file/3]).
 
@@ -46,13 +46,25 @@ create(DomainId, ConvId, Text) ->
         type => ?CHAT_MESSAGE,
         domain_id => DomainId,
         parent_id => ConvId,
-        created_by => <<"admin">>,
+        created_by => <<"operador_dkv">>,
         ?CHAT_MESSAGE => #{
             text => Text
         }
     },
     object_create(Obj).
 
+create_by(SrvId, DomainId, UserId, ConvId, Text) ->
+    Obj = #{
+        type => ?CHAT_MESSAGE,
+        domain_id => DomainId,
+        parent_id => ConvId,
+        created_by => UserId,
+        ?CHAT_MESSAGE => #{
+            text => Text
+        }
+    },
+    object_create(SrvId, Obj).
+        
 
 update(MsgId, Text) ->
     nkdomain:update(MsgId, #{?CHAT_MESSAGE => #{text => Text}}).
@@ -144,6 +156,7 @@ object_event(Event, #?STATE{id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=State) ->
 %% ===================================================================
 
 syntax_check_file(file_id, File, _Ctx) ->
+    #{domain_srv_id:=SrvId} = Ctx,
     case nkdomain_lib:find(File) of
         #obj_id_ext{type=?DOMAIN_FILE, obj_id=FileId} ->
             {ok, FileId};
