@@ -25,7 +25,7 @@
 
 -export([start/3, get_calls/1, get_call_info/2, launch_notifications/1]).
 -export([invite/3, cancel_invite/2, accept_invite/3, reject_invite/2, call_hangup/2]).
--export([object_info/0, object_es_mapping/0, object_parse/3,
+-export([object_info/0, object_es_mapping/0, object_parse/2,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2]).
@@ -260,7 +260,7 @@ object_es_mapping() ->
 
 
 %% @private
-object_parse(_SrvId, _Mode, _Obj) ->
+object_parse(_Mode, _Obj) ->
     #{}.
 
 

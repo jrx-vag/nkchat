@@ -26,7 +26,7 @@
 -export([start/3, get_conversations/1, get_conversation_info/2, launch_notifications/1]).
 -export([set_active_conversation/2, add_conversation/2, remove_conversation/2]).
 -export([conversation_event/4, send_invitation/4, accept_invitation/2, reject_invitation/2, wakeup/1]).
--export([object_info/0, object_es_mapping/0, object_parse/3,
+-export([object_info/0, object_es_mapping/0, object_parse/2,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2, object_handle_info/2]).
@@ -281,7 +281,7 @@ object_es_mapping() ->
 
 
 %% @private
-object_parse(_SrvId, _Mode, _Obj) ->
+object_parse(_Mode, _Obj) ->
     #{
         vsn => binary,
         '__defaults' => #{vsn => <<"1">>}

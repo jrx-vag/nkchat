@@ -28,7 +28,7 @@
 -export([add_member/5, remove_member/2, get_member_info/2, get_info/1]).
 -export([find_member_calls/2, find_calls_with_members/2]).
 -export([send_candidate/3, set_status/3]).
--export([object_info/0, object_es_mapping/0, object_parse/3, object_create/1,
+-export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
          object_link_down/2, object_handle_info/2]).
@@ -282,10 +282,10 @@ object_es_mapping() ->
 
 
 %% @private
-object_parse(_SrvId, update, _Obj) ->
+object_parse(update, _Obj) ->
     #{};
 
-object_parse(_SrvId, _Mode, _Obj) ->
+object_parse(_Mode, _Obj) ->
     #{
         type => {atom_or_binary, [one2one]},
         members_hash => binary,
