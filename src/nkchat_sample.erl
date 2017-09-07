@@ -1,13 +1,8 @@
 
--module(
-nkchat_sample).
+-module(nkchat_sample).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -compile([export_all]).
-
--define(WS, "ws://127.0.0.1:9202/api/ws").
-%%-define(WS, "wss://v1.netc.io/netcomp/chat/v00/nkapi/ws").
-%%-define(HTTP, "http://127.0.0.1:10201/chat").
 
 -include_lib("nkchat.hrl").
 -include_lib("nkapi/include/nkapi.hrl").
@@ -26,7 +21,7 @@ domain_find_convs() ->
 
 %% f(C1), f(C2), f(C3), f(U1), f(U2), f(U3), {C1, C2, C3, U1, U2, U3} = nkchat_sample:init().
 init() ->
-    nkdomain:delete_all_childs(?SRV, "/ct"),
+    nkdomain:delete_all_childs("/ct"),
     {ok, _, Pid1} = nkdomain_sample:login(),
     C1 = <<"/ct/conversations/c1">>,
     C2 = <<"/ct/conversations/c2">>,
