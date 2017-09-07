@@ -504,7 +504,7 @@ do_invite(CalleeId, InviteOpts, State) ->
         }
     },
     case do_invite_push(InviteOpts, State) of
-        {ok, Opts} ->
+        {ok, _Opts} ->
             case nkdomain_user_obj:add_notification_op(CalleeId, ?MEDIA_SESSION, #{}, Op1) of
                 {ok, _MemberId, Op2} ->
                     TTL = case InviteOpts of

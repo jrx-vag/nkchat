@@ -1,7 +1,7 @@
 -module(nkchat_app).
 -behaviour(application).
 
--export([start/0, start/2, stop/1]).
+-export([start/0, start/2, stop/1, register_types/1]).
 -export([get/1, get/2, get_srv/2, put/2]).
 
 -define(APP, nkchat).
@@ -30,7 +30,6 @@ start(_Type, _Args) ->
             {ok, Vsn} = application:get_key(?APP, vsn),
             lager:info("NkCHAT v~s has started.", [Vsn]),
             nkchat_i18n:reload(),
-            register_types(?NKSRV),
             {ok, Pid};
         {error, Error} ->
             lager:error("Config error: ~p", [Error]),

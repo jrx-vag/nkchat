@@ -22,17 +22,7 @@
 
 -export([plugin_deps/0, error/1]).
 -export([admin_element_action/5, admin_get_data/3]).
--export([chat_mm_proxy_init/2,
-         chat_mm_proxy_in/2, chat_mm_proxy_out/2, 
-         chat_mm_proxy_terminate/2, chat_mm_proxy_handle_call/3,
-         chat_mm_proxy_handle_cast/2, chat_mm_proxy_handle_info/2]).
-
--include_lib("nkchat.hrl").
--include_lib("nkapi/include/nkapi.hrl").
--include_lib("nkservice/include/nkservice.hrl").
--include_lib("nkevent/include/nkevent.hrl").
--include_lib("nkdomain/include/nkdomain.hrl").
-
+-export([service_init/2]).
 
 
 %% ===================================================================
@@ -41,11 +31,12 @@
 
 
 plugin_deps() ->
-    [nkdomain, nkapi].
+    [nkdomain].
 
-
-%%error_code(object_not_found)   		-> {0, "Object not found"};
-%%error_code(_) -> continue.
+service_init(_Service, #{id:=SrvId}=State) ->
+    lager:info("NkCHAT registeting types for service '~s'", [SrvId]),
+    nkchat_app:register_types(SrvId),
+    {ok, State}.
 
 
 
@@ -80,117 +71,20 @@ admin_get_data(ElementId, Spec, State) ->
 
 %% ===================================================================
 %% API CMD
-%% ===================================================================
-
-%%%% @private
-%%api_server_cmd(
-%%    #nkreq{class=chat, subclass=Sub, cmd=Cmd}=Req, State) ->
-%%    nkchat_api:cmd(Sub, Cmd, Req, State);
-%%
-%%api_server_cmd(_Req, _State) ->
-%%    continue.
-%%
-%%
-%%%% @private
-%%api_server_syntax(#nkreq{class=chat, subclass=Sub, cmd=Cmd},
-%%    Syntax, Defaults, Mandatory) ->
-%%    nkchat_syntax:syntax(Sub, Cmd, Syntax, Defaults, Mandatory);
-%%
-%%api_server_syntax(_Req, _Syntax, _Defaults, _Mandatory) ->
-%%    continue.
-
-
-
-
+%% =====================
 
 
 %% ===================================================================
 %% Types
 %% ===================================================================
 
--type state() :: term().
--type continue() :: continue | {continue, list()}.
+%-type continue() :: continue | {continue, list()}.
 
 
 %% ===================================================================
-%% Object
-%% ===================================================================
-
-
-%% ===================================================================
-%% MM proxy
+%% Service
 %% ===================================================================
 
 
 
-%% @doc Called when a new FS proxy connection arrives
--spec chat_mm_proxy_init(nkpacket:nkport(), state()) ->
-    {ok, state()}.
 
-chat_mm_proxy_init(_NkPort, State) ->
-    {ok, State}.
-
-
-% %% @doc Called to select a FS server
-% -spec chat_mm_proxy_find_fs(nkmedia_service:id(), state()) ->
-%     {ok, [chat_mm_engine:id()], state()}.
-
-% chat_mm_proxy_find_fs(SrvId, State) ->
-%     List = [Name || {Name, _} <- nkmedia_fs_engine:get_all(SrvId)],
-%     {ok, List, State}.
-
-
-%% @doc Called when a new msg arrives
--spec chat_mm_proxy_in(map(), state()) ->
-    {ok, map(), state()} | {stop, term(), state()} | continue().
-
-chat_mm_proxy_in(Msg, State) ->
-    {ok, Msg, State}.
-
-
-%% @doc Called when a new msg is to be answered
--spec chat_mm_proxy_out(map(), state()) ->
-    {ok, map(), state()} | {stop, term(), state()} | continue().
-
-chat_mm_proxy_out(Msg, State) ->
-    {ok, Msg, State}.
-
-
-%% @doc Called when the connection is stopped
--spec chat_mm_proxy_terminate(Reason::term(), state()) ->
-    {ok, state()}.
-
-chat_mm_proxy_terminate(_Reason, State) ->
-    {ok, State}.
-
-
-%% @doc 
--spec chat_mm_proxy_handle_call(Msg::term(), {pid(), term()}, state()) ->
-    {ok, state()} | continue().
-
-chat_mm_proxy_handle_call(Msg, _From, State) ->
-    lager:error("Module ~p received unexpected call: ~p", [?MODULE, Msg]),
-    {ok, State}.
-
-
-%% @doc 
--spec chat_mm_proxy_handle_cast(Msg::term(), state()) ->
-    {ok, state()}.
-
-chat_mm_proxy_handle_cast(Msg, State) ->
-    lager:error("Module ~p received unexpected cast: ~p", [?MODULE, Msg]),
-    {ok, State}.
-
-
-%% @doc 
--spec chat_mm_proxy_handle_info(Msg::term(), state()) ->
-    {ok, State::map()}.
-
-chat_mm_proxy_handle_info(Msg, State) ->
-    lager:error("Module ~p received unexpected info: ~p", [?MODULE, Msg]),
-    {ok, State}.
-
-
-%% ===================================================================
-%% Implemented objects
-%% ===================================================================
