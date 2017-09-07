@@ -493,7 +493,7 @@ object_handle_info(_Msg, _State) ->
 %% @private
 do_invite(CalleeId, InviteOpts, State) ->
     #?STATE{domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
-    Op1= #{
+    Op1 = #{
         ?MEDIA_SESSION => #{
             <<"invite_op">> => #{
                 <<"caller_id">> => CallerId,
@@ -505,21 +505,21 @@ do_invite(CalleeId, InviteOpts, State) ->
     },
     case do_invite_push(InviteOpts, State) of
         {ok, Opts} ->
-    case nkdomain_user_obj:add_notification_op(CalleeId, ?MEDIA_SESSION, #{}, Op1) of
-        {ok, _MemberId, Op2} ->
-            TTL = case InviteOpts of
-                #{ttl:=TTL0} when is_integer(TTL0), TTL0 > 0 ->
-                    TTL0;
-                _ ->
-                    ?DEFAULT_INVITE_TTL
-            end,
-            Opts = #{ttl => TTL},
-            case
-                nkdomain_token_obj:create(DomainId, CalleeId, CalleeId, <<"media.call">>, Opts, Op2)
-            of
-                {ok, InviteId, Pid, _Secs, _Unknown} ->
-                    State2 = add_invite(InviteId, Pid, CalleeId, InviteOpts, State),
-                    {ok, InviteId, State2};
+            case nkdomain_user_obj:add_notification_op(CalleeId, ?MEDIA_SESSION, #{}, Op1) of
+                {ok, _MemberId, Op2} ->
+                    TTL = case InviteOpts of
+                        #{ttl:=TTL0} when is_integer(TTL0), TTL0>0 ->
+                            TTL0;
+                        _ ->
+                            ?DEFAULT_INVITE_TTL
+                    end,
+                    Opts2 = #{ttl => TTL},
+                    case
+                        nkdomain_token_obj:create(DomainId, CalleeId, CalleeId, <<"media.call">>, Opts2, Op2)
+                    of
+                        {ok, InviteId, Pid, _Secs, _Unknown} ->
+                            State2 = add_invite(InviteId, Pid, CalleeId, InviteOpts, State),
+                            {ok, InviteId, State2};
                         {error, Error} ->
                             {error, Error}
                     end;
