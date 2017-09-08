@@ -116,5 +116,5 @@ cmd(<<"get_last_messages">>, #nkreq{data=#{id:=ConvId}}) ->
     end;
 
 cmd(Cmd, Req) ->
-    nkdomain_obj_api:api(Cmd, ?CHAT_CONVERSATION, Req).
+    nkdomain_obj_cmd:api(Cmd, ?CHAT_CONVERSATION, Req).
 

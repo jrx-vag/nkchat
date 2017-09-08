@@ -188,7 +188,6 @@ accept_invitation(SessId, TokenId) ->
 reject_invitation(_SessId, TokenId) ->
     case nkdomain_token_obj:consume_token(TokenId, rejected) of
         {ok, _Data} ->
-            lager:error("NKLOG Token consumed"),
             ok;
         {error, Error} ->
             {error, Error}
@@ -213,7 +212,6 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
     any.
 
 notify_fun(Pid, Notify) ->
-    % lager:error("NKLOG SESS FUN ~p ~p", [Op, Msg]),
     nkdomain_obj:async_op(Pid, {?MODULE, notify_fun, Notify}).
 
 
@@ -222,11 +220,10 @@ notify_fun(Pid, Notify) ->
     {ok, nkdomain_user_obj:user_presence()}.
 
 presence_fun(_UserId, []) ->
-    lager:notice("NKLOG Chat Presence down"),
+    % lager:info("NKLOG Chat Presence down"),
     {ok, #{status=><<"offline">>}};
 
 presence_fun(_UserId, List) ->
-    lager:notice("NKLOG Chat Presence up: ~p", [List]),
     Status = case lists:member(<<"online">>, List) of
         true ->
             <<"online">>;

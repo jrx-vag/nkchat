@@ -194,7 +194,7 @@ cmd(<<"wakeup">>, #nkreq{data=Data}=Req) ->
     end;
 
 cmd(Cmd, Req) ->
-    nkdomain_obj_api:api(Cmd, ?CHAT_SESSION, Req).
+    nkdomain_obj_cmd:api(Cmd, ?CHAT_SESSION, Req).
 
 
 

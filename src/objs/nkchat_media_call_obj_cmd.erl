@@ -98,6 +98,5 @@ cmd(<<"set_status">>, #nkreq{data=#{id:=CallId}=Data, user_id=MemberId}) ->
     nkchat_media_call_obj:set_status(CallId, MemberId, Opts);
 
 cmd(Cmd, Req) ->
-    lager:error("NKLOG CALL API ~p", [Cmd]),
-    nkdomain_obj_api:api(Cmd, ?CHAT_CONVERSATION, Req).
+    nkdomain_obj_cmd:api(Cmd, ?CHAT_CONVERSATION, Req).
 

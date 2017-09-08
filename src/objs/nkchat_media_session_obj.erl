@@ -204,7 +204,6 @@ call_event(Pid, CallId, Event) ->
     any.
 
 notify_fun(Pid, Notify) ->
-    % lager:error("NKLOG SESS FUN ~p ~p", [Op, Msg]),
     nkdomain_obj:async_op(Pid, {?MODULE, notify_fun, Notify}).
 
 
@@ -532,8 +531,8 @@ do_invite(CalleeId, InviteOpts, State) ->
 
 
 %% @private
-do_invite_push(InviteOpts, #?STATE{parent_id=CallerId, srv_id=SrvId}) ->
-    case nkdomain_user_obj:get_name(SrvId, CallerId) of
+do_invite_push(InviteOpts, #?STATE{parent_id=CallerId}) ->
+    case nkdomain_user_obj:get_name(CallerId) of
         {ok, #{fullname:=FullName}} ->
             Data = #{
                 wakeup_push => #{

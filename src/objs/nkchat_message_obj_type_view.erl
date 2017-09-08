@@ -147,8 +147,7 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
     %% Get the timezone_offset from the filter list and pass it to table_filter
     case table_filter(maps:to_list(Filter), Filter, #{type=>message}) of
         {ok, Filters} ->
-            lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filter)]),
-
+            % lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filter)]),
             FindSpec = #{
                 filters => Filters,
                 fields => [<<"created_by">>, <<"created_time">>, <<"parent_id">>,

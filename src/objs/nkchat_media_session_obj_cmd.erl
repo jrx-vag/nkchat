@@ -164,7 +164,7 @@ cmd(<<"hangup_call">>, #nkreq{data=#{call_id:=CallId}=Data}=Req) ->
     end;
 
 cmd(Cmd, Req) ->
-    nkdomain_obj_api:api(Cmd, ?MEDIA_SESSION, Req).
+    nkdomain_obj_cmd:api(Cmd, ?MEDIA_SESSION, Req).
 
 
 
