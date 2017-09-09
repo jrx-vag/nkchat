@@ -22,7 +22,7 @@
 -module(nkchat_session_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([api/2]).
+-export([syntax/2]).
 
 -include("nkchat.hrl").
 
@@ -33,46 +33,46 @@
 
 
 %% @doc
-api(<<"start">>, Syntax) ->
+syntax(<<"start">>, Syntax) ->
     Syntax#{
         domain_id => binary,
         session_events => {list, binary}
     };
 
-api(<<"get_conversations">>, Syntax) ->
+syntax(<<"get_conversations">>, Syntax) ->
     Syntax#{
         id => binary
     };
 
-api(<<"get_conversation_info">>, Syntax) ->
+syntax(<<"get_conversation_info">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api(<<"set_active_conversation">>, Syntax) ->
+syntax(<<"set_active_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api(<<"add_conversation">>, Syntax) ->
+syntax(<<"add_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api(<<"remove_conversation">>, Syntax) ->
+syntax(<<"remove_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
         conversation_id => binary,
         '__mandatory' => [conversation_id]
     };
 
-api(<<"send_invitation">>, Syntax) ->
+syntax(<<"send_invitation">>, Syntax) ->
     Syntax#{
         id => binary,
         member_id => binary,
@@ -81,29 +81,29 @@ api(<<"send_invitation">>, Syntax) ->
         '__mandatory' => [member_id, conversation_id]
     };
 
-api(<<"accept_invitation">>, Syntax) ->
+syntax(<<"accept_invitation">>, Syntax) ->
     Syntax#{
         id => binary,
         token =>  binary,
         '__mandatory' => [token]
     };
 
-api(<<"reject_invitation">>, Syntax) ->
+syntax(<<"reject_invitation">>, Syntax) ->
     Syntax#{
         id => binary,
         token =>  binary,
         '__mandatory' => [token]
     };
 
-api(<<"launch_notifications">>, Syntax) ->
+syntax(<<"launch_notifications">>, Syntax) ->
     Syntax#{
         id => binary
     };
 
-api(<<"wakeup">>, Syntax) ->
+syntax(<<"wakeup">>, Syntax) ->
     Syntax#{
         id => binary
     };
 
-api(Cmd, Syntax) ->
+syntax(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_SESSION, Syntax).

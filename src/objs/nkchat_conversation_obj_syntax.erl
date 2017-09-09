@@ -22,7 +22,7 @@
 -module(nkchat_conversation_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([api/2]).
+-export([syntax/2]).
 
 -include("nkchat.hrl").
 
@@ -33,34 +33,34 @@
 
 
 %%%% @doc
-api(<<"add_member">>, Syntax) ->
+syntax(<<"add_member">>, Syntax) ->
     Syntax#{
         id => binary,
         member_id => binary,
         '__mandatory' => [id, member_id]
     };
 
-api(<<"remove_member">>, Syntax) ->
+syntax(<<"remove_member">>, Syntax) ->
     Syntax#{
         id => binary,
         member_id => binary,
         '__mandatory' => [id, member_id]
     };
 
-api(<<"find_member_conversations">>, Syntax) ->
+syntax(<<"find_member_conversations">>, Syntax) ->
     Syntax#{
         domain_id => binary,
         member_id => binary
     };
 
-api(<<"find_conversations_with_members">>, Syntax) ->
+syntax(<<"find_conversations_with_members">>, Syntax) ->
     Syntax#{
         domain_id => binary,
         member_ids => {list, binary},
         '__mandatory' => [member_ids]
     };
 
-api(<<"get_messages">>, Syntax) ->
+syntax(<<"get_messages">>, Syntax) ->
     Syntax#{
         id => binary,
         size => integer,
@@ -69,11 +69,11 @@ api(<<"get_messages">>, Syntax) ->
         '__mandatory' => [id]
     };
 
-api(<<"get_last_messages">>, Syntax) ->
+syntax(<<"get_last_messages">>, Syntax) ->
     Syntax#{
         id => binary,
         '__mandatory' => [id]
     };
 
-api(Cmd, Syntax) ->
+syntax(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_CONVERSATION, Syntax).

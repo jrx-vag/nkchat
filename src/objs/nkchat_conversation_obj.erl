@@ -420,7 +420,7 @@ object_send_event(Event, State) ->
 
 %% @private
 object_api_syntax(Cmd, Syntax) ->
-    nkchat_conversation_obj_syntax:api(Cmd, Syntax).
+    nkchat_conversation_obj_syntax:syntax(Cmd, Syntax).
 
 
 %% @private

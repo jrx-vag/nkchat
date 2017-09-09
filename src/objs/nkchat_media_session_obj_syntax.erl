@@ -22,7 +22,7 @@
 -module(nkchat_media_session_obj_syntax).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([api/2]).
+-export([syntax/2]).
 
 -include("nkchat.hrl").
 
@@ -33,25 +33,25 @@
 
 
 %% @doc
-api(<<"start">>, Syntax) ->
+syntax(<<"start">>, Syntax) ->
     Syntax#{
         domain_id => binary,
         session_events => {list, binary}
     };
 
-api(<<"get_calls">>, Syntax) ->
+syntax(<<"get_calls">>, Syntax) ->
     Syntax#{
         id => binary
     };
 
-api(<<"get_call_info">>, Syntax) ->
+syntax(<<"get_call_info">>, Syntax) ->
     Syntax#{
         id => binary,
         call_id => binary,
         '__mandatory' => [call_id]
     };
 
-api(<<"invite">>, Syntax) ->
+syntax(<<"invite">>, Syntax) ->
     Syntax#{
         id => binary,
         user_id => binary,
@@ -64,21 +64,21 @@ api(<<"invite">>, Syntax) ->
         '__mandatory' => [user_id, sdp]
     };
 
-api(<<"cancel_invite">>, Syntax) ->
+syntax(<<"cancel_invite">>, Syntax) ->
     Syntax#{
         id => binary,
         invite_id =>  binary,
         '__mandatory' => [invite_id]
     };
 
-api(<<"hangup_call">>, Syntax) ->
+syntax(<<"hangup_call">>, Syntax) ->
     Syntax#{
         id => binary,
         call_id => binary,
         '__mandatory' => [call_id]
     };
 
-api(<<"accept_invite">>, Syntax) ->
+syntax(<<"accept_invite">>, Syntax) ->
     Syntax#{
         id => binary,
         invite_id =>  binary,
@@ -89,17 +89,17 @@ api(<<"accept_invite">>, Syntax) ->
         '__mandatory' => [invite_id, sdp]
     };
 
-api(<<"reject_invite">>, Syntax) ->
+syntax(<<"reject_invite">>, Syntax) ->
     Syntax#{
         id => binary,
         invite_id =>  binary,
         '__mandatory' => [invite_id]
     };
 
-api(<<"launch_notifications">>, Syntax) ->
+syntax(<<"launch_notifications">>, Syntax) ->
     Syntax#{
         id => binary
     };
 
-api(Cmd, Syntax) ->
+syntax(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_SESSION, Syntax).
