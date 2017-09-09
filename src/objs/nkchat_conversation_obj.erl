@@ -425,7 +425,7 @@ object_api_syntax(Cmd, Syntax) ->
 
 %% @private
 object_api_cmd(Cmd, Req) ->
-    nkchat_conversation_obj_api:cmd(Cmd, Req).
+    nkchat_conversation_obj_cmd:cmd(Cmd, Req).
 
 
 % @private When the object is loaded, we make our cache

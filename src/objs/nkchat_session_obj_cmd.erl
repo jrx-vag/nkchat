@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Session Object API
--module(nkchat_session_obj_api).
+-module(nkchat_session_obj_cmd).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([cmd/2]).
@@ -194,7 +194,7 @@ cmd(<<"wakeup">>, #nkreq{data=Data}=Req) ->
     end;
 
 cmd(Cmd, Req) ->
-    nkdomain_obj_cmd:api(Cmd, ?CHAT_SESSION, Req).
+    nkdomain_obj_cmd:cmd(Cmd, ?CHAT_SESSION, Req).
 
 
 

@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Conversation Object API
--module(nkchat_conversation_obj_api).
+-module(nkchat_conversation_obj_cmd).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([cmd/2]).
@@ -116,5 +116,5 @@ cmd(<<"get_last_messages">>, #nkreq{data=#{id:=ConvId}}) ->
     end;
 
 cmd(Cmd, Req) ->
-    nkdomain_obj_cmd:api(Cmd, ?CHAT_CONVERSATION, Req).
+    nkdomain_obj_cmd:cmd(Cmd, ?CHAT_CONVERSATION, Req).
 
