@@ -23,6 +23,7 @@
 
 -export([i18n/0, reload/0]).
 
+-include_lib("nkdomain/include/nkdomain.hrl").
 
 i18n() -> #{
     en => #{
@@ -55,4 +56,4 @@ i18n() -> #{
 
 
 reload() ->
-    ok = nklib_i18n:load(?MODULE).
+    ok = nklib_i18n:load(?NKSRV, ?MODULE).
