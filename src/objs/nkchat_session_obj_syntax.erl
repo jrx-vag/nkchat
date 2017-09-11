@@ -58,6 +58,11 @@ syntax(<<"set_active_conversation">>, Syntax) ->
         '__mandatory' => [conversation_id]
     };
 
+syntax(<<"deactivate_conversation">>, Syntax) ->
+    Syntax#{
+        id => binary
+    };
+
 syntax(<<"add_conversation">>, Syntax) ->
     Syntax#{
         id => binary,
