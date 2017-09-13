@@ -30,9 +30,6 @@
 -include_lib("nkdomain/include/nkdomain.hrl").
 -include_lib("nkdomain/include/nkdomain_admin.hrl").
 
--define(ID_SUBDOMAINS, <<"domain_detail_type_view__message__subdomains">>).
-
-
 %% @doc
 view(Session) ->
     table(#{is_subtable=>false}, Session).
@@ -49,13 +46,14 @@ table(Opts, Session) ->
 %            <<?ID/binary, "__", TableId/binary>>;
             TableId;
         _ ->
-            <<?ADMIN_TYPE_VIEW/binary, "__message">>
+            nkdomain_admin_util:make_type_view(?CHAT_MESSAGE)
     end,
+    SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter(?CHAT_MESSAGE),
     Spec = #{
         table_id => Id,
         is_subtable => maps:get(is_subtable, Opts),
-        subdomains_id => ?ID_SUBDOMAINS,
-        filters => [?ID_SUBDOMAINS],
+        subdomains_id => SubDomainsFilterId,
+        filters => [SubDomainsFilterId],
         columns => [
             #{
                 id => checkbox,
@@ -122,20 +120,16 @@ table(Opts, Session) ->
             Spec
     end,
     Table = #{
-%        id => ?ID,
         id => Id,
         class => webix_ui,
         value => nkadmin_webix_datatable:datatable(Spec2, Session)
     },
-    KeyData = #{data_fun => fun ?MODULE:table_data/2},
-%    Session2 = nkadmin_util:set_key_data(?ID, KeyData, Session),
-    Session2 = nkadmin_util:set_key_data(Id, KeyData, Session),
-    {Table, Session2}.
+    {Table, Session}.
 
 
 %% @doc
 table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
-    #admin_session{srv_id=SrvId, domain_id=DomainId} = Session,
+    #admin_session{domain_id=DomainId} = Session,
     SortSpec = case Sort of
         {<<"conversation">>, Order} ->
             <<Order/binary, ":path">>;
@@ -156,11 +150,12 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
                 from => Start,
                 size => Size
             },
-            Fun = case Filter of
-                #{?ID_SUBDOMAINS := 0} -> search;
-                _ -> search_all
+            SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter(?CHAT_MESSAGE),
+            Fun = case maps:get(SubDomainsFilterId, Filter) of
+                0 -> search;
+                1 -> search_all
             end,
-            case nkdomain_domain_obj:Fun(SrvId, DomainId, FindSpec) of
+            case nkdomain_domain_obj:Fun(DomainId, FindSpec) of
                 {ok, Total, List, _Meta} ->
                     Data = table_iter(List, Start+1, [], Session),
                     {ok, Total, Data};

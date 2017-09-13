@@ -21,7 +21,6 @@
 -module(nkchat_callbacks).
 
 -export([plugin_deps/0, error/1]).
--export([admin_element_action/5, admin_get_data/3]).
 
 
 %% ===================================================================
@@ -54,14 +53,14 @@ error(_)   		                        -> continue.
 %% ===================================================================
 
 
-%% @doc
-admin_element_action(ElementId, Action, Value, Updates, State) ->
-    nkchat_admin_tree:element_action(ElementId, Action, Value, Updates, State).
-
-
-%% @doc
-admin_get_data(ElementId, Spec, State) ->
-    nkchat_admin_detail:get_data(ElementId, Spec, State).
+%%%% @doc
+%%admin_element_action(ElementId, Action, Value, Updates, State) ->
+%%    nkchat_admin_tree:element_action(ElementId, Action, Value, Updates, State).
+%%
+%%
+%%%% @doc
+%%admin_get_data(ElementId, Spec, State) ->
+%%    nkchat_admin_detail:get_data(ElementId, Spec, State).
 
 
 %% ===================================================================
