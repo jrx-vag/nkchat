@@ -4,6 +4,6 @@
     {modules, []},
     {registered, []},
     {mod, {nkchat_app, []}},
-    {applications, [nkservice, nkelastic, nkdomain]},
+    {applications, [nkservice, nkdomain]},
     {env, []}
 ]}.

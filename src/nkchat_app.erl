@@ -1,7 +1,7 @@
 -module(nkchat_app).
 -behaviour(application).
 
--export([start/0, start/2, stop/1, register_types/1]).
+-export([start/0, start/2, stop/1]).
 -export([get/1, get/2, get_srv/2, put/2]).
 
 -define(APP, nkchat).
@@ -30,6 +30,7 @@ start(_Type, _Args) ->
             {ok, Vsn} = application:get_key(?APP, vsn),
             lager:info("NkCHAT v~s has started.", [Vsn]),
             nkchat_i18n:reload(),
+            register_types(),
             {ok, Pid};
         {error, Error} ->
             lager:error("Config error: ~p", [Error]),
@@ -44,12 +45,12 @@ stop(_) ->
 
 
 %% @private
-register_types(SrvId) ->
-    ok = nkdomain_all_types:register(SrvId, nkchat_conversation_obj),
-    ok = nkdomain_all_types:register(SrvId, nkchat_message_obj),
-    ok = nkdomain_all_types:register(SrvId, nkchat_session_obj),
-    ok = nkdomain_all_types:register(SrvId, nkchat_media_call_obj),
-    ok = nkdomain_all_types:register(SrvId, nkchat_media_session_obj).
+register_types() ->
+    ok = nkdomain_all_types:register(nkchat_conversation_obj),
+    ok = nkdomain_all_types:register(nkchat_message_obj),
+    ok = nkdomain_all_types:register(nkchat_session_obj),
+    ok = nkdomain_all_types:register(nkchat_media_call_obj),
+    ok = nkdomain_all_types:register(nkchat_media_session_obj).
 
 
 %% Config Management

@@ -22,7 +22,6 @@
 
 -export([plugin_deps/0, error/1]).
 -export([admin_element_action/5, admin_get_data/3]).
--export([service_init/2]).
 
 
 %% ===================================================================
@@ -33,10 +32,6 @@
 plugin_deps() ->
     [nkdomain].
 
-service_init(_Service, #{id:=SrvId}=State) ->
-    lager:info("NkCHAT registeting types for service '~s'", [SrvId]),
-    nkchat_app:register_types(SrvId),
-    {ok, State}.
 
 
 
