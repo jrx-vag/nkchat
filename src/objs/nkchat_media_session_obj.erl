@@ -512,10 +512,14 @@ do_invite(CalleeId, InviteOpts, State) ->
                         _ ->
                             ?DEFAULT_INVITE_TTL
                     end,
-                    Opts2 = #{ttl => TTL},
-                    case
-                        nkdomain_token_obj:create(DomainId, CalleeId, CalleeId, <<"media.call">>, Opts2, Op2)
-                    of
+                    TokenOpts = #{
+                        domain_id => DomainId,
+                        parent_id => CalleeId,
+                        created_by => CalleeId,
+                        subtype => <<"media.call">>,
+                        ttl => TTL
+                    },
+                    case nkdomain_token_obj:create(TokenOpts, Op2) of
                         {ok, InviteId, Pid, _Secs, _Unknown} ->
                             State2 = add_invite(InviteId, Pid, CalleeId, InviteOpts, State),
                             {ok, InviteId, State2};

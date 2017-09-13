@@ -406,8 +406,14 @@ object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
                             }
                         }
                     },
-                    Opts = #{ttl => TTL},
-                    case nkdomain_token_obj:create(DomainId, MemberId, UserId, <<"chat.invite">>, Opts, Op3) of
+                    TokenOpts = #{
+                        domain_id => DomainId,
+                        parent_id => MemberId,
+                        created_by => UserId,
+                        subtype => <<"chat.invite">>,
+                        ttl => TTL
+                    },
+                    case nkdomain_token_obj:create(TokenOpts, Op3) of
                         {ok, TokenId, _Pid, _Secs, _Unknown} ->
                             {ok, TokenId};
                         {error, Error} ->

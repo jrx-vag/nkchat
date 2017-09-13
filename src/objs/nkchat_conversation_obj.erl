@@ -584,11 +584,17 @@ object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) -
                 <<"conversation_id">> => ConvId,
                 <<"member_id">> => MemberId
             },
-            Opts = #{ttl => TTL2},
             % Since the parent is ours, it would block
             spawn_link(
                 fun() ->
-                    Reply = case nkdomain_token_obj:create(DomainId, ConvId, UserId, ?CHAT_CONVERSATION, Opts, Data) of
+                    TokenOpts = #{
+                        domain_id => DomainId,
+                        parent_id => ConvId,
+                        created_by => UserId,
+                        subtype => ?CHAT_CONVERSATION,
+                        ttl => TTL2
+                    },
+                    Reply = case nkdomain_token_obj:create(TokenOpts, Data) of
                         {ok, TokenId, _Pid, _Secs, _Unknown} ->
                             {ok, ConvId, TokenId, TTL2};
                         {error, Error} ->
