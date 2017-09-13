@@ -28,8 +28,8 @@
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
+-include_lib("nkdomain/include/nkdomain_admin.hrl").
 
--define(ID, <<"domain_detail_type_view__message">>).
 -define(ID_SUBDOMAINS, <<"domain_detail_type_view__message__subdomains">>).
 
 
@@ -49,7 +49,7 @@ table(Opts, Session) ->
 %            <<?ID/binary, "__", TableId/binary>>;
             TableId;
         _ ->
-            ?ID
+            <<?ADMIN_TYPE_VIEW/binary, "__message">>
     end,
     Spec = #{
         table_id => Id,
