@@ -23,7 +23,7 @@
 -module(nkchat_message_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([view/1, subview/2, table_data/2, element_updated/3]).
+-export([view/1, subview/2, table_data/2]).
 
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
@@ -66,6 +66,13 @@ table(Opts, Session) ->
                 sort => false,
                 options => nkdomain_admin_util:get_agg(<<"parent_id">>, ?CHAT_MESSAGE, Session),
                 is_html => true
+            },
+            #{
+                id => service,
+                type => text,
+                name => domain_column_service,
+                sort => true,
+                options => nkdomain_admin_util:get_agg(<<"srv_id">>, ?DOMAIN_USER, Session)
             },
             #{
                 id => created_time,
@@ -138,14 +145,22 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
         _ ->
             <<"desc:path">>
     end,
-    %% Get the timezone_offset from the filter list and pass it to table_filter
-    case table_filter(maps:to_list(Filter), Filter, #{type=>message}) of
+    Offset = maps:get(<<"timezone_offset">>, Filter, 0),
+    case table_filter(maps:to_list(Filter), #{timezone_offset=>Offset}, #{type=>message}) of
         {ok, Filters} ->
             % lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filter)]),
             FindSpec = #{
                 filters => Filters,
-                fields => [<<"created_by">>, <<"created_time">>, <<"parent_id">>,
-                           <<"domain_id">>, <<"message.text">>, <<"message.file_id">>],
+                fields => [
+                        <<"created_by">>,
+                        <<"srv_id">>,
+                        <<"path">>,
+                        <<"created_time">>,
+                        <<"parent_id">>,
+                        <<"domain_id">>,
+                        <<"message.text">>,
+                        <<"message.file_id">>
+                ],
                 sort => SortSpec,
                 from => Start,
                 size => Size
@@ -168,42 +183,33 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
 
 
 %% @private
-table_filter([], _Filter, Acc) ->
+table_filter([], _Info, Acc) ->
     {ok, Acc};
 
-table_filter([{_, <<>>}|Rest], Filter, Acc) ->
-    table_filter(Rest, Filter, Acc);
-
-table_filter([{<<"conversation">>, Data}|Rest], Filter, Acc) ->
-    Acc2 = Acc#{<<"parent_id">> => Data},
-    table_filter(Rest, Filter, Acc2);
-
-table_filter([{<<"created_by">>, Data}|Rest], Filter, Acc) ->
-    Acc2 = Acc#{<<"created_by">> => Data},
-    table_filter(Rest, Filter, Acc2);
-
-table_filter([{<<"created_time">>, Data}|Rest], Filter, Acc) ->
-    case nkdomain_admin_util:table_filter_time(Data, Filter, Acc) of
+table_filter([Term|Rest], Info, Acc) ->
+    case nkdomain_admin_util:table_filter(Term, Info, Acc) of
         {ok, Acc2} ->
-            table_filter(Rest, Filter, Acc2);
+            table_filter(Rest, Info, Acc2);
         {error, Error} ->
-            {error, Error}
-    end;
-
-table_filter([{<<"text">>, Data}|Rest], Filter, Acc) ->
-    Acc2 = Acc#{<<"message.text">> => Data},
-    table_filter(Rest, Filter, Acc2);
-
-table_filter([{<<"file_id">>, <<"with_attach">>}|Rest], Filter, Acc) ->
-    Acc2 = Acc#{<<"message.file_id">> => <<"prefix:file">>},
-    table_filter(Rest, Filter, Acc2);
-
-table_filter([{<<"file_id">>, <<"false">>}|Rest], Filter, Acc) ->
-    Acc2 = Acc#{<<"message.file_id">> => <<>>},
-    table_filter(Rest, Filter, Acc2);
-
-table_filter([_|Rest], Filter, Acc) ->
-    table_filter(Rest, Filter, Acc).
+            {error, Error};
+        unknown ->
+            case Term of
+                {<<"conversation">>, Data} ->
+                    Acc2 = Acc#{<<"parent_id">> => Data},
+                    table_filter(Rest, Info, Acc2);
+                {<<"text">>, Data} ->
+                    Acc2 = Acc#{<<"message.text">> => Data},
+                    table_filter(Rest, Info, Acc2);
+                {<<"file_id">>, <<"with_attach">>} ->
+                    Acc2 = Acc#{<<"message.file_id">> => <<"prefix:file">>},
+                    table_filter(Rest, Info, Acc2);
+                {<<"file_id">>, <<"false">>} ->
+                    Acc2 = Acc#{<<"message.file_id">> => <<>>},
+                    table_filter(Rest, Info, Acc2);
+                _ ->
+                    table_filter(Rest, Info, Acc)
+            end
+    end.
 
 
 %% @private
@@ -211,29 +217,16 @@ table_iter([], _Pos, Acc, _Session) ->
     lists:reverse(Acc);
 
 table_iter([Entry|Rest], Pos, Acc, Session) ->
+    Base = nkdomain_admin_util:table_entry(?CHAT_MESSAGE, Entry, Pos),
     #{
-        <<"obj_id">> := ObjId,
         <<"parent_id">> := ParentId,
-        <<"created_time">> := CreatedTime
+        ?CHAT_MESSAGE := Message
     } = Entry,
-    Message = maps:get(<<"message">>, Entry, #{}),
     MessageText = maps:get(<<"text">>, Message, <<>>),
     MessageFileId = maps:get(<<"file_id">>, Message, <<>>),
-    CreatedBy = maps:get(<<"created_by">>, Entry, <<>>),
-    Enabled = maps:get(<<"enabled">>, Entry, true),
-%    Css = case Enabled of
-%        true -> <<"">>;
-%        false -> <<"webix_cell_disabled">>
-%    end,
     Conv = case nkdomain_lib:find(ParentId) of
         #obj_id_ext{path=ConvPath} ->
             nkdomain_admin_util:obj_url(ParentId, ConvPath);
-        _ ->
-            <<>>
-    end,
-    User = case nkdomain:get_name(CreatedBy) of
-        {ok, #{name:=UserName}} ->
-            nkdomain_admin_util:obj_url(CreatedBy, UserName);
         _ ->
             <<>>
     end,
@@ -251,28 +244,22 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
                     <<>>
             end
     end,
-    Data = #{
-        checkbox => <<"0">>,
-        pos => Pos,
-        id => ObjId,
+    Data = Base#{
         conversation => Conv,
-        created_time => CreatedTime,
-        created_by => User,
         text => MessageText,
-        file_id => File,
-        enabled => Enabled
-%        <<"$css">> => Css
+        file_id => File
     },
     table_iter(Rest, Pos+1, [Data|Acc], Session).
 
-%% @private
-element_updated(_ObjId, Value, _Session) ->
-    #{
-        <<"text">> := Text
-    } = Value,
-    Update = #{
-        ?CHAT_MESSAGE => #{
-            text => Text
-        }
-    },
-    {ok, Update}.
+
+%%%% @private
+%%element_updated(_ObjId, Value, _Session) ->
+%%    #{
+%%        <<"text">> := Text
+%%    } = Value,
+%%    Update = #{
+%%        ?CHAT_MESSAGE => #{
+%%            text => Text
+%%        }
+%%    },
+%%    {ok, Update}.
