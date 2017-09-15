@@ -249,7 +249,7 @@ object_admin_info() ->
     #{
         class => session,
         weight => 2000,
-        tree_id => <<"domain_tree_sessions_media.sessions">>
+        type_view_mod => nkchat_media_session_obj_type_view
     }.
 
 
