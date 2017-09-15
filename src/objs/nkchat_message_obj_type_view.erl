@@ -60,19 +60,26 @@ table(Opts, Session) ->
                 type => checkbox
             },
             #{
-                id => conversation,
+                id => domain,
                 type => text,
-                name => domain_column_conversation,
-                sort => false,
-                options => nkdomain_admin_util:get_agg(<<"parent_id">>, ?CHAT_MESSAGE, Session),
-                is_html => true
+                name => domain_column_domain,
+                sort => true,
+                options => nkdomain_admin_util:get_agg(<<"domain_id">>, ?CHAT_MESSAGE, Session)
             },
             #{
                 id => service,
                 type => text,
                 name => domain_column_service,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"srv_id">>, ?DOMAIN_USER, Session)
+                options => nkdomain_admin_util:get_agg(<<"srv_id">>, ?CHAT_MESSAGE, Session)
+            },
+            #{
+                id => conversation,
+                type => text,
+                name => domain_column_conversation,
+                sort => false,
+                options => nkdomain_admin_util:get_agg(<<"parent_id">>, ?CHAT_MESSAGE, Session),
+                is_html => true
             },
             #{
                 id => created_time,
@@ -224,9 +231,9 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
     } = Entry,
     MessageText = maps:get(<<"text">>, Message, <<>>),
     MessageFileId = maps:get(<<"file_id">>, Message, <<>>),
-    Conv = case nkdomain_lib:find(ParentId) of
-        #obj_id_ext{path=ConvPath} ->
-            nkdomain_admin_util:obj_url(ParentId, ConvPath);
+    Conv = case nkdomain:get_name(ParentId) of
+        {ok, #{name:=Name}} ->
+            nkdomain_admin_util:obj_url(ParentId, Name);
         _ ->
             <<>>
     end,
