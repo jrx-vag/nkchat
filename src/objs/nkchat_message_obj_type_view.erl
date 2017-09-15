@@ -23,7 +23,7 @@
 -module(nkchat_message_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([view/1, subview/2, table_data/3, element_updated/3]).
+-export([view/2, subview/3, table_data/3, element_updated/3]).
 
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
@@ -31,16 +31,16 @@
 -include_lib("nkdomain/include/nkdomain_admin.hrl").
 
 %% @doc
-view(Session) ->
-    table(#{is_subtable=>false}, Session).
+view(Path, Session) ->
+    table(#{is_subtable=>false}, Path, Session).
 
 %% @doc
-subview(Opts, Session) ->
-    table(Opts#{is_subtable=>true, created_by_hidden=>true}, Session).
+subview(Opts, Path, Session) ->
+    table(Opts#{is_subtable=>true, created_by_hidden=>true}, Path, Session).
 
 
 %% @doc
-table(Opts, Session) ->
+table(Opts, Path, Session) ->
     Id = case Opts of
         #{table_id:=TableId} ->
 %            <<?ID/binary, "__", TableId/binary>>;
@@ -54,6 +54,7 @@ table(Opts, Session) ->
         is_subtable => maps:get(is_subtable, Opts),
         subdomains_id => SubDomainsFilterId,
         filters => [SubDomainsFilterId],
+        base_domain => Path,
         columns => lists:flatten([
             #{
                 id => checkbox,
