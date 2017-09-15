@@ -23,7 +23,7 @@
 -module(nkchat_message_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([view/1, subview/2, table_data/2, element_updated/3]).
+-export([view/1, subview/2, table_data/3, element_updated/3]).
 
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
@@ -36,7 +36,7 @@ view(Session) ->
 
 %% @doc
 subview(Opts, Session) ->
-    table(Opts#{is_subtable=>true}, Session).
+    table(Opts#{is_subtable=>true, created_by_hidden=>true}, Session).
 
 
 %% @doc
@@ -54,7 +54,7 @@ table(Opts, Session) ->
         is_subtable => maps:get(is_subtable, Opts),
         subdomains_id => SubDomainsFilterId,
         filters => [SubDomainsFilterId],
-        columns => [
+        columns => lists:flatten([
             #{
                 id => checkbox,
                 type => checkbox
@@ -87,14 +87,19 @@ table(Opts, Session) ->
                 name => domain_column_created_time,
                 sort => true
             },
-            #{
-                id => created_by,
-                type => text,
-                name => domain_column_created_by,
-                sort => false,
-                options => nkdomain_admin_util:get_agg(<<"created_by">>, ?CHAT_MESSAGE, Session),
-                is_html => true % Will allow us to return HTML inside the column data
-            },
+            case Opts of
+                #{created_by_hidden:=true} ->
+                    [];
+                _ ->
+                    #{
+                        id => created_by,
+                        type => text,
+                        name => domain_column_created_by,
+                        sort => false,
+                        options => nkdomain_admin_util:get_agg(<<"created_by">>, ?CHAT_MESSAGE, Session),
+                        is_html => true % Will allow us to return HTML inside the column data
+                    }
+            end,
             #{
                 id => text,
                 type => text,
@@ -109,7 +114,7 @@ table(Opts, Session) ->
                 options => [#{id=><<>>, value=><<>>}, #{id=>with_attach, value=><<"With attach">>}],
                 is_html => true
             }
-        ],
+        ]),
         left_split => 1,
 %        right_split => 2,
         on_click => [
@@ -142,7 +147,13 @@ table(Opts, Session) ->
 
 
 %% @doc
-table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
+table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Opts, Session) ->
+    Filter2 = case Opts of
+        #{orig_type:=?DOMAIN_USER, obj_id:=UserId} ->
+            Filter#{<<"created_by">> => UserId};
+        _ ->
+            Filter
+    end,
     #admin_session{domain_id=DomainId} = Session,
     SortSpec = case Sort of
         {<<"conversation">>, Order} ->
@@ -152,8 +163,8 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
         _ ->
             <<"desc:path">>
     end,
-    Offset = maps:get(<<"timezone_offset">>, Filter, 0),
-    case table_filter(maps:to_list(Filter), #{timezone_offset=>Offset}, #{type=>message}) of
+    Offset = maps:get(<<"timezone_offset">>, Filter2, 0),
+    case table_filter(maps:to_list(Filter2), #{timezone_offset=>Offset}, #{type=>message}) of
         {ok, Filters} ->
             % lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filter)]),
             FindSpec = #{
@@ -173,7 +184,7 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Session) ->
                 size => Size
             },
             SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_MESSAGE),
-            Fun = case maps:get(SubDomainsFilterId, Filter) of
+            Fun = case maps:get(SubDomainsFilterId, Filter2, 1) of
                 0 -> search;
                 1 -> search_all
             end,
