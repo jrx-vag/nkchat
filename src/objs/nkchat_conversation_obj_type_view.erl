@@ -65,7 +65,7 @@ table(Opts, Path, Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_domain,
                 sort => true,
-                options => nkdomain_admin_util:get_agg_name(<<"domain_id">>, ?CHAT_CONVERSATION, Session)
+                options => get_agg_name(<<"domain_id">>, Path)
             },
             #{
                 id => service,
@@ -73,7 +73,7 @@ table(Opts, Path, Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_service,
                 sort => true,
-                options => nkdomain_admin_util:get_agg_srv_id(?CHAT_CONVERSATION, Session)
+                options => get_agg_srv_id(Path)
             },
             #{
                 id => obj_name,
@@ -96,7 +96,7 @@ table(Opts, Path, Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_type,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"conversation.type">>, ?CHAT_CONVERSATION, Session)
+                options => get_agg_term(<<"conversation.type">>, Path)
             },
             #{
                 id => created_time,
@@ -109,7 +109,7 @@ table(Opts, Path, Session) ->
                 id => members,
                 type => text,
                 name => domain_column_members,
-                sort => true,
+                options => get_agg_name(<<"conversation.members.member_id">>, Path),
                 is_html => true
             }
         ]),
@@ -130,6 +130,7 @@ table(Opts, Path, Session) ->
     {Table, Session}.
 
 
+
 %% @doc
 table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, _Opts, Session) ->
 %%    Filter2 = case Opts of
@@ -141,9 +142,15 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, _Opts, Sessi
     Filter2 = Filter,
     #admin_session{domain_id=DomainId} = Session,
     SortSpec = case Sort of
+        {<<"service">>, Order} ->
+            <<Order/binary, ":srv_id">>;
+        {<<"name">>, Order} ->
+            <<Order/binary, ":name_sort">>;
         {<<"conversation">>, Order} ->
             <<Order/binary, ":path">>;
-        {Field, Order} when Field==<<"created_by">>; Field==<<"created_time">> ->
+        {<<"type">>, Order} ->
+            <<Order/binary, ":conversation.type">>;
+        {Field, Order} when Field==<<"created_by">>; Field==<<"created_time">>; Field==<<"obj_name">> ->
             <<Order/binary, $:, Field/binary>>;
         _ ->
             <<"desc:path">>
@@ -198,18 +205,12 @@ table_filter([Term|Rest], Info, Acc) ->
             {error, Error};
         unknown ->
             case Term of
-%%                {<<"conversation">>, Data} ->
-%%                    Acc2 = Acc#{<<"parent_id">> => Data},
-%%                    table_filter(Rest, Info, Acc2);
-%%                {<<"text">>, Data} ->
-%%                    Acc2 = Acc#{<<"message.text">> => Data},
-%%                    table_filter(Rest, Info, Acc2);
-%%                {<<"file_id">>, <<"with_attach">>} ->
-%%                    Acc2 = Acc#{<<"message.file_id">> => <<"prefix:file">>},
-%%                    table_filter(Rest, Info, Acc2);
-%%                {<<"file_id">>, <<"false">>} ->
-%%                    Acc2 = Acc#{<<"message.file_id">> => <<>>},
-%%                    table_filter(Rest, Info, Acc2);
+                {<<"type">>, Data} ->
+                    Acc2 = Acc#{<<"conversation.type">> => Data},
+                    table_filter(Rest, Info, Acc2);
+                {<<"members">>, Data} ->
+                    Acc2 = Acc#{<<"conversation.members.member_id">> => Data},
+                    table_filter(Rest, Info, Acc2);
                 _ ->
                     table_filter(Rest, Info, Acc)
             end
@@ -228,7 +229,7 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
             <<"members">> := Members
         }
     } = Entry,
-
+    Name = maps:get(<<"name">>, Entry, <<>>),
     #{<<"obj_id">>:=ObjId, <<"obj_name">> := ObjName} = Entry,
     ObjName2 = case ObjName of
         <<"mh-", _/binary>> -> <<"(dynamic)">>;
@@ -236,6 +237,7 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
     end,
     MemberIds1 = [nkdomain_admin_util:obj_url(M) || #{<<"member_id">>:=M} <- Members],
     Data = Base#{
+        name => Name,
         obj_name := nkdomain_admin_util:obj_url(ObjId, ObjName2),
         type => Type,
         members => nklib_util:bjoin(MemberIds1, <<", ">>)
@@ -246,11 +248,22 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
 %% @private
 element_updated(_ObjId, Value, _Session) ->
     #{
-        <<"text">> := Text
+        <<"name">> := Name
     } = Value,
-    Update = #{
-        ?CHAT_CONVERSATION => #{
-            text => Text
-        }
-    },
+    Update = #{name => Name},
     {ok, Update}.
+
+
+%% @private
+get_agg_name(Field, Path) ->
+    nkdomain_admin_util:get_agg_name(Field, ?CHAT_CONVERSATION, Path).
+
+
+%% @private
+get_agg_srv_id(Path) ->
+    nkdomain_admin_util:get_agg_srv_id(?CHAT_CONVERSATION, Path).
+
+
+%% @private
+get_agg_term(Field, Path) ->
+    nkdomain_admin_util:get_agg_term(Field, ?CHAT_CONVERSATION, Path).

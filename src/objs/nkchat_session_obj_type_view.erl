@@ -48,7 +48,7 @@ view(Path, Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_domain,
                 sort => true,
-                options => nkdomain_admin_util:get_agg_name(<<"domain_id">>, ?CHAT_SESSION, Session)
+                options => get_agg_name(<<"domain_id">>, Path)
             },
             #{
                 id => service,
@@ -56,7 +56,7 @@ view(Path, Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_service,
                 sort => true,
-                options => nkdomain_admin_util:get_agg_srv_id(?CHAT_SESSION, Session)
+                options => get_agg_srv_id(Path)
             },
             #{
                 id => obj_name,
@@ -71,7 +71,7 @@ view(Path, Session) ->
                 type => text,
                 name => domain_column_created_by,
                 sort => true,
-                options => nkdomain_admin_util:get_agg_name(<<"created_by">>, ?CHAT_SESSION, Session),
+                options => get_agg_name(<<"created_by">>, Path),
                 is_html => true % Will allow us to return HTML inside the column data
             },
             #{
@@ -174,3 +174,15 @@ table_iter([Entry|Rest], Pos, Acc) ->
 %% @private
 element_updated(_ObjId, _Value, _Session) ->
     #{}.
+
+
+%% @private
+get_agg_name(Field, Path) ->
+    nkdomain_admin_util:get_agg_name(Field, ?CHAT_SESSION, Path).
+
+
+%% @private
+get_agg_srv_id(Path) ->
+    nkdomain_admin_util:get_agg_srv_id(?CHAT_SESSION, Path).
+
+
