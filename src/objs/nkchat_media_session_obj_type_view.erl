@@ -47,7 +47,7 @@ view(Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_domain,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"domain_id">>, ?MEDIA_SESSION, Session)
+                options => nkdomain_admin_util:get_agg_name(<<"domain_id">>, ?MEDIA_SESSION, Session)
             },
             #{
                 id => service,
@@ -55,7 +55,7 @@ view(Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_service,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"srv_id">>, ?MEDIA_SESSION, Session)
+                options => nkdomain_admin_util:get_agg_srv_id(?MEDIA_SESSION, Session)
             },
             #{
                 id => obj_name,
@@ -70,7 +70,7 @@ view(Session) ->
                 type => text,
                 name => domain_column_created_by,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"created_by">>, ?MEDIA_SESSION, Session),
+                options => nkdomain_admin_util:get_agg_name(<<"created_by">>, ?MEDIA_SESSION, Session),
                 is_html => true % Will allow us to return HTML inside the column data
             },
             #{

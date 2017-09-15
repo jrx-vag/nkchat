@@ -64,7 +64,7 @@ table(Opts, Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_domain,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"domain_id">>, ?CHAT_CONVERSATION, Session)
+                options => nkdomain_admin_util:get_agg_name(<<"domain_id">>, ?CHAT_CONVERSATION, Session)
             },
             #{
                 id => service,
@@ -72,7 +72,7 @@ table(Opts, Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_service,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"srv_id">>, ?CHAT_CONVERSATION, Session)
+                options => nkdomain_admin_util:get_agg_srv_id(?CHAT_CONVERSATION, Session)
             },
             #{
                 id => obj_name,
@@ -220,7 +220,6 @@ table_iter([], _Pos, Acc, _Session) ->
     lists:reverse(Acc);
 
 table_iter([Entry|Rest], Pos, Acc, Session) ->
-    lager:error("NKLOG EE ~p", [Entry]),
     Base = nkdomain_admin_util:table_entry(?CHAT_CONVERSATION, Entry, Pos),
     #{
         ?CHAT_CONVERSATION := #{

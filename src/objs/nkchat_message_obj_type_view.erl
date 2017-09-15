@@ -64,21 +64,21 @@ table(Opts, Session) ->
                 type => text,
                 name => domain_column_domain,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"domain_id">>, ?CHAT_MESSAGE, Session)
+                options => nkdomain_admin_util:get_agg_name(<<"domain_id">>, ?CHAT_MESSAGE, Session)
             },
             #{
                 id => service,
                 type => text,
                 name => domain_column_service,
                 sort => true,
-                options => nkdomain_admin_util:get_agg(<<"srv_id">>, ?CHAT_MESSAGE, Session)
+                options => nkdomain_admin_util:get_agg_srv_id(?CHAT_MESSAGE, Session)
             },
             #{
                 id => conversation,
                 type => text,
                 name => domain_column_conversation,
                 sort => false,
-                options => nkdomain_admin_util:get_agg(<<"parent_id">>, ?CHAT_MESSAGE, Session),
+                options => nkdomain_admin_util:get_agg_name(<<"parent_id">>, ?CHAT_MESSAGE, Session),
                 is_html => true
             },
             #{
@@ -96,7 +96,7 @@ table(Opts, Session) ->
                         type => text,
                         name => domain_column_created_by,
                         sort => false,
-                        options => nkdomain_admin_util:get_agg(<<"created_by">>, ?CHAT_MESSAGE, Session),
+                        options => nkdomain_admin_util:get_agg_name(<<"created_by">>, ?CHAT_MESSAGE, Session),
                         is_html => true % Will allow us to return HTML inside the column data
                     }
             end,
