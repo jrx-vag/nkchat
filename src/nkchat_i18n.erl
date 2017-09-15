@@ -37,7 +37,11 @@ i18n() -> #{
 
         "domain_column_conversation" => "CONVERSATION",
         "domain_column_text" => "MESSAGE",
-        "domain_column_file_id" => "FILE"
+        "domain_column_file_id" => "FILE",
+        "domain_column_members" => "MEMBERS",
+        "domain_column_type" => "TYPE"
+
+
     },
     es => #{
         "domain_tree_resources__conversation" => "Conversaciones",
@@ -50,7 +54,9 @@ i18n() -> #{
 
         "domain_column_conversation" => <<"CONVERSACIÓN"/utf8>>,
         "domain_column_text" => "MENSAJE",
-        "domain_column_file_id" => "FICHERO"
+        "domain_column_file_id" => "FICHERO",
+        "domain_column_members" => "MIEMBROS",
+        "domain_column_type" => "TIPO"
     }
 }.
 

@@ -341,7 +341,8 @@ object_info() ->
 object_admin_info() ->
     #{
         class => resource,
-        weight => 2000
+        weight => 2000,
+        type_view_mod => nkchat_conversation_obj_type_view
     }.
 
 
