@@ -48,7 +48,7 @@ table(Opts, Session) ->
         _ ->
             nkdomain_admin_util:make_type_view_id(?CHAT_MESSAGE)
     end,
-    SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_MESSAGE),
+    SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(Id),
     Spec = #{
         table_id => Id,
         is_subtable => maps:get(is_subtable, Opts),
@@ -183,7 +183,14 @@ table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, Opts, Sessio
                 from => Start,
                 size => Size
             },
-            SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_MESSAGE),
+            Id = case Opts of
+                #{table_id:=TableId} ->
+%                    <<?ID/binary, "__", TableId/binary>>;
+                TableId;
+            _ ->
+                nkdomain_admin_util:make_type_view_id(?CHAT_MESSAGE)
+            end,
+            SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(Id),
             Fun = case maps:get(SubDomainsFilterId, Filter2, 1) of
                 0 -> search;
                 1 -> search_all
