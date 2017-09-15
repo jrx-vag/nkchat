@@ -64,6 +64,7 @@ table(Opts, Path, Session) ->
                 type => text,
                 fillspace => <<"0.5">>,
                 name => domain_column_domain,
+                is_html => true,
                 sort => true,
                 options => get_agg_name(<<"domain_id">>, Path)
             },
@@ -235,10 +236,10 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
         <<"mh-", _/binary>> -> <<"(dynamic)">>;
         _ -> ObjName
     end,
-    MemberIds1 = [nkdomain_admin_util:obj_url(M) || #{<<"member_id">>:=M} <- Members],
+    MemberIds1 = [nkdomain_admin_util:obj_id_url(M)|| #{<<"member_id">>:=M} <- Members],
     Data = Base#{
         name => Name,
-        obj_name := nkdomain_admin_util:obj_url(ObjId, ObjName2),
+        obj_name := nkdomain_admin_util:obj_id_url(ObjId, ObjName2),
         type => Type,
         members => nklib_util:bjoin(MemberIds1, <<", ">>)
     },

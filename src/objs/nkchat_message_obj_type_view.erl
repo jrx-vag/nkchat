@@ -64,6 +64,7 @@ table(Opts, Path, Session) ->
                 id => domain,
                 type => text,
                 name => domain_column_domain,
+                is_html => true,
                 sort => true,
                 options => get_agg_name(<<"domain_id">>, Path)
             },
@@ -252,7 +253,7 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
     MessageFileId = maps:get(<<"file_id">>, Message, <<>>),
     Conv = case nkdomain:get_name(ParentId) of
         {ok, #{name:=Name}} ->
-            nkdomain_admin_util:obj_url(ParentId, Name);
+            nkdomain_admin_util:obj_id_url(ParentId, Name);
         _ ->
             <<>>
     end,
@@ -265,7 +266,7 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
                     #{content_type:=CT, size:=Size} = FileObj,
                     FileTxt = <<FileName/binary, $(, CT/binary, ", ",
                                 (nklib_util:to_binary(Size div 1024))/binary, "KB)">>,
-                    nkdomain_admin_util:obj_url(MessageFileId, FileTxt);
+                    nkdomain_admin_util:obj_id_url(MessageFileId, FileTxt);
                 _ ->
                     <<>>
             end
