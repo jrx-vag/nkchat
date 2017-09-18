@@ -24,7 +24,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([start/3, get_conversations/1, get_conversation_info/2, launch_notifications/1]).
--export([set_active_conversation/2, add_conversation/2, remove_conversation/2]).
+-export([set_active_conversation/2, deactivate_conversation/1, add_conversation/2, remove_conversation/2]).
 -export([conversation_event/4, send_invitation/4, accept_invitation/2, reject_invitation/2, wakeup/1]).
 -export([object_info/0, object_es_mapping/0, object_parse/2,
          object_api_syntax/2, object_api_cmd/2]).
@@ -159,6 +159,13 @@ set_active_conversation(Id, Conv) ->
         {error, Error} ->
             {error, Error}
     end.
+
+%% @doc
+-spec deactivate_conversation(nkdomain:id()) ->
+    {ok, map()} | {error, term()}.
+
+deactivate_conversation(Id) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, deactivate_conv}).
 
 %% @doc Sends a invitation notification
 -spec send_invitation(nkdomain:id(), nkdomain:id(), nkdomain:id(), integer()) ->
@@ -366,6 +373,11 @@ object_sync_op({?MODULE, set_active_conv, ConvId}, _From, State) ->
             {reply, {error, conversation_not_found}, State2}
     end;
 
+object_sync_op({?MODULE, deactivate_conv}, _From, State) ->
+    State2 = set_user_active(State),
+    ConvId = undefined,
+    {reply, ok, do_set_active_conv(ConvId, State2)};    
+
 object_sync_op({?MODULE, add_conv, ConvId}, _From, State) ->
     case get_conv_pid(ConvId, State) of
         not_found ->
@@ -509,7 +521,6 @@ do_set_active_conv([{ConvId, Pid}|Rest], ActiveId, UserId, SessId) ->
     Active = (ActiveId == ConvId),
     nkchat_conversation_obj:set_session_active(Pid, UserId, SessId, Active),
     do_set_active_conv(Rest, ActiveId, UserId, SessId).
-
 
 %% @private
 do_add_conv(ConvId, State) ->

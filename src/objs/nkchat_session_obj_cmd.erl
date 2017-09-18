@@ -129,6 +129,19 @@ cmd(<<"set_active_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data}=
             {error, Error}
     end;
 
+cmd(<<"deactivate_conversation">>, #nkreq{data=Data}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
+        {ok, Id} ->
+            case nkchat_session_obj:deactivate_conversation(Id) of
+                ok ->
+                    {ok, #{}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(<<"add_conversation">>, #nkreq{data=#{conversation_id:=ConvId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
