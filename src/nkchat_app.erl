@@ -1,7 +1,7 @@
 -module(nkchat_app).
 -behaviour(application).
 
--export([start/0, start/2, stop/1]).
+-export([start/0, start/2, stop/1, register_types/0]).
 -export([get/1, get/2, get_srv/2, put/2]).
 
 -define(APP, nkchat).
