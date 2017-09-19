@@ -48,11 +48,13 @@ table(Opts, Path, Session) ->
             nkdomain_admin_util:make_type_view_id(?CHAT_CONVERSATION)
     end,
     SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_CONVERSATION),
+    DeletedFilterId = nkdomain_admin_util:make_type_view_delfilter_id(?CHAT_CONVERSATION),
     Spec = #{
         table_id => Id,
         is_subtable => maps:get(is_subtable, Opts),
         subdomains_id => SubDomainsFilterId,
-        filters => [SubDomainsFilterId],
+        deleted_id => DeletedFilterId,
+        filters => [SubDomainsFilterId, DeletedFilterId],
         base_domain => Path,
         columns => lists:flatten([
             #{
