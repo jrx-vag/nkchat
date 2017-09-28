@@ -228,11 +228,12 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
     Base = nkdomain_admin_util:table_entry(?CHAT_CONVERSATION, Entry, Pos),
     #{
         ?CHAT_CONVERSATION := #{
-            <<"type">> := Type,
-            <<"members">> := Members
+            <<"type">> := Type
         }
     } = Entry,
     Name = maps:get(<<"name">>, Entry, <<>>),
+    ChatConv = maps:get(?CHAT_CONVERSATION, Entry, #{}),
+    Members = maps:get(<<"members">>, ChatConv, []),
     #{<<"obj_id">>:=ObjId, <<"obj_name">> := ObjName} = Entry,
     ObjName2 = case ObjName of
         <<"mh-", _/binary>> -> <<"(dynamic)">>;
