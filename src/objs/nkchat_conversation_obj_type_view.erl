@@ -48,11 +48,13 @@ table(Opts, Path, Session) ->
             nkdomain_admin_util:make_type_view_id(?CHAT_CONVERSATION)
     end,
     SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_CONVERSATION),
+    DeletedFilterId = nkdomain_admin_util:make_type_view_delfilter_id(?CHAT_CONVERSATION),
     Spec = #{
         table_id => Id,
         is_subtable => maps:get(is_subtable, Opts),
         subdomains_id => SubDomainsFilterId,
-        filters => [SubDomainsFilterId],
+        deleted_id => DeletedFilterId,
+        filters => [SubDomainsFilterId, DeletedFilterId],
         base_domain => Path,
         columns => lists:flatten([
             #{
@@ -226,11 +228,12 @@ table_iter([Entry|Rest], Pos, Acc, Session) ->
     Base = nkdomain_admin_util:table_entry(?CHAT_CONVERSATION, Entry, Pos),
     #{
         ?CHAT_CONVERSATION := #{
-            <<"type">> := Type,
-            <<"members">> := Members
+            <<"type">> := Type
         }
     } = Entry,
     Name = maps:get(<<"name">>, Entry, <<>>),
+    ChatConv = maps:get(?CHAT_CONVERSATION, Entry, #{}),
+    Members = maps:get(<<"members">>, ChatConv, []),
     #{<<"obj_id">>:=ObjId, <<"obj_name">> := ObjName} = Entry,
     ObjName2 = case ObjName of
         <<"mh-", _/binary>> -> <<"(dynamic)">>;
