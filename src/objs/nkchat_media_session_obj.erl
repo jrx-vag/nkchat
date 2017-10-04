@@ -279,13 +279,13 @@ object_send_event(Event, State) ->
 
 
 %% @private When the object is loaded, we make our cache
-object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
+object_init(#obj_state{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     #obj_id_ext{obj_id=SessId} = Id,
     #{parent_id := UserId} = Obj,
     Session = #session{
         user_id = UserId
     },
-    State2 = State#?STATE{session=Session},
+    State2 = State#obj_state{session=Session},
 %%    {ok, Calls1} = nkchat_conversation_obj:find_member_conversations(SrvId, DomainId, UserId),
 %%    State3 = lists:foldl(
 %%        fun({CallId, _Type}, Acc) ->
@@ -311,7 +311,7 @@ object_stop(_Reason, State) ->
 
 
 %% @private
-object_sync_op({?MODULE, get_calls}, _From, #?STATE{session=Session}=State) ->
+object_sync_op({?MODULE, get_calls}, _From, #obj_state{session=Session}=State) ->
     #session{calls2=Calls} = Session,
     {reply, {ok, [CallId || #call{id=CallId} <- Calls]}, State};
 
@@ -346,7 +346,7 @@ object_sync_op({?MODULE, accept_invite, InviteId, Data, AcceptOpts}, _From, Stat
                 }
             }
         } ->
-            #?STATE{parent_id=UserId} = State,
+            #obj_state{parent_id=UserId} = State,
             % Avoid user detecting the going down of token and send the invite_removed event
             nkdomain_user_obj:remove_notification(UserId, InviteId, call_accepted),
             case nkdomain_obj:sync_op(SessId, {?MODULE, remote_accept_invite, InviteId, AcceptOpts}) of
@@ -371,7 +371,7 @@ object_sync_op({?MODULE, reject_invite, InviteId, Data}, _From, State) ->
                 }
             }
         } ->
-            #?STATE{parent_id=UserId} = State,
+            #obj_state{parent_id=UserId} = State,
             % Avoid user detecting the going down of token
             % User will send a notification removal throw notify_fun and we will send
             % the invite_removed event
@@ -431,7 +431,7 @@ object_async_op({?MODULE, call_event, CallId, Event}, State) ->
     {noreply, State2};
 
 object_async_op({?MODULE, launch_notifications}, State) ->
-    #?STATE{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
+    #obj_state{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
     nkdomain_user_obj:launch_session_notifications(UserId, SessId),
     {noreply, State};
 
@@ -491,7 +491,7 @@ object_handle_info(_Msg, _State) ->
 
 %% @private
 do_invite(CalleeId, InviteOpts, State) ->
-    #?STATE{domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
+    #obj_state{domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
     Op1 = #{
         ?MEDIA_SESSION => #{
             <<"invite_op">> => #{
@@ -535,7 +535,7 @@ do_invite(CalleeId, InviteOpts, State) ->
 
 
 %% @private
-do_invite_push(InviteOpts, #?STATE{parent_id=CallerId}) ->
+do_invite_push(InviteOpts, #obj_state{parent_id=CallerId}) ->
     case nkdomain_user_obj:get_name(CallerId) of
         {ok, #{fullname:=FullName}} ->
             Data = #{
@@ -555,7 +555,7 @@ do_invite_push(InviteOpts, #?STATE{parent_id=CallerId}) ->
 
 %% @private
 do_accept_invite(InviteId, InviteOpts, AcceptOpts, State) ->
-    #?STATE{domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
+    #obj_state{domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
     State2 = rm_invite(InviteId, State),
     case nkchat_media_call_obj:create(DomainId, <<>>, CallerId, one2one) of
         {ok, CallId, CallPid} ->
@@ -601,28 +601,28 @@ do_event(Event, State) ->
 
 
 %% @private
-get_invites(#?STATE{session=Session}) ->
+get_invites(#obj_state{session=Session}) ->
     #session{invites2=Invites} = Session,
     Invites.
 
 
 %% @private
-add_invite(InviteId, Pid, CalleeId, InviteOpts, #?STATE{session=Session}=State) ->
+add_invite(InviteId, Pid, CalleeId, InviteOpts, #obj_state{session=Session}=State) ->
     Invites = get_invites(State),
     Invite = #invite{id=InviteId, callee_id=CalleeId, token_pid=Pid, invite_opts=InviteOpts},
     Invites2 = lists:keystore(InviteId, #invite.id, Invites, Invite),
     Session2 = Session#session{invites2=Invites2},
-    State2 = State#?STATE{session=Session2},
+    State2 = State#obj_state{session=Session2},
     nkdomain_obj:links_add(usage, {?MODULE, invite, InviteId, Pid}, State2).
 
 
 %% @private
-rm_invite(InviteId, #?STATE{session=Session}=State) ->
+rm_invite(InviteId, #obj_state{session=Session}=State) ->
     Invites = get_invites(State),
     case lists:keytake(InviteId, #invite.id, Invites) of
         {value, #invite{token_pid=TokenPid}, Invites2} ->
             Session2 = Session#session{invites2=Invites2},
-            State2 = State#?STATE{session=Session2},
+            State2 = State#obj_state{session=Session2},
             nkdomain_obj:links_remove(usage, {?MODULE, invite, InviteId, TokenPid}, State2);
         false ->
             State
@@ -630,29 +630,29 @@ rm_invite(InviteId, #?STATE{session=Session}=State) ->
 
 
 %% @private
-do_get_calls(#?STATE{session=Session}) ->
+do_get_calls(#obj_state{session=Session}) ->
     #session{calls2=Calls} = Session,
     Calls.
 
 
 %% @private
-add_call(CallId, Pid, Role, #?STATE{session=Session}=State) ->
+add_call(CallId, Pid, Role, #obj_state{session=Session}=State) ->
     Calls = do_get_calls(State),
     Mon = monitor(process, Pid),
     Call = #call{id=CallId, role=Role, pid=Pid, monitor=Mon},
     Calls2 = lists:keystore(CallId, #call.id, Calls, Call),
     Session2 = Session#session{calls2=Calls2},
-    State#?STATE{session=Session2}.
+    State#obj_state{session=Session2}.
 
 
 %% @private
-rm_call(CallId, Reason, #?STATE{session=Session}=State) ->
+rm_call(CallId, Reason, #obj_state{session=Session}=State) ->
     Calls = do_get_calls(State),
     case lists:keytake(CallId, #call.id, Calls) of
         {value, #call{monitor=Mon}, Calls2} ->
             nklib_util:demonitor(Mon),
             Session2 = Session#session{calls2=Calls2},
-            State2 = State#?STATE{session=Session2},
+            State2 = State#obj_state{session=Session2},
             do_event({call_hangup, CallId, Reason}, State2);
         false ->
             State

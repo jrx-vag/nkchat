@@ -132,7 +132,7 @@ object_create(_Obj) ->
 
 
 %% @private
-object_event(Event, #?STATE{id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=State) ->
+object_event(Event, #obj_state{id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=State) ->
     #{parent_id:=ConvId} = Obj,
     case Event of
         created ->

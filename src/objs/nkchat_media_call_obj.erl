@@ -326,7 +326,7 @@ object_api_cmd(Cmd, Req) ->
 
 %% @private
 %% Client must start a session or it will be destroyed after timeout
-object_init(#?STATE{obj=Obj}=State) ->
+object_init(#obj_state{obj=Obj}=State) ->
     #{?MEDIA_CALL := #{members:=MemberList, type:=Type}} = Obj,
     Members = lists:map(
         fun(Data) ->
@@ -347,11 +347,11 @@ object_init(#?STATE{obj=Obj}=State) ->
         type = Type,
         members = maps:from_list(Members)
     },
-    {ok, State#?STATE{session=Session}}.
+    {ok, State#obj_state{session=Session}}.
 
 
 %% @private Prepare the object for saving
-object_save(#?STATE{obj=Obj, session=Session}=State) ->
+object_save(#obj_state{obj=Obj, session=Session}=State) ->
     #session{members=Members} = Session,
     MemberList= lists:map(
         fun({MemberId, Member}) ->
@@ -369,12 +369,12 @@ object_save(#?STATE{obj=Obj, session=Session}=State) ->
     #{?MEDIA_CALL:=Call1} = Obj,
     Call2 = Call1#{members=>MemberList},
     Obj2 = ?ADD_TO_OBJ(?MEDIA_CALL, Call2, Obj),
-    {ok, State#?STATE{obj = Obj2}}.
+    {ok, State#obj_state{obj = Obj2}}.
 
 
 %% @private
 object_sync_op({?MODULE, get_info}, _From, State) ->
-    #?STATE{obj=#{?MEDIA_CALL:=ChatCall}=Obj} = State,
+    #obj_state{obj=#{?MEDIA_CALL:=ChatCall}=Obj} = State,
     #{type:=Type} = ChatCall,
     Data = #{
         name => maps:get(name, Obj, <<>>),
@@ -401,7 +401,7 @@ object_sync_op({?MODULE, remove_member, MemberId}, _From, State) ->
     end;
 
 %%object_sync_op({?MODULE, add_invite_op, CalleeId, Base}, _From, State) ->
-%%    #?STATE{session=Session} = State,
+%%    #obj_state{session=Session} = State,
 %%    case Session of
 %%        #session{type=one2one} ->
 %%            case do_one2one_invite(CalleeId, Base, State) of
@@ -443,7 +443,7 @@ object_sync_op({?MODULE, set_status, MemberId, Status}, _From, State) ->
         {ok, #member{status=Status0}=Member} ->
             Member2 = Member#member{status=maps:merge(Status0, Status)},
             State2 = set_members(Members#{MemberId => Member2}, State),
-            #?STATE{} = State2,
+            #obj_state{} = State2,
             State3 = do_event_all_sessions({member_status, MemberId, Status}, State2),
             {reply, ok, State3}
     end;
@@ -551,15 +551,15 @@ do_member_down(MemberId, State) ->
 
 
 %% @private
-get_members(#?STATE{session=Session}) ->
+get_members(#obj_state{session=Session}) ->
     #session{members=Members} = Session,
     Members.
 
 
 %% @private
-set_members(Members, #?STATE{session=Session}=State) ->
+set_members(Members, #obj_state{session=Session}=State) ->
     Session2 = Session#session{members=Members},
-    set_members_hash(State#?STATE{session=Session2, is_dirty=true}).
+    set_members_hash(State#obj_state{session=Session2, is_dirty=true}).
 
 
 %% @private
@@ -578,26 +578,26 @@ do_event_all_sessions(Event, State) ->
 do_event_all_sessions([], _Event, State) ->
     State;
 
-do_event_all_sessions([{_MemberId, #member{session_pid=Pid}}|Rest], Event, #?STATE{}=State) ->
+do_event_all_sessions([{_MemberId, #member{session_pid=Pid}}|Rest], Event, #obj_state{}=State) ->
     do_event_session(Pid, Event, State),
     do_event_all_sessions(Rest, Event, State).
 
 
 %% @private
-do_event_session(Pid, Event, #?STATE{id=#obj_id_ext{obj_id=CallId}}) ->
+do_event_session(Pid, Event, #obj_state{id=#obj_id_ext{obj_id=CallId}}) ->
     nkchat_media_session_obj:call_event(Pid, CallId, Event).
 
 
 
 
 %% @private
-set_members_hash(#?STATE{obj=Obj, session=#session{members=Members}}=State) ->
+set_members_hash(#obj_state{obj=Obj, session=#session{members=Members}}=State) ->
     MemberIds = maps:keys(Members),
     Hash = get_members_hash(MemberIds),
     #{?MEDIA_CALL:=Call} = Obj,
     Call2 = Call#{members_hash=>Hash},
     Obj2 = ?ADD_TO_OBJ(?MEDIA_CALL, Call2, Obj),
-    State#?STATE{obj=Obj2, is_dirty=true}.
+    State#obj_state{obj=Obj2, is_dirty=true}.
 
 
 %% @private
@@ -607,7 +607,7 @@ get_members_hash(MemberIds) ->
 
 
 %% @doc
-expand_members(#?STATE{session=Session}) ->
+expand_members(#obj_state{session=Session}) ->
     #session{members=Members} = Session,
     lists:map(
         fun({MemberId, Member}) ->

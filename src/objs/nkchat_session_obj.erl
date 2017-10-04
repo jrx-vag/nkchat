@@ -308,7 +308,7 @@ object_send_event(Event, State) ->
 
 
 %% @private When the object is loaded, we make our cache
-object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
+object_init(#obj_state{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     #obj_id_ext{obj_id=SessId} = Id,
     #{parent_id := UserId} = Obj,
     Session = #session{
@@ -316,7 +316,7 @@ object_init(#?STATE{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         conv_pids = #{},
         user_is_active = true
     },
-    State2 = State#?STATE{session=Session},
+    State2 = State#obj_state{session=Session},
     {ok, Convs1} = nkchat_conversation_obj:find_member_conversations(DomainId, UserId),
     State3 = lists:foldl(
         fun({ConvId, _Type}, Acc) ->
@@ -346,11 +346,11 @@ object_stop(_Reason, State) ->
 
 
 %% @private
-object_sync_op({?MODULE, get_conversations}, _From, #?STATE{session=Session}=State) ->
+object_sync_op({?MODULE, get_conversations}, _From, #obj_state{session=Session}=State) ->
     #session{conv_pids=Convs} = Session,
     {reply, {ok, maps:keys(Convs)}, State};
 
-object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #?STATE{session=Session}=State) ->
+object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #obj_state{session=Session}=State) ->
     #session{user_id=UserId} = Session,
     case get_conv_pid(ConvId, State) of
         {ok, Pid} ->
@@ -403,7 +403,7 @@ object_sync_op({?MODULE, rm_conv, ConvId}, _From, State) ->
     end;
 
 object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
-    #?STATE{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
+    #obj_state{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
     Reply = case nkchat_conversation_obj:add_invite_op(Conv, UserId, Member, #{}) of
         {ok, ConvId, MemberId, UserId, Op1} ->
             case nkdomain_user_obj:add_notification_op(MemberId, ?CHAT_SESSION, #{}, Op1) of
@@ -476,7 +476,7 @@ object_async_op({?MODULE, notify_fun, {token_created, TokenId, Msg}}, State) ->
     end;
 
 object_async_op({?MODULE, launch_notifications}, State) ->
-    #?STATE{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
+    #obj_state{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
     nkdomain_user_obj:launch_session_notifications(UserId, SessId),
     {noreply, State};
 
@@ -506,11 +506,11 @@ object_handle_info(_Msg, _State) ->
 
 
 %% @private
-do_set_active_conv(ConvId, #?STATE{session=Session, id=#obj_id_ext{obj_id=SessId}}=State) ->
+do_set_active_conv(ConvId, #obj_state{session=Session, id=#obj_id_ext{obj_id=SessId}}=State) ->
     #session{user_id=UserId, conv_pids=ConvPids} = Session,
     do_set_active_conv(maps:to_list(ConvPids), ConvId, UserId, SessId),
     Session2 = Session#session{active_id=ConvId},
-    State#?STATE{session=Session2}.
+    State#obj_state{session=Session2}.
 
 
 %% @private
@@ -524,15 +524,15 @@ do_set_active_conv([{ConvId, Pid}|Rest], ActiveId, UserId, SessId) ->
 
 %% @private
 do_add_conv(ConvId, State) ->
-    #?STATE{id=#obj_id_ext{obj_id=SessId}} = State,
-    #?STATE{session=Session} = State,
+    #obj_state{id=#obj_id_ext{obj_id=SessId}} = State,
+    #obj_state{session=Session} = State,
     #session{user_id=UserId, conv_pids=Convs1} = Session,
     case nkchat_conversation_obj:add_session(ConvId, UserId, SessId, #{}) of
         {ok, Pid} ->
             monitor(process, Pid),
             Convs2 = Convs1#{ConvId => Pid},
             Session2 = Session#session{conv_pids=Convs2},
-            {ok, State#?STATE{session=Session2}};
+            {ok, State#obj_state{session=Session2}};
         {error, Error} ->
             {error, Error}
     end.
@@ -542,8 +542,8 @@ do_add_conv(ConvId, State) ->
 do_rm_conv(ConvId, State) ->
     case get_conv_pid(ConvId, State) of
         {ok, Pid} ->
-            #?STATE{id=#obj_id_ext{obj_id=SessId}} = State,
-            #?STATE{session=Session} = State,
+            #obj_state{id=#obj_id_ext{obj_id=SessId}} = State,
+            #obj_state{session=Session} = State,
             #session{user_id=UserId, conv_pids=ConvPids1, active_id=ActiveId} = Session,
             nkchat_conversation_obj:remove_session(Pid, UserId, SessId),
             ConvPids2 = maps:remove(Pid, ConvPids1),
@@ -555,7 +555,7 @@ do_rm_conv(ConvId, State) ->
                     Session2
             end,
             State2 = do_event({conversation_removed, ConvId}, State),
-            {ok, State2#?STATE{session=Session3}};
+            {ok, State2#obj_state{session=Session3}};
         not_found ->
             {error, conversation_not_found}
     end.
@@ -565,7 +565,7 @@ do_rm_conv(ConvId, State) ->
 do_conversation_event({member_added, MemberId}, ConvId, State) ->
     {noreply, do_event({member_added, ConvId, MemberId}, State)};
 
-do_conversation_event({member_removed, MemberId}, ConvId, #?STATE{session=Session}=State) ->
+do_conversation_event({member_removed, MemberId}, ConvId, #obj_state{session=Session}=State) ->
     State2 = case Session of
         #session{user_id=MemberId} ->
             {ok, S} = do_rm_conv(ConvId, State),
@@ -597,7 +597,7 @@ do_conversation_event(_Event, _ConvId, State) ->
 
 
 %% @private
-get_conv_pid(ConvId, #?STATE{session=Session}) ->
+get_conv_pid(ConvId, #obj_state{session=Session}) ->
     #session{conv_pids=Convs} = Session,
     case maps:find(ConvId, Convs) of
         {ok, Pid} ->
@@ -618,10 +618,10 @@ set_user_active(State) ->
 
 
 %% @private
-set_user_active(Active, #?STATE{session=#session{user_is_active=Active}} = State) ->
+set_user_active(Active, #obj_state{session=#session{user_is_active=Active}} = State) ->
     State;
 
-set_user_active(Active, #?STATE{id=Id, parent_id=UserId, session=Session} = State) ->
+set_user_active(Active, #obj_state{id=Id, parent_id=UserId, session=Session} = State) ->
     #obj_id_ext{obj_id=SessId} = Id,
     Presence = case Active of
         true -> <<"online">>;
@@ -629,7 +629,7 @@ set_user_active(Active, #?STATE{id=Id, parent_id=UserId, session=Session} = Stat
     end,
     nkdomain_user_obj:update_presence(UserId, SessId, Presence),
     Session2 = Session#session{user_is_active=Active},
-    State2 = State#?STATE{session=Session2},
+    State2 = State#obj_state{session=Session2},
     case Active of
         true ->
             restart_timer(State2);
@@ -639,8 +639,8 @@ set_user_active(Active, #?STATE{id=Id, parent_id=UserId, session=Session} = Stat
 
 
 %% @private
-restart_timer(#?STATE{session=#session{timer=Timer}=Session}=State) ->
+restart_timer(#obj_state{session=#session{timer=Timer}=Session}=State) ->
     nklib_util:cancel_timer(Timer),
     Timer2 = erlang:send_after(?INACTIVITY_TIMER*1000, self(), {?MODULE, inactivity}),
     Session2 = Session#session{timer=Timer2},
-    State#?STATE{session=Session2}.
+    State#obj_state{session=Session2}.

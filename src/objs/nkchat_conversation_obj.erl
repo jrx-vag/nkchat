@@ -430,7 +430,7 @@ object_api_cmd(Cmd, Req) ->
 
 
 % @private When the object is loaded, we make our cache
-object_init(#?STATE{id=Id, obj=Obj}=State) ->
+object_init(#obj_state{id=Id, obj=Obj}=State) ->
     #obj_id_ext{obj_id=ConvId} = Id,
     #{obj_name:=ObjName, ?CHAT_CONVERSATION := #{members:=MemberList, type:=Type}=Conv} = Obj,
     Members = lists:map(
@@ -463,13 +463,13 @@ object_init(#?STATE{id=Id, obj=Obj}=State) ->
                 push_app_id = maps:get(push_app_id, Conv, <<>>),
                 obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
-            State2 = State#?STATE{session=Session},
+            State2 = State#obj_state{session=Session},
             case maps:take(initial_member_ids, Conv) of
                 error ->
                     {ok, State2};
                 {MemberIds, Conv2} when Members == [] ->
                     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
-                    State3 = State2#?STATE{obj=Obj2, is_dirty=true},
+                    State3 = State2#obj_state{obj=Obj2, is_dirty=true},
                     % Store generated users
                     nkdomain_obj:async_op(self(), save),
                     load_initial_members(MemberIds, State3)
@@ -480,7 +480,7 @@ object_init(#?STATE{id=Id, obj=Obj}=State) ->
 
 
 %% @private Prepare the object for saving
-object_save(#?STATE{obj=Obj, session=Session}=State) ->
+object_save(#obj_state{obj=Obj, session=Session}=State) ->
     #session{members=Members} = Session,
     MemberList= lists:map(
         fun(Member) ->
@@ -501,12 +501,12 @@ object_save(#?STATE{obj=Obj, session=Session}=State) ->
     #{?CHAT_CONVERSATION:=Conv1} = Obj,
     Conv2 = Conv1#{members=>MemberList},
     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
-    {ok, State#?STATE{obj = Obj2}}.
+    {ok, State#obj_state{obj = Obj2}}.
 
 
 %% @private
 object_sync_op({?MODULE, get_info}, _From, State) ->
-    #?STATE{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
+    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
     #{type:=Type, members:=Members} = ChatConv,
     Data = #{
         name => maps:get(name, Obj, <<>>),
@@ -566,14 +566,14 @@ object_sync_op({?MODULE, get_member_info, MemberId}, _From, State) ->
             {reply, {error, member_not_found}, State}
     end;
 
-object_sync_op({?MODULE, get_last_messages}, _From, #?STATE{session=Session}=State) ->
+object_sync_op({?MODULE, get_last_messages}, _From, #obj_state{session=Session}=State) ->
     #session{total_messages=Total, messages=Messages} = Session,
     Messages2 = [M || {_Time, _Id, M} <- Messages],
     {reply, {ok, #{total=>Total, data=>Messages2}}, State};
 
 
 object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) ->
-    #?STATE{id=#obj_id_ext{obj_id=ConvId}, domain_id=DomainId} = State,
+    #obj_state{id=#obj_id_ext{obj_id=ConvId}, domain_id=DomainId} = State,
     TTL2 = case TTL of
         0 -> ?INVITE_TTL;
         _ -> TTL
@@ -610,7 +610,7 @@ object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) -
 
 object_sync_op({?MODULE, add_invite_op, User, Member, Base}, _From, State) ->
     %% TODO check permission
-    #?STATE{id=#obj_id_ext{obj_id=ConvId}} = State,
+    #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
     case nkdomain_lib:find(Member) of
         #obj_id_ext{obj_id=MemberId} ->
             case nkdomain_lib:find(User) of
@@ -648,7 +648,7 @@ object_async_op({?MODULE, set_active, MemberId, SessId, Bool}, State) ->
                     Member2 = Member#member{sessions=ChatSessions3},
                     Member3 = case Bool of
                         true ->
-                            #?STATE{session=#session{messages=Msgs}} = State,
+                            #obj_state{session=#session{messages=Msgs}} = State,
                             Time = case Msgs of
                                 [{Time0, _, _}|_] -> Time0;
                                 _ -> 0
@@ -689,7 +689,7 @@ object_link_down(_Link, State) ->
     {ok, State}.
 
 %% @private Hook called before sending a event
-object_event({message_created, Msg}, #?STATE{session=Session}=State) ->
+object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
     ?DEBUG("created message ~p", [Msg], State),
     #session{total_messages=Total, messages=Msgs} = Session,
     #{obj_id:=MsgId, created_time:=Time} = Msg,
@@ -702,10 +702,10 @@ object_event({message_created, Msg}, #?STATE{session=Session}=State) ->
         total_messages = Total+1,
         messages = Msgs3
     },
-    State2 = do_new_msg_event(Time, Msg, State#?STATE{session=Session2}),
+    State2 = do_new_msg_event(Time, Msg, State#obj_state{session=Session2}),
     {ok, State2};
 
-object_event({message_updated, Msg}, #?STATE{session=Session}=State) ->
+object_event({message_updated, Msg}, #obj_state{session=Session}=State) ->
     #session{messages=Msgs} = Session,
     #{obj_id:=MsgId, created_time:=Time} = Msg,
     Session2 = case lists:keymember(MsgId, 2, Msgs) of
@@ -715,10 +715,10 @@ object_event({message_updated, Msg}, #?STATE{session=Session}=State) ->
         false ->
             Session
     end,
-    State2 = do_event_all_sessions({message_updated, Msg}, State#?STATE{session=Session2}),
+    State2 = do_event_all_sessions({message_updated, Msg}, State#obj_state{session=Session2}),
     {ok, State2};
 
-object_event({message_deleted, MsgId}, #?STATE{session=Session}=State) ->
+object_event({message_deleted, MsgId}, #obj_state{session=Session}=State) ->
     #session{total_messages=Total, messages=Msgs} = Session,
     Session2 = case lists:keymember(MsgId, 2, Msgs) of
         true ->
@@ -728,7 +728,7 @@ object_event({message_deleted, MsgId}, #?STATE{session=Session}=State) ->
             Session
     end,
     Session3 = Session2#session{total_messages=Total-1},
-    State2 = do_event_all_sessions({message_deleted, MsgId}, State#?STATE{session=Session3}),
+    State2 = do_event_all_sessions({message_deleted, MsgId}, State#obj_state{session=Session3}),
     {ok, State2};
 
 object_event({member_added, MemberId}, State) ->
@@ -751,13 +751,13 @@ object_event(_Event, State) ->
 %% ===================================================================
 
 %% @private
-load_initial_members(MemberIds, #?STATE{session=#session{obj_name_follows_members=true}=Session}=State) ->
-    State2 = State#?STATE{session=Session#session{obj_name_follows_members=false}},
+load_initial_members(MemberIds, #obj_state{session=#session{obj_name_follows_members=true}=Session}=State) ->
+    State2 = State#obj_state{session=Session#session{obj_name_follows_members=false}},
     % We don't want to update obj_name, it is already calculated for the initial user list
     case do_add_members(MemberIds, State2) of
-        {ok, #?STATE{session=Session3}=State3} ->
+        {ok, #obj_state{session=Session3}=State3} ->
             % From now on we keep updating
-            {ok, State3#?STATE{session=Session3#session{obj_name_follows_members=true}}};
+            {ok, State3#obj_state{session=Session3#session{obj_name_follows_members=true}}};
         {error, Error} ->
             {error, Error}
     end;
@@ -861,7 +861,7 @@ do_remove_session(MemberId, SessId, State) ->
 
 
 %% @private
-do_remove_sessions(_MemberId, [], #?STATE{} = State) ->
+do_remove_sessions(_MemberId, [], #obj_state{} = State) ->
     State;
 
 do_remove_sessions(MemberId, [#chat_session{session_id=SessId}|Rest], State) ->
@@ -886,15 +886,15 @@ find_member(MemberId, State) ->
 
 
 %% @private
-get_members(#?STATE{session=Session}) ->
+get_members(#obj_state{session=Session}) ->
     #session{members=Members} = Session,
     Members.
 
 
 %% @private
-set_members(Members, #?STATE{session=Session}=State) ->
+set_members(Members, #obj_state{session=Session}=State) ->
     Session2 = Session#session{members=Members},
-    State#?STATE{session=Session2, is_dirty=true}.
+    State#obj_state{session=Session2, is_dirty=true}.
 
 
 %% @private
@@ -938,7 +938,7 @@ do_event_member_sessions(#member{sessions=Sessions}, Event, State) ->
 
 
 %% @private
-do_event_sessions(Sessions, Event, #?STATE{id=Id}) when is_list(Sessions) ->
+do_event_sessions(Sessions, Event, #obj_state{id=Id}) when is_list(Sessions) ->
     #obj_id_ext{obj_id=ConvId} = Id,
     lists:foreach(
         fun(#chat_session{meta=Meta, pid=Pid}) ->
@@ -971,7 +971,7 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
                 unread_count = Count2
             },
             #{?CHAT_MESSAGE:=#{text:=Txt}} = Msg,
-            #?STATE{session=#session{name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
+            #obj_state{session=#session{name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
             Push = #{
                 type => ?CHAT_CONVERSATION,
                 class => new_msg,
@@ -1030,7 +1030,7 @@ read_messages(ConvId, _State) ->
 
 
 %% @private
-find_unread(Time, #?STATE{id=Id}=State) ->
+find_unread(Time, #obj_state{id=Id}=State) ->
     #obj_id_ext{obj_id=ConvId} = Id,
     Search = #{
         filters => #{
@@ -1050,13 +1050,13 @@ find_unread(Time, #?STATE{id=Id}=State) ->
 
 
 %% @private
-set_obj_name_members(#?STATE{obj=#{?CHAT_CONVERSATION:=Conv}=Obj, session=Session}=State) ->
-    #?STATE{session=#session{members=Members}} = State,
+set_obj_name_members(#obj_state{obj=#{?CHAT_CONVERSATION:=Conv}=Obj, session=Session}=State) ->
+    #obj_state{session=#session{members=Members}} = State,
     MemberIds = [Id || #member{member_id=Id} <- Members],
     Hash = make_members_hash(MemberIds),
     Conv2 = Conv#{members_hash => Hash},
     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
-    State2 = State#?STATE{obj=Obj2, is_dirty=true},
+    State2 = State#obj_state{obj=Obj2, is_dirty=true},
     case Session of
         #session{obj_name_follows_members=true} ->
             ObjName = make_obj_name(Hash),
@@ -1079,7 +1079,7 @@ make_obj_name(Hash) ->
 
 %% @private
 do_get_member_info(Member, State) ->
-    #?STATE{obj=Obj, session=Session} = State,
+    #obj_state{obj=Obj, session=Session} = State,
     #session{total_messages=Total, messages=Msgs} = Session,
     LastMessage = case Msgs of
         [{_, _, Msg}|_] -> Msg;
@@ -1100,7 +1100,7 @@ do_get_member_info(Member, State) ->
 
 
 %% @private
-send_push(MemberId, Push, #?STATE{session=#session{push_app_id=AppId}}) ->
+send_push(MemberId, Push, #obj_state{session=#session{push_app_id=AppId}}) ->
     case AppId of
         <<>> ->
             ok;

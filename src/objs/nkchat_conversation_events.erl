@@ -48,12 +48,12 @@ event({message_updated, #{obj_id:=MsgId}}, State) ->
 event({message_deleted, MsgId}, State) ->
     {event, {message_deleted, #{message_id=>MsgId}}, State};
 
-event({added_member, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+event({added_member, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
     %% TODO: use nkdomain_obj_util:event?
     nkdomain_obj_util:send_event(added_to_conversation, MemberId, #{conversation_id=>ConvId}, State),
     {event, {added_member, #{member_id=>MemberId}}, State};
 
-event({removed_member, MemberId}, #?STATE{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+event({removed_member, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
     nkdomain_obj_util:send_event(removed_from_conversation, MemberId, #{conversation_id=>ConvId}, State),
     {event, {removed_member, #{member_id=>MemberId}}, State};
 
