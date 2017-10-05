@@ -109,11 +109,9 @@ object_es_mapping() ->
 %% @private
 object_parse(_Mode, _Obj) ->
     #{
-        vsn => binary,
         text => binary,
         file_id => fun ?MODULE:syntax_check_file/3,
-        '__mandatory' => [text],
-        '__defaults' => #{vsn => <<"1">>}
+        '__mandatory' => [text]
     }.
 
 
