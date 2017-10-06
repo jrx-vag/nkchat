@@ -58,6 +58,17 @@
 %% ===================================================================
 
 
+-type create_opts() ::
+    #{
+        parent_id => nkdomain:id(),
+        created_by => nkdomain:id(),
+        obj_name => nkdomain:obj_name(),
+        type => binary(),
+        obj_name_follows_members => boolean(),
+        push_app_id => binary(),
+        initial_member_ids => [binary()]
+    }.
+
 
 -type event() ::
     {message_created, nkdomain:obj()} |
@@ -77,15 +88,26 @@
 
 
 %% @doc
-create(Domain, Name) ->
-    Obj = #{
+
+-spec create(nkdomain:id(), create_opts()) ->
+    {ok, ConfId::nkdomain:id(), pid()} | {error, term()}.
+
+create(Domain, Opts) ->
+    Core = maps:with([created_by, obj_name, parent_id], Opts),
+    Conv = maps:with([type, obj_name_follows_members, push_app_id, initial_member_ids], Opts),
+    Obj = Core#{
         type => ?CHAT_CONVERSATION,
         domain_id => Domain,
-        created_by => <<"admin">>,
-        obj_name => Name
+        ?CHAT_CONVERSATION => Conv
     },
-    {ok, #obj_id_ext{obj_id=ConvId}, []} = nkdomain_obj_make:create(Obj),
-    ConvId.
+    lager:error("NKLOG OO1 ~p", [Opts]),
+    lager:error("NKLOG OO1 ~p", [Obj]),
+    case nkdomain_obj_make:create(Obj) of
+        {ok, #obj_id_ext{obj_id=ConvId, pid=Pid}, []} ->
+            {ok, ConvId, Pid};
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% @doc Members will be changed for roles
@@ -150,7 +172,7 @@ get_member_info(ConvId, MemberId) ->
 
 %% @private
 get_info(Pid) ->
-    nkdomain_obj:sync_op(any, Pid, {?MODULE, get_info}).
+    nkdomain_obj:sync_op(Pid, {?MODULE, get_info}).
 
 
 %% @doc
