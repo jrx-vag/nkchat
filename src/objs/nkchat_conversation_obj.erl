@@ -100,8 +100,6 @@ create(Domain, Opts) ->
         domain_id => Domain,
         ?CHAT_CONVERSATION => Conv
     },
-    lager:error("NKLOG OO1 ~p", [Opts]),
-    lager:error("NKLOG OO1 ~p", [Obj]),
     case nkdomain_obj_make:create(Obj) of
         {ok, #obj_id_ext{obj_id=ConvId, pid=Pid}, []} ->
             {ok, ConvId, Pid};
