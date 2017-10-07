@@ -39,6 +39,9 @@
 
 
 %% @private
+event({added_info, Info}, State) ->
+    {event, {added_info, #{info=>Info}}, State};
+
 event({message_created, #{obj_id:=MsgId}}, State) ->
     {event, {message_created, #{message_id=>MsgId}}, State};
 

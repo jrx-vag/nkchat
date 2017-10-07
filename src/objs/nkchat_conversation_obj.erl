@@ -31,7 +31,8 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/2]).
--export([add_member/2, remove_member/2, add_session/4, set_session_active/4, remove_session/3, get_member_info/2]).
+-export([add_info/2, add_member/2, remove_member/2]).
+-export([add_session/4, set_session_active/4, remove_session/3, get_member_info/2]).
 -export([get_status/1]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
@@ -72,7 +73,10 @@
 
 -type member_role() :: binary().
 
+-type info() :: map().
+
 -type event() ::
+    {added_info, info()} |
     {message_created, nkdomain:obj()} |
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
@@ -108,6 +112,11 @@ create(Domain, Opts) ->
         {error, Error} ->
             {error, Error}
     end.
+
+
+%% @doc
+add_info(Id, Info) when is_map(Info) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, add_info, Info}).
 
 
 %% @doc Members will be changed for roles
@@ -550,6 +559,18 @@ object_sync_op({?MODULE, get_info}, _From, State) ->
         info => maps:get(info, ChatConv, [])
     },
     {reply, {ok, Data}, State};
+
+%% @private
+object_sync_op({?MODULE, add_info, Info}, _From, State) ->
+    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
+    Infos1 = maps:get(info, ChatConv, []),
+    Infos2 = [Info|Infos1],
+    ChatConv2 = ChatConv#{info=>Infos2},
+    Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, ChatConv2, Obj),
+    State2 = State#obj_state{obj=Obj2},
+    State3 = do_event({added_info, Info}, State2),
+    {reply_and_save, ok, State3};
+
 
 object_sync_op({?MODULE, get_status}, _From, State) ->
     #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}} = State,
