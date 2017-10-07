@@ -32,6 +32,7 @@
 
 -export([create/2]).
 -export([add_member/2, remove_member/2, add_session/4, set_session_active/4, remove_session/3, get_member_info/2]).
+-export([get_status/1]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
 -export([add_invite_op/4, perform_op/1]).
@@ -69,6 +70,7 @@
         initial_member_ids => [binary()]
     }.
 
+-type member_role() :: binary().
 
 -type event() ::
     {message_created, nkdomain:obj()} |
@@ -138,6 +140,10 @@ remove_member(Id, Member) ->
             nkdomain_obj:sync_op(Id, {?MODULE, remove_member, Member})
     end.
 
+
+%% @doc
+get_status(Id) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, get_status}).
 
 
 %% @private Called from nkchat_session_obj
@@ -331,6 +337,7 @@ perform_op(_Data) ->
 -record(member, {
     member_id :: nkdomain:obj_id(),
     added_time :: nkdomain:timestamp(),
+    roles :: [member_role()],
     last_active_time = 0:: nkdomain:timestamp(),
     last_seen_msg_time = 0 :: nkdomain:timestamp(),
     unread_count = -1 :: integer(),
@@ -376,10 +383,12 @@ object_es_mapping() ->
             properties => #{
                 member_id => #{type => keyword},
                 added_time => #{type => date},
+                member_roles => #{type => keyword},
                 last_active_time => #{type => date},
                 last_seen_message_time => #{type => date}
             }
         },
+        info => #{enabled => false},
         members_hash => #{type => keyword},
         obj_name_follows_members => #{type => boolean},
         push_app_id => #{type => keyword}
@@ -398,16 +407,18 @@ object_parse(_Mode, _Obj) ->
                  #{
                      member_id => binary,
                      added_time => integer,
+                     member_roles => {list, binary},
                      last_active_time => integer,
                      last_seen_message_time => integer,
                      '__mandatory' => [member_id, added_time, last_active_time, last_seen_message_time]
                  }
             },
+        info => {list, map},
         members_hash => binary,
         obj_name_follows_members => boolean,
         push_app_id => binary,
         initial_member_ids => {list, binary},
-        '__defaults' => #{type => <<"private">>, members => []}
+        '__defaults' => #{type => <<"private">>, info => [], members => []}
     }.
 
 
@@ -464,6 +475,7 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
             #member{
                 member_id = MemberId,
                 added_time = AddedTime,
+                roles = maps:get(member_roles, Data, []),
                 last_active_time= LastActiveTime,
                 last_seen_msg_time = LastSeenTime
             }
@@ -507,12 +519,14 @@ object_save(#obj_state{obj=Obj, session=Session}=State) ->
             #member{
                 member_id = MemberId,
                 added_time = Time,
+                roles = Roles,
                 last_active_time = ActiveTime,
                 last_seen_msg_time = MsgTime
             } = Member,
             #{
                 member_id => MemberId,
                 added_time => Time,
+                member_roles => Roles,
                 last_active_time => ActiveTime,
                 last_seen_message_time => MsgTime
             }
@@ -532,9 +546,14 @@ object_sync_op({?MODULE, get_info}, _From, State) ->
         name => maps:get(name, Obj, <<>>),
         description => maps:get(description, Obj, <<>>),
         type => Type,
-        members => Members
+        members => Members,
+        info => maps:get(info, ChatConv, [])
     },
     {reply, {ok, Data}, State};
+
+object_sync_op({?MODULE, get_status}, _From, State) ->
+    #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}} = State,
+    {reply, {ready, DomainId, ConvId}, State};
 
 object_sync_op({?MODULE, add_member, MemberId}, _From, State) ->
     case do_add_member(MemberId, State) of

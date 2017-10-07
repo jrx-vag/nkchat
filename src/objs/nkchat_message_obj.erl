@@ -27,7 +27,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/3, create_by/4, update/2]).
+-export([create/2, update/2]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1, object_event/2]).
 -export([object_admin_info/0]).
 -export([syntax_check_file/3]).
@@ -38,37 +38,68 @@
 
 
 %% ===================================================================
+%% Types
+%% ===================================================================
+
+-type message_type() :: binary().
+
+-type create_opts() ::
+    #{
+        text => binary(),                       % Mandatory
+        created_by => nkdomain:obj_id(),
+        type => message_type(),
+        body => map(),
+        member_roles => [nkchat_conversation_obj:member_role()]
+    }.
+
+-type update_opts() ::
+    #{
+        text => binary(),
+        type => message_type(),
+        body => map()
+    }.
+
+
+%% ===================================================================
 %% Public
 %% ===================================================================
 
-create(DomainId, ConvId, Text) ->
-    Obj = #{
-        type => ?CHAT_MESSAGE,
-        domain_id => DomainId,
-        parent_id => ConvId,
-        created_by => <<"admin">>,
-        ?CHAT_MESSAGE => #{
-            text => Text
-        }
-    },
-    object_create(Obj).
+-spec create(nkdomain:id(), create_opts()) ->
+    {ok, MsgId::nkdomain:obj_id(), pid()} | {error, term()}.
+
+create(Conv, Opts) ->
+    case nkchat_conversation_obj:get_status(Conv) of
+        {ready, DomainId, ConvId} ->
+            Msg = maps:with([text, type, body, member_roles], Opts),
+            Obj = #{
+                type => ?CHAT_MESSAGE,
+                domain_id => DomainId,
+                parent_id => ConvId,
+                created_by => maps:get(created_by, Opts, <<"admin">>),
+                ?CHAT_MESSAGE => Msg
+            },
+            case nkdomain_obj_make:create(Obj#{domain_id=>DomainId}) of
+                {ok, #obj_id_ext{obj_id=MsgId, pid=MsgPid}, _Unknown} ->
+                    {ok, MsgId, MsgPid};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
-create_by(DomainId, UserId, ConvId, Text) ->
-    Obj = #{
-        type => ?CHAT_MESSAGE,
-        domain_id => DomainId,
-        parent_id => ConvId,
-        created_by => UserId,
-        ?CHAT_MESSAGE => #{
-            text => Text
-        }
-    },
-    object_create(Obj).
-        
+-spec update(nkdomain:id(), update_opts()) ->
+    ok | {error, term()}.
 
-update(MsgId, Text) ->
-    nkdomain:update(MsgId, #{?CHAT_MESSAGE => #{text => Text}}).
+update(MsgId, Opts) ->
+    Msg = maps:with([text, file_id, body], Opts),
+    case nkdomain:update(MsgId, #{?CHAT_MESSAGE => Msg}) of
+        {ok, _} ->
+            ok;
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 
@@ -99,18 +130,29 @@ object_admin_info() ->
 %% @private
 object_es_mapping() ->
     #{
-        vsn => #{type => keyword},
+        type => #{type => keyword},
         text => #{type => text},
-        file_id => #{type => keyword}
+        file_id => #{type => keyword},
+        body => #{enabled => false},
+        member_roles => #{type => keyword}
     }.
 
 
 
 %% @private
-object_parse(_Mode, _Obj) ->
+object_parse(update, _Obj) ->
     #{
         text => binary,
         file_id => fun ?MODULE:syntax_check_file/3,
+        body => map
+    };
+
+object_parse(_Mode, Obj) ->
+    Base = object_parse(update, Obj),
+    Base#{
+        type => binary,
+        member_roles => #{type => keyword},
+        '__defaults' => #{type => text},
         '__mandatory' => [text]
     }.
 
