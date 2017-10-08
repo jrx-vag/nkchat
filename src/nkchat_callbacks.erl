@@ -42,6 +42,7 @@ plugin_deps() ->
 error(conversation_not_found)           -> "Conversation not found";
 error(conversation_is_already_present)   -> "Conversation is already a member";
 error(conversation_is_disabled)         -> "Conversation is currently disabled";
+error(conversation_is_closed)           -> "Conversation is closed";
 error(invite_not_found)                 -> "Invite not found";
 error(_)   		                        -> continue.
 

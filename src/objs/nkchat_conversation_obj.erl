@@ -33,7 +33,7 @@
 -export([create/2]).
 -export([add_info/2, add_member/2, remove_member/2]).
 -export([add_session/4, set_session_active/4, remove_session/3, get_member_info/2]).
--export([get_status/1]).
+-export([is_closed/1, set_status/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
 -export([add_invite_op/4, perform_op/1]).
@@ -151,8 +151,21 @@ remove_member(Id, Member) ->
 
 
 %% @doc
-get_status(Id) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, get_status}).
+-spec is_closed(nkdomain:id()) ->
+    {boolean(), ConvId::nkdomain:obj_id(), Domain::nkdomain:obj_id()}.
+
+is_closed(Id) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, is_closed}).
+
+
+
+%% @doc
+-spec set_status(nkdomain:id(), #{is_closed=>boolean()}) ->
+    {boolean(), ConvId::nkdomain:obj_id(), Domain::nkdomain:obj_id()}.
+
+set_status(Id, Status) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, set_status, Status}).
+
 
 
 %% @private Called from nkchat_session_obj
@@ -357,6 +370,7 @@ perform_op(_Data) ->
     name :: binary(),
     type :: binary(),
     members :: [#member{}],
+    is_closed :: boolean(),
     total_messages :: integer(),
     messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
     obj_name_follows_members :: boolean(),
@@ -386,6 +400,7 @@ object_admin_info() ->
 object_es_mapping() ->
     #{
         type => #{type => keyword},
+        is_closed => #{type => boolean},
         members => #{
             type => object,
             dynamic => false,
@@ -411,6 +426,7 @@ object_parse(update, _Obj) ->
 object_parse(_Mode, _Obj) ->
     #{
         type => binary,
+        is_closed => boolean,                          % No new members or messages
         members =>
             {list,
                  #{
@@ -498,6 +514,7 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
             Session = #session{
                 name = maps:get(name, Obj, ObjName),
                 type = Type,
+                is_closed = maps:get(is_closed, Conv, false),
                 members = Members,
                 total_messages = Total,
                 messages = Msgs2,
@@ -522,7 +539,7 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
 
 %% @private Prepare the object for saving
 object_save(#obj_state{obj=Obj, session=Session}=State) ->
-    #session{members=Members} = Session,
+    #session{members=Members, is_closed=IsClosed} = Session,
     MemberList= lists:map(
         fun(Member) ->
             #member{
@@ -542,7 +559,7 @@ object_save(#obj_state{obj=Obj, session=Session}=State) ->
         end,
         Members),
     #{?CHAT_CONVERSATION:=Conv1} = Obj,
-    Conv2 = Conv1#{members=>MemberList},
+    Conv2 = Conv1#{members=>MemberList, is_closed=>IsClosed},
     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
     {ok, State#obj_state{obj = Obj2}}.
 
@@ -571,10 +588,24 @@ object_sync_op({?MODULE, add_info, Info}, _From, State) ->
     State3 = do_event({added_info, Info}, State2),
     {reply_and_save, ok, State3};
 
+object_sync_op({?MODULE, is_closed}, _From, State) ->
+    #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}, session=Session} = State,
+    #session{is_closed=IsClosed} = Session,
+    {reply, {IsClosed, ConvId, DomainId}, State};
 
-object_sync_op({?MODULE, get_status}, _From, State) ->
-    #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}} = State,
-    {reply, {ready, DomainId, ConvId}, State};
+object_sync_op({?MODULE, set_status, #{is_closed:=Closed}}, _From, #obj_state{session=Session}=State) ->
+    case Session of
+        #session{is_closed=Closed} ->
+            {reply, ok, State};
+        _ ->
+            Session2 = Session#session{is_closed=true},
+            State2 = State#obj_state{session=Session2},
+            {reply_and_save, ok, State2}
+    end;
+
+object_sync_op({?MODULE, set_status, _Status}, _From, State) ->
+    {reply, {error, unknown_status}, State};
+
 
 object_sync_op({?MODULE, add_member, MemberId}, _From, State) ->
     case do_add_member(MemberId, State) of
