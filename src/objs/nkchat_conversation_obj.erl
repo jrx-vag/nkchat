@@ -67,7 +67,7 @@
         obj_name => nkdomain:obj_name(),
         type => binary(),
         obj_name_follows_members => boolean(),
-        push_app_id => binary(),
+        push_srv_id => atom() | binary(),
         initial_member_ids => [binary()]
     }.
 
@@ -100,7 +100,7 @@
 
 create(Domain, Opts) ->
     Core = maps:with([created_by, obj_name, parent_id], Opts),
-    Conv = maps:with([type, obj_name_follows_members, push_app_id, initial_member_ids], Opts),
+    Conv = maps:with([type, obj_name_follows_members, push_srv_id, initial_member_ids], Opts),
     Obj = Core#{
         type => ?CHAT_CONVERSATION,
         domain_id => Domain,
@@ -374,7 +374,7 @@ perform_op(_Data) ->
     total_messages :: integer(),
     messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
     obj_name_follows_members :: boolean(),
-    push_app_id :: binary()
+    push_srv_id :: binary()
 }).
 
 
@@ -415,7 +415,7 @@ object_es_mapping() ->
         info => #{enabled => false},
         members_hash => #{type => keyword},
         obj_name_follows_members => #{type => boolean},
-        push_app_id => #{type => keyword}
+        push_srv_id => #{type => keyword}
     }.
 
 
@@ -441,7 +441,7 @@ object_parse(_Mode, _Obj) ->
         info => {list, map},
         members_hash => binary,
         obj_name_follows_members => boolean,
-        push_app_id => binary,
+        push_srv_id => binary,
         initial_member_ids => {list, binary},
         '__defaults' => #{type => <<"private">>, info => [], members => []}
     }.
@@ -518,7 +518,7 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 members = Members,
                 total_messages = Total,
                 messages = Msgs2,
-                push_app_id = maps:get(push_app_id, Conv, <<>>),
+                push_srv_id = maps:get(push_srv_id, Conv, <<>>),
                 obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
             State2 = State#obj_state{session=Session},
@@ -680,14 +680,13 @@ object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) -
             spawn_link(
                 fun() ->
                     TokenOpts = #{
-                        domain_id => DomainId,
                         parent_id => ConvId,
                         created_by => UserId,
                         subtype => ?CHAT_CONVERSATION,
                         ttl => TTL2
                     },
-                    Reply = case nkdomain_token_obj:create(TokenOpts, Data) of
-                        {ok, TokenId, _Pid, _Secs, _Unknown} ->
+                    Reply = case nkdomain_token_obj:create(DomainId, TokenOpts, Data) of
+                        {ok, TokenId, _Pid, _Secs} ->
                             {ok, ConvId, TokenId, TTL2};
                         {error, Error} ->
                             {error, Error}
@@ -1191,13 +1190,8 @@ do_get_member_info(Member, State) ->
 
 
 %% @private
-send_push(MemberId, Push, #obj_state{session=#session{push_app_id=AppId}}) ->
-    case AppId of
-        <<>> ->
-            ok;
-        _ ->
-            nkdomain_user_obj:send_push(MemberId, AppId, Push)
-    end.
+send_push(MemberId, Push, #obj_state{session=#session{push_srv_id=SrvId}}) ->
+    nkdomain_user_obj:send_push(MemberId, SrvId, Push).
 
 
 %% @private

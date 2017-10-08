@@ -54,7 +54,8 @@
         trickle_ice => boolean(),
         ttl => integer(),
         audio => boolean,
-        video => boolean
+        video => boolean,
+        screen => boolean
     }.
 
 -type accept_opts() ::
@@ -62,7 +63,8 @@
         sdp => binary(),
         trickle_ice => boolean(),
         audio => boolean,
-        video => boolean
+        video => boolean,
+        screen => boolean
     }.
 
 
@@ -328,7 +330,7 @@ object_sync_op({?MODULE, cancel_invite, InviteId, _Data}, _From, State) ->
     case lists:keyfind(InviteId, #invite.id, Invites) of
         #invite{callee_id=CalleeId} ->
             % Avoid user detecting the going down of token
-            nkdomain_user_obj:remove_notification(CalleeId, InviteId, caller_cancelled),
+            nkdomain_user_obj:remove_token_notification(CalleeId, InviteId, caller_cancelled),
             State2 = rm_invite(InviteId, State),
             State3 = do_event({invite_removed, InviteId, caller_cancelled}, State2),
             {reply, ok, State3};
@@ -348,7 +350,7 @@ object_sync_op({?MODULE, accept_invite, InviteId, Data, AcceptOpts}, _From, Stat
         } ->
             #obj_state{parent_id=UserId} = State,
             % Avoid user detecting the going down of token and send the invite_removed event
-            nkdomain_user_obj:remove_notification(UserId, InviteId, call_accepted),
+            nkdomain_user_obj:remove_token_notification(UserId, InviteId, call_accepted),
             case nkdomain_obj:sync_op(SessId, {?MODULE, remote_accept_invite, InviteId, AcceptOpts}) of
                 {ok, CallId, CallPid} ->
                     State2 = do_event({call_created, InviteId, CallId, #{}}, State),
@@ -375,7 +377,7 @@ object_sync_op({?MODULE, reject_invite, InviteId, Data}, _From, State) ->
             % Avoid user detecting the going down of token
             % User will send a notification removal throw notify_fun and we will send
             % the invite_removed event
-            nkdomain_user_obj:remove_notification(UserId, InviteId, callee_rejected),
+            nkdomain_user_obj:remove_token_notification(UserId, InviteId, callee_rejected),
             Reply = nkdomain_obj:sync_op(SessId, {?MODULE, remote_reject_invite, InviteId}),
             {reply, Reply, State};
         _ ->
@@ -502,9 +504,9 @@ do_invite(CalleeId, InviteOpts, State) ->
             }
         }
     },
-    case do_invite_push(InviteOpts, State) of
+    case make_invite_push(InviteOpts, State) of
         {ok, _Opts} ->
-            case nkdomain_user_obj:add_notification_op(CalleeId, ?MEDIA_SESSION, #{}, Op1) of
+            case nkdomain_user_obj:add_token_notification(CalleeId, ?MEDIA_SESSION, #{}, Op1) of
                 {ok, _MemberId, Op2} ->
                     TTL = case InviteOpts of
                         #{ttl:=TTL0} when is_integer(TTL0), TTL0>0 ->
@@ -513,14 +515,13 @@ do_invite(CalleeId, InviteOpts, State) ->
                             ?DEFAULT_INVITE_TTL
                     end,
                     TokenOpts = #{
-                        domain_id => DomainId,
                         parent_id => CalleeId,
                         created_by => CalleeId,
                         subtype => <<"media.call">>,
                         ttl => TTL
                     },
-                    case nkdomain_token_obj:create(TokenOpts, Op2) of
-                        {ok, InviteId, Pid, _Secs, _Unknown} ->
+                    case nkdomain_token_obj:create(DomainId, TokenOpts, Op2) of
+                        {ok, InviteId, Pid, _Secs} ->
                             State2 = add_invite(InviteId, Pid, CalleeId, InviteOpts, State),
                             {ok, InviteId, State2};
                         {error, Error} ->
@@ -535,7 +536,7 @@ do_invite(CalleeId, InviteOpts, State) ->
 
 
 %% @private
-do_invite_push(InviteOpts, #obj_state{parent_id=CallerId}) ->
+make_invite_push(InviteOpts, #obj_state{parent_id=CallerId}) ->
     case nkdomain_user_obj:get_name(CallerId) of
         {ok, #{fullname:=FullName}} ->
             Data = #{
@@ -544,7 +545,8 @@ do_invite_push(InviteOpts, #obj_state{parent_id=CallerId}) ->
                     class => invite,
                     full_name => FullName,
                     audio => maps:get(audio, InviteOpts),
-                    video => maps:get(video, InviteOpts)
+                    video => maps:get(video, InviteOpts),
+                    screen => maps:get(screen, InviteOpts)
                 }
             },
             {ok, Data};

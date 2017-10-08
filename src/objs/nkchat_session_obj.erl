@@ -403,7 +403,7 @@ object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
     #obj_state{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
     Reply = case nkchat_conversation_obj:add_invite_op(Conv, UserId, Member, #{}) of
         {ok, ConvId, MemberId, UserId, Op1} ->
-            case nkdomain_user_obj:add_notification_op(MemberId, ?CHAT_SESSION, #{}, Op1) of
+            case nkdomain_user_obj:add_token_notification(MemberId, ?CHAT_SESSION, #{}, Op1) of
                 {ok, MemberId, Op2} ->
                     Op3 = Op2#{
                         ?CHAT_SESSION => #{
@@ -416,14 +416,13 @@ object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
                         }
                     },
                     TokenOpts = #{
-                        domain_id => DomainId,
                         parent_id => MemberId,
                         created_by => UserId,
                         subtype => <<"chat.invite">>,
                         ttl => TTL
                     },
-                    case nkdomain_token_obj:create(TokenOpts, Op3) of
-                        {ok, TokenId, _Pid, _Secs, _Unknown} ->
+                    case nkdomain_token_obj:create(DomainId, TokenOpts, Op3) of
+                        {ok, TokenId, _Pid, _Secs} ->
                             {ok, TokenId};
                         {error, Error} ->
                             {error, Error}
