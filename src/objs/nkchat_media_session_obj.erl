@@ -544,9 +544,9 @@ make_invite_push(InviteOpts, #obj_state{parent_id=CallerId}) ->
                     type => ?MEDIA_SESSION,
                     class => invite,
                     full_name => FullName,
-                    audio => maps:get(audio, InviteOpts),
-                    video => maps:get(video, InviteOpts),
-                    screen => maps:get(screen, InviteOpts)
+                    audio => maps:get(audio, InviteOpts, false),
+                    video => maps:get(video, InviteOpts, false),
+                    screen => maps:get(screen, InviteOpts, false)
                 }
             },
             {ok, Data};
