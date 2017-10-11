@@ -101,7 +101,7 @@
     {ok, ConfId::nkdomain:id(), pid()} | {error, term()}.
 
 create(Domain, Opts) ->
-    Core = maps:with([created_by, obj_name, parent_id], Opts),
+    Core = maps:with([created_by, obj_name, name, parent_id], Opts),
     Conv = maps:with([type, obj_name_follows_members, push_srv_id, initial_member_ids], Opts),
     Obj = Core#{
         type => ?CHAT_CONVERSATION,
