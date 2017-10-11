@@ -68,8 +68,8 @@
     {ok, MsgId::nkdomain:obj_id(), pid()} | {error, term()}.
 
 create(Conv, Opts) ->
-    case nkchat_conversation_obj:is_closed(Conv) of
-        {false, ConvId, DomainId} ->
+    case nkchat_conversation_obj:get_status(Conv) of
+        {ConvId, DomainId, _Status, false} ->
             Msg = maps:with([text, type, body, member_roles], Opts),
             Obj = #{
                 type => ?CHAT_MESSAGE,
@@ -84,7 +84,7 @@ create(Conv, Opts) ->
                 {error, Error} ->
                     {error, Error}
             end;
-        {true, _, _} ->
+        {_, _, _, true} ->
             {error, converation_is_closed};
         {error, Error} ->
             {error, Error}
