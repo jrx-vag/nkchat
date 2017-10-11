@@ -157,7 +157,7 @@ remove_member(Id, Member) ->
     {ConvId::nkdomain:obj_id(), Domaind::nkdomain:obj_id(), Status::status(), IsClosed::boolean()}.
 
 get_status(Id) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, get_status, Id}).
+    nkdomain_obj:sync_op(Id, {?MODULE, get_status}).
 
 
 %% @doc
