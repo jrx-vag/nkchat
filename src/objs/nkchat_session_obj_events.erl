@@ -54,6 +54,12 @@ event({message_updated, ConvId, Msg}, State) ->
 event({message_deleted, ConvId, MsgId}, State) ->
     {event, {message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}}, State};
 
+event({status_updated, ConvId, Status}, State) ->
+    {event, {status_updated, #{conversation_id=>ConvId, status=>Status}}, State};
+
+event({is_closed_updated, ConvId, IsClosed}, State) ->
+    {event, {is_closed_updated, #{conversation_id=>ConvId, is_closed=>IsClosed}}, State};
+
 event({unread_counter_updated, ConvId, Counter}, State) ->
     {event, {unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}}, State};
 

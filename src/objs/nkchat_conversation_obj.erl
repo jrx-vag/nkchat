@@ -68,6 +68,7 @@
         type => binary(),
         obj_name_follows_members => boolean(),
         push_srv_id => atom() | binary(),
+        status => status(),
         initial_member_ids => [binary()]
     }.
 
@@ -85,7 +86,10 @@
     {member_removed, nkdomain:obj_id()} |
     {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
     {session_added, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
-    {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()}.
+    {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
+    {status_updated, status()} |
+    {is_closed_updated, boolean()}.
+
 
 -type status() :: binary().
 
@@ -102,7 +106,7 @@
 
 create(Domain, Opts) ->
     Core = maps:with([created_by, obj_name, name, parent_id], Opts),
-    Conv = maps:with([type, obj_name_follows_members, push_srv_id, initial_member_ids], Opts),
+    Conv = maps:with([type, status, obj_name_follows_members, push_srv_id, initial_member_ids], Opts),
     Obj = Core#{
         type => ?CHAT_CONVERSATION,
         domain_id => Domain,
@@ -609,13 +613,13 @@ object_sync_op({?MODULE, get_status}, _From, State) ->
 object_sync_op({?MODULE, set_status, Status}, _From, #obj_state{session=Session}=State) ->
     Session2 = Session#session{status=Status},
     State2 = State#obj_state{session=Session2},
-    State3 = do_event({updated_status, Status}, State2),
+    State3 = do_event({status_updated, Status}, State2),
     {reply_and_save, ok, State3};
 
 object_sync_op({?MODULE, set_closed, Closed}, _From, #obj_state{session=Session}=State) ->
     Session2 = Session#session{is_closed=Closed},
     State2 = State#obj_state{session=Session2},
-    State3 = do_event({updated_is_closed, Closed}, State2),
+    State3 = do_event({is_closed_updated, Closed}, State2),
     {reply_and_save, ok, State3};
 
 object_sync_op({?MODULE, add_info, Info}, _From, State) ->
@@ -869,6 +873,12 @@ object_event({member_removed, MemberId}, State) ->
 
 object_event({session_removed, MemberId, SessId}, State) ->
     {ok, do_event_all_sessions({session_removed, MemberId, SessId}, State)};
+
+object_event({status_updated, Status}, State) ->
+    {ok, do_event_all_sessions({status_updated, Status}, State)};
+
+object_event({is_closed_updated, IsClosed}, State) ->
+    {ok, do_event_all_sessions({is_closed_updated, IsClosed}, State)};
 
 object_event(_Event, State) ->
     {ok, State}.

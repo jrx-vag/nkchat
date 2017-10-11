@@ -42,11 +42,11 @@
 event({added_info, Info}, State) ->
     {event, {added_info, #{info=>Info}}, State};
 
-event({updated_status, Status}, State) ->
-    {event, {updated_status, #{status=>Status}}, State};
+event({status_updated, Status}, State) ->
+    {event, {status_updated, #{status=>Status}}, State};
 
-event({updated_is_closed, IsClosed}, State) ->
-    {event, {updated_is_closed, #{is_closed=>IsClosed}}, State};
+event({is_closed_updated, IsClosed}, State) ->
+    {event, {is_closed_updated, #{is_closed=>IsClosed}}, State};
 
 event({message_created, #{obj_id:=MsgId}}, State) ->
     {event, {message_created, #{message_id=>MsgId}}, State};

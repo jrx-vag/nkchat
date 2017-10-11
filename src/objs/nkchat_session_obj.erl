@@ -580,6 +580,12 @@ do_conversation_event({message_updated, Msg}, ConvId, State) ->
 do_conversation_event({message_deleted, MsgId}, ConvId, State) ->
     {noreply, do_event({message_deleted, ConvId, MsgId}, State)};
 
+do_conversation_event({status_updated, Status}, ConvId, State) ->
+    {noreply, do_event({status_updated, ConvId, Status}, State)};
+
+do_conversation_event({is_closed_updated, IsClosed}, ConvId, State) ->
+    {noreply, do_event({is_closed_updated, ConvId, IsClosed}, State)};
+
 do_conversation_event({counter_updated, Counter}, ConvId, State) ->
     {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
 
