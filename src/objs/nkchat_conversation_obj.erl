@@ -1228,6 +1228,7 @@ do_get_member_info(Member, State) ->
     #member{unread_count=Counter} = Member,
     #{
         path:=Path,
+        parent_id:=ParentId,
         ?CHAT_CONVERSATION:=#{
             type:=Type,
             members:=Members,
@@ -1237,6 +1238,7 @@ do_get_member_info(Member, State) ->
         }
     } = Obj,
     #{
+        parent_id => ParentId,
         name => maps:get(name, Obj, <<>>),
         description => maps:get(description, Obj, <<>>),
         type => Type,
