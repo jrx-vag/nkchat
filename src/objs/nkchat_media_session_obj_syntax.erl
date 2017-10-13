@@ -61,6 +61,8 @@ syntax(<<"invite">>, Syntax) ->
         trickle_ice => boolean,
         audio => boolean,
         video => boolean,
+        screen => boolean,
+        conversation_id => binary,
         '__mandatory' => [user_id, sdp]
     };
 
@@ -86,6 +88,7 @@ syntax(<<"accept_invite">>, Syntax) ->
         trickle_ice => boolean,
         audio => boolean,
         video => boolean,
+        screen => boolean,
         '__mandatory' => [invite_id, sdp]
     };
 

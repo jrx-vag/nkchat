@@ -53,9 +53,10 @@
         sdp => binary(),
         trickle_ice => boolean(),
         ttl => integer(),
-        audio => boolean,
-        video => boolean,
-        screen => boolean
+        audio => boolean(),
+        video => boolean(),
+        screen => boolean(),
+        conversation_id => binary()
     }.
 
 -type accept_opts() ::
@@ -493,7 +494,7 @@ object_handle_info(_Msg, _State) ->
 
 %% @private
 do_invite(CalleeId, InviteOpts, State) ->
-    #obj_state{domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{obj_id=SessId}} = State,
+    #obj_state{domain_id=DomainId, parent_id=CallerId, id=#obj_id_ext{srv_id=SrvId, obj_id=SessId}} = State,
     Op1 = #{
         ?MEDIA_SESSION => #{
             <<"invite_op">> => #{
@@ -504,29 +505,26 @@ do_invite(CalleeId, InviteOpts, State) ->
             }
         }
     },
-    case make_invite_push(InviteOpts, State) of
-        {ok, _Opts} ->
-            case nkdomain_user_obj:add_token_notification(CalleeId, ?MEDIA_SESSION, #{}, Op1) of
-                {ok, _MemberId, Op2} ->
-                    TTL = case InviteOpts of
-                        #{ttl:=TTL0} when is_integer(TTL0), TTL0>0 ->
-                            TTL0;
-                        _ ->
-                            ?DEFAULT_INVITE_TTL
-                    end,
-                    TokenOpts = #{
-                        parent_id => CalleeId,
-                        created_by => CalleeId,
-                        subtype => <<"media.call">>,
-                        ttl => TTL
-                    },
-                    case nkdomain_token_obj:create(DomainId, TokenOpts, Op2) of
-                        {ok, InviteId, Pid, _Secs} ->
-                            State2 = add_invite(InviteId, Pid, CalleeId, InviteOpts, State),
-                            {ok, InviteId, State2};
-                        {error, Error} ->
-                            {error, Error}
-                    end;
+    Push = make_invite_push(InviteOpts, State),
+    Opts = #{srv_id=>SrvId, wakeup_push => Push},
+    case nkdomain_user_obj:add_token_notification(CalleeId, ?MEDIA_SESSION, Opts, Op1) of
+        {ok, _MemberId, Op2} ->
+            TTL = case InviteOpts of
+                #{ttl:=TTL0} when is_integer(TTL0), TTL0>0 ->
+                    TTL0;
+                _ ->
+                    ?DEFAULT_INVITE_TTL
+            end,
+            TokenOpts = #{
+                parent_id => CalleeId,
+                created_by => CalleeId,
+                subtype => <<"media.call">>,
+                ttl => TTL
+            },
+            case nkdomain_token_obj:create(DomainId, TokenOpts, Op2) of
+                {ok, InviteId, Pid, _Secs} ->
+                    State2 = add_invite(InviteId, Pid, CalleeId, InviteOpts, State),
+                    {ok, InviteId, State2};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -537,22 +535,17 @@ do_invite(CalleeId, InviteOpts, State) ->
 
 %% @private
 make_invite_push(InviteOpts, #obj_state{parent_id=CallerId}) ->
-    case nkdomain_user_obj:get_name(CallerId) of
-        {ok, #{fullname:=FullName}} ->
-            Data = #{
-                wakeup_push => #{
-                    type => ?MEDIA_SESSION,
-                    class => invite,
-                    full_name => FullName,
-                    audio => maps:get(audio, InviteOpts, false),
-                    video => maps:get(video, InviteOpts, false),
-                    screen => maps:get(screen, InviteOpts, false)
-                }
-            },
-            {ok, Data};
-        {error, Error} ->
-            {error, Error}
-    end.
+    {ok, #{fullname:=FullName}} = nkdomain_user_obj:get_name(CallerId),
+    #{
+        type => ?MEDIA_CALL,
+        class => invite,
+        invite_id => <<>>,
+        full_name => FullName,
+        audio => maps:get(audio, InviteOpts, false),
+        video => maps:get(video, InviteOpts, false),
+        screen => maps:get(screen, InviteOpts, false),
+        conversation_id => maps:get(conversation_id, InviteOpts, <<>>)
+    }.
 
 
 %% @private
