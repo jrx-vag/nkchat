@@ -1226,11 +1226,25 @@ do_get_member_info(Member, State) ->
         [] -> #{}
     end,
     #member{unread_count=Counter} = Member,
-    #{path:=Path, ?CHAT_CONVERSATION:=#{type:=Type, members:=Members}} = Obj,
     #{
+        path:=Path,
+        parent_id:=ParentId,
+        ?CHAT_CONVERSATION:=#{
+            type:=Type,
+            members:=Members,
+            is_closed:=IsClosed,
+            info:=Info,
+            status:=Status
+        }
+    } = Obj,
+    #{
+        parent_id => ParentId,
         name => maps:get(name, Obj, <<>>),
         description => maps:get(description, Obj, <<>>),
         type => Type,
+        info => Info,
+        status => Status,
+        is_closed => IsClosed,
         members => Members,
         path => Path,
         total_messages => Total,
