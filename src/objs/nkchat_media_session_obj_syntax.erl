@@ -68,14 +68,12 @@ syntax(<<"invite">>, Syntax) ->
 
 syntax(<<"cancel_invite">>, Syntax) ->
     Syntax#{
-        id => binary,
         invite_id =>  binary,
         '__mandatory' => [invite_id]
     };
 
 syntax(<<"hangup_call">>, Syntax) ->
     Syntax#{
-        id => binary,
         call_id => binary,
         '__mandatory' => [call_id]
     };
@@ -94,7 +92,6 @@ syntax(<<"accept_invite">>, Syntax) ->
 
 syntax(<<"reject_invite">>, Syntax) ->
     Syntax#{
-        id => binary,
         invite_id =>  binary,
         '__mandatory' => [invite_id]
     };

@@ -94,7 +94,7 @@ cmd(<<"send_candidate_end">>, #nkreq{data=Data, user_id=MemberId}) ->
 
 
 cmd(<<"set_status">>, #nkreq{data=#{id:=CallId}=Data, user_id=MemberId}) ->
-    Opts = maps:with([audio, video], Data),
+    Opts = maps:with([audio, video, screen], Data),
     nkchat_media_call_obj:set_status(CallId, MemberId, Opts);
 
 cmd(Cmd, Req) ->
