@@ -80,6 +80,7 @@ syntax(<<"set_status">>, Syntax) ->
         id => binary,
         audio => boolean,
         video => boolean,
+        screen => boolean,
         '__mandatory' => [id]
     };
 
