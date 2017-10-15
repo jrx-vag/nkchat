@@ -479,7 +479,7 @@ object_async_op({?MODULE, launch_notifications}, State) ->
 object_async_op({?MODULE, wakeup}, State) ->
     {noreply, set_user_active(State)};
 
-object_async_op({?MODULE, notify_fun, {token_removed, TokenId, Reason}}, State) ->
+object_async_op({?MODULE, notify_fun, {token_removed, TokenId, _Data, Reason}}, State) ->
     State2 = do_event({remove_notification, TokenId, Reason}, State),
     {noreply, State2};
 
