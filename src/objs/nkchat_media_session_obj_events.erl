@@ -53,7 +53,7 @@ event({member_removed, CallId, MemberId, Roles}, State) ->
 event({member_down, CallId, MemberId, Roles}, State) ->
     {event, {member_down, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
 
-event({call_created, InviteId, CallId, _CallOpts}, State) ->
+event({call_created, InviteId, CallId}, State) ->
     {event, {call_created, #{invite_id=>InviteId, call_id=>CallId}}, State};
 
 event({call_hangup, CallId, Reason}, State) ->
