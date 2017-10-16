@@ -52,15 +52,15 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/2, hangup/2, hangup_async/2]).
--export([add_member/3, remove_member/2, get_info/1]).
--export([invite/5, cancel_invite/1, accept_invite/4, reject_invite/1]).
+-export([add_session/3, remove_session/2, get_info/1]).
+-export([invite/5, stop_media/3, answer_media/5]).
 -export([find_member_calls/2, find_calls_with_members/2]).
 -export([send_candidate/3, set_status/3]).
--export([get_invite_token/1]).
+-export([get_invite_token/1, heartbeat/1]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
-         object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
-         object_link_down/2, object_handle_info/2]).
+         object_init/1, object_save/1, object_stop/2, object_sync_op/3, object_async_op/2,
+         object_handle_info/2]).
 -export([object_next_status_timer/1, object_check_active/1]).
 -export([object_admin_info/0]).
 -export_type([event/0]).
@@ -110,7 +110,7 @@
 
 -type role() :: binary().
 
--type member_status() ::
+-type session_status() ::
     #{
         audio => boolean(),
         video => boolean(),
@@ -119,6 +119,7 @@
 
 -type create_opts() ::
     #{
+        type => call_type(),
         parent_id => nkdomain:id(),
         created_by => nkdomain:id(),
         obj_name => nkdomain:obj_name(),
@@ -128,12 +129,13 @@
 
 -type event() ::
     {status, call_status()} |
-    {member_added, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id(), [Role::role()]} |
-    {member_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id(), [Role::role()]} |
-    %{member_down, Member::nkdomain:obj_id(), [Role::role()]} |
+    {session_added, SessId::nkdomain:obj_id(), User::nkdomain:obj_id(), #{}} |
+    {session_removed, SessId::nkdomain:obj_id(), User::nkdomain:obj_id(), #{}} |
+    {session_status, SessId::nkdomain:obj_id(), session_status()} |
+    {media_started, MediaId::nkdomain:obj_id()} |
+    {media_stopped, MediaId::nkdomain:obj_id(), Reason::term()} |
     {call_hangup, Reason::term()} |
-    {new_candidate, #sdp_candidate{}} |     %% sdp_candidate.candidate = <<>> for end
-    {member_status, Member::nkdomain:obj_id(), member_status()}.
+    {new_candidate, SessId::nkdomain:obj_id(), #sdp_candidate{}}.     %% sdp_candidate.candidate = <<>> for end
 
 
 %% ===================================================================
@@ -145,13 +147,14 @@
 -spec create(nkdomain:id(), create_opts()) ->
     {ok, CallId::nkdomain:id(), pid()} | {error, term()}.
 
-create(Domain, Opts) ->
+create(Domain, #{type:=_}=Opts) ->
     Base = maps:with([parent_id, created_by, obj_name, name], Opts),
     Obj =Base#{
         type => ?MEDIA_CALL,
         domain_id => Domain,
         active => true,
         ?MEDIA_CALL => #{
+            type => maps:get(type, Opts)
         }
     },
     case nkdomain_obj_make:create(Obj) of
@@ -179,19 +182,19 @@ hangup_async(Id, Reason) ->
 
 
 %% @doc Registers an user session
--spec add_member(nkdomain:id(), nkdomain:obj_id(), nkdomain:obj_id()) ->
+-spec add_session(nkdomain:id(), nkdomain:obj_id(), nkdomain:obj_id()) ->
     ok | {error, term()}.
 
-add_member(Id, SessId, UserId) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, add_member, SessId, self(), UserId}).
+add_session(Id, SessId, UserId) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, add_session, SessId, self(), UserId}).
 
 
 %% @doc
--spec remove_member(nkdomain:id(), nkdomain:obj_id()) ->
+-spec remove_session(nkdomain:id(), nkdomain:obj_id()) ->
     ok | {error, term()}.
 
-remove_member(Id, SessId) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, remove_member, SessId}).
+remove_session(Id, SessId) ->
+    nkdomain_obj:sync_op(Id, {?MODULE, remove_session, SessId}).
 
 
 %% @private
@@ -199,7 +202,7 @@ get_info(Pid) ->
     nkdomain_obj:sync_op(any, Pid, {?MODULE, get_info}).
 
 
-%% @doc
+%% @doc Valid for direct calls, adds the sessions and starts the invite
 -spec invite(nkdomain:id(), nkdomain:obj_id(), nkdomain:obj_id(), nkdomain:id(), invite_opts()) ->
     {ok, InviteId::nkdomain:obj_id()} | {error, term()}.
 
@@ -214,40 +217,22 @@ invite(Id, SessId, UserId, Callee, InviteOpts) ->
     end.
 
 
-%% @doc
-cancel_invite(InviteId) ->
-    case consume_token(InviteId, cancelled) of
-        {ok, CallId} ->
-            nkdomain_obj:sync_op(CallId, {?MODULE, cancel_invite, InviteId});
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @doc Accepts a invitation notification
--spec accept_invite(nkdomain:id(), nkdomain:obj_id(), nkdomain:id(), accept_opts()) ->
+%% @doc Accepts a invitation notification in a direct call
+-spec answer_media(nkdomain:id(), nkdomain:obj_id(), nkdoman:obj_id(), nkdomain:id(), accept_opts()) ->
     {ok, CallId::nkdomain:obj_id(), pid()} | {error, term()}.
 
-accept_invite(InviteId, SessId, UserId, AcceptOpts) ->
-    case consume_token(InviteId, accepted) of
-        {ok, CallId} ->
-            nkdomain_obj:sync_op(CallId, {?MODULE, accept_invite, InviteId, SessId, self(), UserId, AcceptOpts});
-        {error, Error} ->
-            {error, Error}
-    end.
+answer_media(CallId, MediaId, SessId, UserId, AcceptOpts) ->
+    nkdomain_obj:sync_op(CallId, {?MODULE, answer_media, MediaId, SessId, self(), UserId, AcceptOpts}).
 
 
-%% @doc Rejects a invitation notification
--spec reject_invite(nkdomain:id()) ->
-    ok | {error, term()}.
+%% @doc
+stop_media(CallId, MediaId, Reason) ->
+    nkdomain_obj:async_op(CallId, {?MODULE, stop_media, MediaId, Reason}).
 
-reject_invite(InviteId) ->
-    case consume_token(InviteId, rejected) of
-        {ok, CallId} ->
-            nkdomain_obj:sync_op(CallId, {?MODULE, reject_invite, InviteId});
-        {error, Error} ->
-            {error, Error}
-    end.
+
+%% @doc
+heartbeat(CallId) ->
+    nkdomain_obj:async_op(CallId, {?MODULE, heartbeat}).
 
 
 %% @doc
@@ -316,7 +301,7 @@ send_candidate(CallId, SessId, Candidate) ->
 
 
 %% @doc
--spec set_status(nkdomain:obj_id(), nkdomain:obj_id(), member_status()) ->
+-spec set_status(nkdomain:obj_id(), nkdomain:obj_id(), session_status()) ->
     ok | {error, term()}.
 
 set_status(CallId, SessId, Status) ->
@@ -329,25 +314,25 @@ set_status(CallId, SessId, Status) ->
 %% ===================================================================
 
 
--record(member2, {
-    user_id :: nkdomain:obj_id(),
+-record(session_member, {
     session_id :: nkdomain_obj:id(),
+    user_id :: nkdomain:obj_id(),
     session_pid :: pid(),
     session_mon :: reference()
 }).
 
 
--record(media2, {
+-record(session_media, {
     type :: direct,
-    status :: ringing | in_call,
-    invite_id :: nkdomain_obj:id(),
-    invite_pid :: pid(),
+    status :: ringing | answered,
+    media_id :: nkdomain_obj:id(),
+    timer :: reference(),
     caller_session_id = <<>> :: nkdomain_obj:id(),
     caller_opts = #{} :: invite_opts(),
-    caller_status = #{} :: member_status(),
+    caller_status = #{} :: session_status(),
     callee_session_id = <<>> :: nkdomain_obj:id(),     % For other than 'direct' would be the MS
     callee_opts = #{} :: invite_opts(),
-    callee_status = #{} :: member_status()
+    callee_status = #{} :: session_status()
 }).
 
 
@@ -356,8 +341,8 @@ set_status(CallId, SessId, Status) ->
     type :: call_type(),
     status :: call_status(),
     roles :: #{MemberId::nkdomain:obj_id() => [role()]},
-    members2 :: [#member2{}],
-    medias2 :: [#media2{}]
+    members2 :: [#session_member{}],
+    medias2 :: [#session_media{}]
 }).
 
 
@@ -383,14 +368,12 @@ object_admin_info() ->
 object_es_mapping() ->
     #{
         type => #{type => keyword},
-        status => #{type => keyword},
         members_hash => #{type => keyword},
         members => #{
             type => object,
             dynamic => false,
             properties => #{
-                member_id => #{type => keyword},
-                roles => #{type => keyword}
+                member_id => #{type => keyword}
             }
         }
     }.
@@ -403,13 +386,11 @@ object_parse(update, _Obj) ->
 object_parse(_Mode, _Obj) ->
     #{
         type => {atom, [direct, one2one, room]},
-        status => {atom, [new, ringing, in_call]},
         members_hash => binary,
         members =>
             {list,
                  #{
                      member_id => binary,
-                     roles => {list, binary},
                      '__mandatory' => [member_id]
                  }
             },
@@ -442,16 +423,15 @@ object_api_cmd(Cmd, Req) ->
 %% @private
 %% Client must start a session or it will be destroyed after timeout
 object_init(#obj_state{obj=Obj}=State) ->
-    #{type:=Type, status:=Status, ?MEDIA_CALL := #{members:=_MemberList}} = Obj,
+    #{?MEDIA_CALL := #{type:=Type}} = Obj,
     Session = #session{
         type = Type,
-        status = Status,
         roles = #{},
         members2 = [],
         medias2 = []
     },
     State2 = State#obj_state{session=Session},
-    State3 = update_status(Status, State2),
+    State3 = update_status(new, State2),
     {ok, State3}.
 
 
@@ -459,7 +439,7 @@ object_init(#obj_state{obj=Obj}=State) ->
 object_save(#obj_state{obj=Obj, session=Session}=State) ->
     #session{type=Type, status=Status, members2=Members} = Session,
     MemberList= lists:map(
-        fun(#member2{user_id = UserId}) ->
+        fun(#session_member{user_id = UserId}) ->
             #{
                 member_id => UserId
             }
@@ -469,6 +449,11 @@ object_save(#obj_state{obj=Obj, session=Session}=State) ->
     Call2 = Call1#{type=>Type, status=>Status, members=>MemberList},
     Obj2 = ?ADD_TO_OBJ(?MEDIA_CALL, Call2, Obj),
     {ok, State#obj_state{obj = Obj2}}.
+
+
+%% @private
+object_stop(_Reason, State) ->
+    {ok, do_hangup(object_stopped, State)}.
 
 
 %% @private
@@ -484,12 +469,12 @@ object_sync_op({?MODULE, get_info}, _From, State) ->
     {reply, {ok, Data}, State};
 
 
-object_sync_op({?MODULE, add_member, SessId, Pid, UserId}, _From, State) ->
-    State2 = do_add_member(SessId, Pid, UserId, State),
+object_sync_op({?MODULE, add_session, SessId, Pid, UserId}, _From, State) ->
+    State2 = add_session_member(SessId, Pid, UserId, State),
     {reply, ok, State2};
 
-object_sync_op({?MODULE, remove_member, SessId}, _From, State) ->
-    case do_rm_member(SessId, State) of
+object_sync_op({?MODULE, remove_session, SessId}, _From, State) ->
+    case rm_session_member(SessId, State) of
         {ok, State2} ->
             {reply, ok, State2};
         {error, Error} ->
@@ -497,49 +482,48 @@ object_sync_op({?MODULE, remove_member, SessId}, _From, State) ->
     end;
 
 object_sync_op({?MODULE, invite, SessId, Pid, UserId, CalleeId, InviteOpts}, _From, State) ->
-    State2 = do_add_member(SessId, Pid, UserId, State),
-    case do_invite(UserId, SessId, CalleeId, InviteOpts, State2) of
-        {ok, InviteId, State3} ->
-            {reply, {ok, InviteId}, State3};
-        {error, Error} ->
-            {reply, {error, Error}, State2}
+    case get_type_status(State) of
+        {direct, new} ->
+            case State of
+                #obj_state{session=#session{members2=[], medias2=[]}} ->
+                    State2 = add_session_member(SessId, Pid, UserId, State),
+                    case do_invite(UserId, SessId, CalleeId, InviteOpts, State2) of
+                        {ok, InviteId, State3} ->
+                            State4 = update_status(ringing, State3),
+                            {reply, {ok, InviteId}, State4};
+                        {error, Error} ->
+                            {reply, {error, Error}, State2}
+                    end;
+                _ ->
+                    {reply, {error, call_status_invalid}, State}
+            end;
+        _ ->
+            {reply, {error, call_status_invalid}, State}
     end;
 
-object_sync_op({?MODULE, cancel_invite, InviteId}, _From, State) ->
-    case do_get_media(InviteId, State) of
-        {ok, Media} ->
-            State2 = do_rm_medias([Media], caller_cancelled, State),
-            {reply, ok, State2};
-        not_found ->
-            {error, media_not_found}
-    end;
 
-object_sync_op({?MODULE, accept_invite, InviteId, SessId, SessPid, UserId, AcceptOpts}, _From, State) ->
-    case do_get_media(InviteId, State) of
-        #media2{caller_session_id=CallerSessId, status=ringing}=Media ->
-            State2 = do_add_member(SessId, SessPid, UserId, State),
-            Media2 = Media#media2{
+object_sync_op({?MODULE, answer_media, MediaId, SessId, SessPid, UserId, AcceptOpts}, _From, State) ->
+    case get_session_media(MediaId, State) of
+        #session_media{status=ringing, caller_session_id=CallerSessId, timer=Timer}=Media ->
+            nklib_util:cancel_timer(Timer),
+            State2 = add_session_member(SessId, SessPid, UserId, State),
+            Media2 = Media#session_media{
+                status = answered,
+                timer = undefined,
                 callee_session_id = SessId,
                 callee_opts = AcceptOpts,
                 caller_status = #{}
             },
-            State3 = do_update_media(Media2, State2),
-            State4 = do_event_member(CallerSessId, {invite_accepted, AcceptOpts}, State3),
-            #obj_state{id=#obj_id_ext{obj_id=CallId}} = State4,
-            {reply, {ok, CallId, self()}, State4};
-        #media2{} ->
-            {reply, {error, session_invalid}, State};
+            State3 = update_session_media(Media2, State2),
+            State4 = do_session_member_event(CallerSessId, {media_answered, MediaId, AcceptOpts}, State3),
+            State5 = do_session_member_event(SessId, {media_started, MediaId}, State4),
+            State6 = update_status(in_call, State5),
+            #obj_state{id=#obj_id_ext{obj_id=CallId}} = State6,
+            {reply, {ok, CallId, self()}, State6};
+        #session_media{} ->
+            {reply, {error, session_already_answered}, State};
         not_found ->
             {reply, {error, session_not_found}, State}
-    end;
-
-object_sync_op({?MODULE, reject_invite, InviteId}, _From, State) ->
-    case do_get_media(InviteId, State) of
-        {ok, Media} ->
-            State2 = do_rm_medias([Media], callee_rejected, State),
-            {reply, ok, State2};
-        not_found ->
-            {error, media_not_found}
     end;
 
 object_sync_op({?MODULE, hangup_call, Reason}, _From, State) ->
@@ -547,41 +531,33 @@ object_sync_op({?MODULE, hangup_call, Reason}, _From, State) ->
     {stop, normal, ok, State2};
 
 object_sync_op({?MODULE, send_candidate, SessId, Candidate}, _From, State) ->
-    #obj_state{session=#session{medias2=Medias}} = State,
-    case lists:keyfind(SessId, #media2.caller_session_id, Medias) of
-        #media2{callee_session_id=Remote} ->
-            do_event_member(Remote, {new_candidate, Candidate}, State),
+    case get_session_media_session(SessId, State) of
+        {caller, #session_media{callee_session_id=Remote}} ->
+            do_session_member_event(Remote, {new_candidate, Remote, Candidate}, State),
+            {reply, ok, State};
+        {callee, #session_media{caller_session_id=Remote}} ->
+            do_session_member_event(Remote, {new_candidate, Remote, Candidate}, State),
             {reply, ok, State};
         not_found ->
-            case lists:keyfind(SessId, #media2.callee_session_id, Medias) of
-                #media2{callee_session_id=Remote} ->
-                    do_event_member(Remote, {new_candidate, Candidate}, State),
-                    {reply, ok, State};
-                not_found ->
-                    {error, session_not_found}
-            end
+            {error, session_not_found}
     end;
 
 object_sync_op({?MODULE, set_status, SessId, Status}, _From, State) ->
-    #obj_state{session=#session{medias2=Medias}} = State,
-    case lists:keyfind(SessId, #media2.caller_session_id, Medias) of
-        #media2{caller_status=OldStatus, callee_session_id=Remote}=Media ->
+    case get_session_media_session(SessId, State) of
+         {caller, #session_media{caller_status=OldStatus, callee_session_id=Remote}=Media} ->
             NewStatus = maps:merge(OldStatus, Status),
-            Media2 = Media#media2{caller_status=NewStatus},
-            State2 = do_update_media(Media2, State),
-            do_event_member(Remote, {member_status, SessId, Status}, State),
+            Media2 = Media#session_media{caller_status=NewStatus},
+             State2 = update_session_media(Media2, State),
+            do_session_member_event(Remote, {member_status, SessId, Status}, State),
+            {ok, State2};
+        {callee, #session_media{callee_status=OldStatus, caller_session_id=Remote}=Media} ->
+            NewStatus = maps:merge(OldStatus, Status),
+            Media2 = Media#session_media{callee_status=NewStatus},
+            State2 = update_session_media(Media2, State),
+            do_session_member_event(Remote, {member_status, SessId, Status}, State),
             {ok, State2};
         not_found ->
-            case lists:keyfind(SessId, #media2.callee_session_id, Medias) of
-                #media2{callee_status=OldStatus, caller_session_id=Remote}=Media ->
-                    NewStatus = maps:merge(OldStatus, Status),
-                    Media2 = Media#media2{callee_status=NewStatus},
-                    State2 = do_update_media(Media2, State),
-                    do_event_member(Remote, {member_status, SessId, Status}, State),
-                    {ok, State2};
-                not_found ->
-                    {error, session_not_found}
-            end
+            {error, session_not_found}
     end;
 
 object_sync_op(_Op, _From, _State) ->
@@ -589,6 +565,25 @@ object_sync_op(_Op, _From, _State) ->
 
 
 %% @private
+object_async_op({?MODULE, heartbeat}, State) ->
+    State2 = case get_type_status(State) of
+        {direct, in_call} ->
+            update_status(in_call, State);
+        _ ->
+            State
+
+    end,
+    {noreply, State2};
+
+object_async_op({?MODULE, stop_media, MediaId, Reason}, State) ->
+    State2 = case get_session_media(MediaId, State) of
+        #session_media{}=Media ->
+            rm_session_media(Media, Reason, State);
+        not_found ->
+            State
+    end,
+    {noreply, State2};
+
 object_async_op({?MODULE, hangup_call, Reason}, State) ->
     State2 = do_hangup(Reason, State),
     {stop, normal, State2};
@@ -598,25 +593,21 @@ object_async_op(_Op, _State) ->
 
 
 %% @private
-object_link_down({usage, {?MODULE, invite, InviteId, _Pid}}, State) ->
-    case do_get_media(InviteId, State) of
-        {ok, #media2{status=ringing}} ->
-            State2 = do_rm_medias(InviteId, timeout, State),
+object_handle_info({?MODULE, ringing_timeout, MediaId}, State) ->
+    case get_session_media(MediaId, State) of
+        #session_media{status=ringing}=Media ->
+            State2 = rm_session_media(Media, ring_timeout, State),
             {noreply, State2};
         _ ->
+            ?LLOG(warning, "received ringing_timeout for unknown media", [], State),
             {noreply, State}
     end;
 
-object_link_down(_Link, State) ->
-    {ok, State}.
-
-
-%% @private
 object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, State) ->
     #obj_state{session=#session{members2=Members}} = State,
-    case lists:keyfind(Pid, #member2.session_pid, Members) of
-        #member2{session_id=SessId} ->
-            State2 = do_rm_member(SessId, State),
+    case lists:keyfind(Pid, #session_member.session_pid, Members) of
+        #session_member{session_id=SessId} ->
+            State2 = rm_session_member(SessId, State),
             {noreply, State2};
         false ->
             continue
@@ -644,21 +635,29 @@ object_check_active(_Id) ->
 %% ===================================================================
 
 %% @private
-consume_token(InviteId, Reason) ->
-    case nkdomain_token_obj:consume_token(InviteId, Reason) of
-        {ok, Data} ->
-            case get_invite_token(Data) of
-                {ok, #{call_id:=CallId}} ->
-                    {ok, CallId};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        {error, Error} ->
-            {error, Error}
-    end.
+get_type_status(#obj_state{session=#session{type=Type, status=Status}}) ->
+    {Type, Status}.
+
+
+%%%% @private
+%%consume_token(InviteId, Reason) ->
+%%    case nkdomain_token_obj:consume_token(InviteId, Reason) of
+%%        {ok, Data} ->
+%%            case get_invite_token(Data) of
+%%                {ok, #{call_id:=CallId}} ->
+%%                    {ok, CallId};
+%%                {error, Error} ->
+%%                    {error, Error}
+%%            end;
+%%        {error, Error} ->
+%%            {error, Error}
+%%    end.
 
 
 %% @doc
+update_status(hangup, #obj_state{session=Session}=State) ->
+    State#obj_state{session=Session#session{status=hangup}};
+
 update_status(Status, #obj_state{session=Session}=State) ->
     State2 = State#obj_state{session=Session#session{status=Status}},
     Time = case Status of
@@ -671,13 +670,13 @@ update_status(Status, #obj_state{session=Session}=State) ->
     end,
     ?LLOG(info, "call is now in '~s' status", [Status], State),
     State3 = nkdomain_obj_util:set_next_status_timer(Time*1000, State2),
-    do_event({status, Status}, State3).
+    do_all_session_members_event({status, Status}, State3).
 
 
 %% @private
-get_member_session_id(SessId, #obj_state{session=#session{members2=Members}}) ->
-    case lists:keyfind(SessId, #member2.session_id, Members) of
-        #member2{}=Member ->
+get_session_member(SessId, #obj_state{session=#session{members2=Members}}) ->
+    case lists:keyfind(SessId, #session_member.session_id, Members) of
+        #session_member{}=Member ->
             Member;
         false ->
             not_found
@@ -685,50 +684,46 @@ get_member_session_id(SessId, #obj_state{session=#session{members2=Members}}) ->
 
 
 %% @private
-put_member_session_id(SessId, Member, #obj_state{session=#session{members2=Members}=Session}=State) ->
-    Members2 = lists:keystore(SessId, #member2.session_id, Members, Member),
+put_session_member(SessId, Member, #obj_state{session=#session{members2=Members} = Session} = State) ->
+    Members2 = lists:keystore(SessId, #session_member.session_id, Members, Member),
     Session2 = Session#session{members2=Members2},
     State#obj_state{session=Session2}.
 
 
 %% @private
-do_add_member(SessId, Pid, UserId, State) ->
-    case get_member_session_id(SessId, State) of
-        #member2{user_id=UserId, session_pid=Pid} ->
+add_session_member(SessId, Pid, UserId, State) ->
+    case get_session_member(SessId, State) of
+        #session_member{user_id=UserId, session_pid=Pid} ->
             State;
         not_found ->
-            Member = #member2{
+            Member = #session_member{
                 user_id = UserId,
                 session_id = SessId,
                 session_pid = Pid,
                 session_mon = monitor(process, Pid)
             },
-            State2 = put_member_session_id(SessId, Member, State),
-            State3 = do_event({member_added, UserId, #{}}, State2),
+            State2 = put_session_member(SessId, Member, State),
+            State3 = do_all_session_members_event({session_added, SessId, UserId, #{}}, State2),
             set_members_hash(State3)
     end.
 
 
-do_rm_member(SessId, #obj_state{session=Session}=State) ->
+%% @private
+rm_session_member(SessId, #obj_state{session=Session} = State) ->
     #session{members2=Members, medias2=Medias} = Session,
-    case lists:keytake(SessId, #member2.session_id, Members) of
-        {value, #member2{user_id=UserId, session_pid=Pid}, Members2} ->
+    case lists:keytake(SessId, #session_member.session_id, Members) of
+        {value, #session_member{user_id=UserId, session_pid=Pid}, Members2} ->
             demonitor(Pid),
             Session2 = Session#session{members2=Members2},
             State2 = set_members_hash(State#obj_state{session=Session2}),
-            State3 = do_event({member_removed, UserId, #{}}, State2),
-            SessIds = lists:filtermap(
-                fun(#media2{invite_id=Id1, caller_session_id=Id2, callee_session_id=Id3}) ->
-                    case Id2==SessId orelse Id3==SessId of
-                        true ->
-                            {true, Id1};
-                        false ->
-                            false
-                    end
+            State3 = do_all_session_members_event({session_removed, UserId, #{}}, State2),
+            Medias = lists:filter(
+                fun(#session_media{caller_session_id=Caller, callee_session_id=Callee}) ->
+                    Caller==SessId orelse Callee==SessId
                 end,
                 Medias),
             % TODO: move to 'recover'
-            State4 = do_rm_medias(SessIds, member_stopped, State3),
+            State4 = rm_session_medias(Medias, member_stopped, State3),
             {ok, State4};
         false ->
             {error, session_not_found}
@@ -736,45 +731,79 @@ do_rm_member(SessId, #obj_state{session=Session}=State) ->
 
 
 %% @private
-do_get_media(InviteId, #obj_state{session=#session{medias2=Medias}}) ->
-    case lists:keyfind(InviteId, #media2.invite_id, Medias) of
-        #media2{}=Media ->
-            {ok, Media};
+get_session_media(MediaId, #obj_state{session=#session{medias2=Medias}}) ->
+    case lists:keyfind(MediaId, #session_media.media_id, Medias) of
+        #session_media{}=Media ->
+            Media;
         false ->
             not_found
     end.
 
 
 %% @private
-do_add_media(#media2{invite_id=InviteId, invite_pid=Pid}=Media, State) ->
-    State2 = do_update_media(Media, State),
-    State3 = nkdomain_obj:links_add(usage, {?MODULE, invite, InviteId, Pid}, State2),
-    do_event({media_started, InviteId}, State3).
+get_session_media_session(SessId, #obj_state{session=#session{medias2=Medias}}) ->
+    case lists:keyfind(SessId, #session_media.caller_session_id, Medias) of
+        #session_media{} = Media ->
+            {caller, Media};
+        false ->
+            case lists:keyfind(SessId, #session_media.callee_session_id, Medias) of
+                #session_media{} = Media ->
+                    {callee, Media};
+                false ->
+                    not_found
+            end
+    end.
 
 
 %% @private
-do_update_media(#media2{invite_id=InviteId}=Media, #obj_state{session=Session}=State) ->
+add_session_media(#session_media{media_id=MediaId} = Media, State) ->
+    State2 = update_session_media(Media, State),
+    do_event({media_started, MediaId}, State2).
+
+
+%% @private
+update_session_media(#session_media{media_id=MediaId} = Media, #obj_state{session=Session} = State) ->
     #session{medias2=Medias} = Session,
-    Medias2 = lists:keystore(InviteId, #media2.invite_id, Medias, Media),
+    Medias2 = lists:keystore(MediaId, #session_media.media_id, Medias, Media),
     Session2 = Session#session{medias2=Medias2},
     State#obj_state{session=Session2}.
 
 
-%% @private Removes a serie of media sessions
-do_rm_medias([], _Reason, State) ->
+%% @private Removes a series of media sessions. If no one is remaining, stop
+rm_session_medias([], _Reason, State) ->
     State;
 
-do_rm_medias([InviteId|Rest], Reason, #obj_state{session=#session{medias2=Medias}=Session}=State) ->
-    case lists:keytake(InviteId, #media2.invite_id, Medias) of
-        {value, #media2{caller_session_id=Caller, callee_session_id=Callee}, Medias2} ->
-            do_event_member(Caller, {media_session_stopped, InviteId, Reason}, State),
-            do_event_member(Callee, {media_session_stopped, InviteId, Reason}, State),
-            Session2 = Session#session{medias2=Medias2},
-            State2 = State#obj_state{session=Session2},
-            do_rm_medias(Rest, Reason, State2);
-        false ->
-            do_rm_medias(Rest, Reason, State)
-    end.
+rm_session_medias([#session_media{} = Media|Rest], Reason, State) ->
+    State2 = rm_session_media(Media, Reason, State),
+    rm_session_media(Rest, Reason, State2).
+
+
+%% @private
+rm_session_media(Media, Reason, #obj_state{session=Session} = State) ->
+    #session_media{
+        media_id = MediaId,
+        caller_session_id = Caller,
+        callee_session_id = Callee,
+        timer = Timer
+    } = Media,
+    nklib_util:cancel_timer(Timer),
+    #session{medias2=Medias} = Session,
+    do_session_member_event(Caller, {media_stopped, MediaId, Reason}, State),
+    do_session_member_event(Callee, {media_stopped, MediaId, Reason}, State),
+    Medias2 = lists:keydelete(MediaId, #session_media.media_id, Medias),
+    case Medias2 of
+        [] ->
+            case get_type_status(State) of
+                {direct, _} when Medias==[] ->
+                    hangup_async(self(), no_remaining_medias);
+                _ ->
+                    ok
+            end;
+        _ ->
+            ok
+    end,
+    Session2 = Session#session{medias2=Medias2},
+    State#obj_state{session=Session2}.
 
 
 
@@ -799,17 +828,19 @@ do_invite(CallerId, SessId, CalleeId, InviteOpts, State) ->
                 ttl => TTL
             },
             case nkdomain_token_obj:create(DomainId, TokenOpts, TokenData2) of
-                {ok, InviteId, Pid, _Secs} ->
-                    Media = #media2{
+                {ok, MediaId, _Pid, _Secs} ->
+                    Timer = erlang:send_after(self(), 1100*TTL, {?MODULE, ringing_timeout, MediaId}),
+                    Media = #session_media{
                         type = direct,
                         status = ringing,
-                        invite_id = InviteId,
-                        invite_pid = Pid,
+                        media_id = MediaId,
+                        timer = Timer,
                         caller_session_id = SessId,
                         caller_opts = InviteOpts
                     },
-                    State2 = do_add_media(Media, State),
-                    {ok, InviteId, State2};
+                    State2 = add_session_media(Media, State),
+                    State3 = do_session_member_event(SessId, {media_ringing_out, MediaId}, State2),
+                    {ok, MediaId, State3};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -867,7 +898,7 @@ make_invite_push(CallerId, InviteOpts) ->
     #{
         type => ?MEDIA_CALL,
         class => invite,
-        invite_id => <<>>,
+        media_id => <<>>,
         full_name => FullName,
         audio => maps:get(audio, InviteOpts, false),
         video => maps:get(video, InviteOpts, false),
@@ -878,10 +909,44 @@ make_invite_push(CallerId, InviteOpts) ->
 
 %% @private
 do_hangup(Reason, State) ->
-    #obj_state{session=#session{medias2=Medias}} = State,
-    State2 = do_rm_medias(Medias, call_hangup, State),
-    do_event_all_members({call_hangup, Reason}, State2).
+    case get_type_status(State) of
+        {_, hangup} ->
+            State;
+        _ ->
+            #obj_state{session=#session{medias2=Medias}} = State,
+            State2 = rm_session_medias(Medias, call_hangup, State),
+            State3 = do_all_session_members_event({call_hangup, Reason}, State2),
+            update_status(hangup, State3)
+    end.
 
+
+%% @private
+do_session_member_event(Pid, Event, #obj_state{id=#obj_id_ext{obj_id=CallId}}) when is_pid(Pid) ->
+    nkchat_media_session_obj:call_event(Pid, CallId, Event);
+
+do_session_member_event(SessId, Event, State) ->
+    case get_session_member(SessId, State) of
+        #session_member{session_pid=Pid} when is_pid(Pid) ->
+            do_session_member_event(Pid, Event, State);
+        _ ->
+            ok
+    end.
+
+
+%% @private
+do_all_session_members_event(Event, State) ->
+    #obj_state{session=#session{members2=Members}} = State,
+    State2 = do_all_session_members_event(Members, Event, State),
+    do_event(Event, State2).
+
+
+%% @private
+do_all_session_members_event([], _Event, State) ->
+    State;
+
+do_all_session_members_event([#session_member{session_pid=Pid}|Rest], Event, #obj_state{} = State) ->
+    do_session_member_event(Pid, Event, State),
+    do_all_session_members_event(Rest, Event, State).
 
 
 %% @private
@@ -890,39 +955,8 @@ do_event(Event, State) ->
 
 
 %% @private
-do_event_member(SessId, Event, State) ->
-    case get_member_session_id(SessId, State) of
-        #member2{session_pid=Pid} when is_pid(Pid) ->
-            do_event_session(Pid, Event, State);
-        _ ->
-            ok
-    end.
-
-
-%% @private
-do_event_all_members(Event, State) ->
-    #obj_state{session=#session{members2=Members}} = State,
-    State2 = do_event_all_members(Members, Event, State),
-    do_event(Event, State2).
-
-
-%% @private
-do_event_all_members([], _Event, State) ->
-    State;
-
-do_event_all_members([#member2{session_pid=Pid}|Rest], Event, #obj_state{}=State) ->
-    do_event_session(Pid, Event, State),
-    do_event_all_members(Rest, Event, State).
-
-
-%% @private
-do_event_session(Pid, Event, #obj_state{id=#obj_id_ext{obj_id=CallId}}) ->
-    nkchat_media_session_obj:call_event(Pid, CallId, Event).
-
-
-%% @private
 set_members_hash(#obj_state{obj=Obj, session=#session{members2=Members}}=State) ->
-    UserIds = [UserId || #member2{user_id=UserId} <- Members],
+    UserIds = [UserId || #session_member{user_id=UserId} <- Members],
     Hash = get_members_hash(UserIds),
     #{?MEDIA_CALL:=Call} = Obj,
     Call2 = Call#{members_hash=>Hash},
@@ -940,7 +974,7 @@ get_members_hash(MemberIds) ->
 expand_members(#obj_state{session=Session}) ->
     #session{members2=Members} = Session,
     lists:map(
-        fun(#member2{user_id = MemberId}) ->
+        fun(#session_member{user_id = MemberId}) ->
             #{
                 member_id => MemberId
             }

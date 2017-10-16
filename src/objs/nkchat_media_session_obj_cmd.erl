@@ -113,8 +113,13 @@ cmd(<<"invite">>, #nkreq{data=#{user_id:=UserId}=Data}=Req) ->
             {error, Error}
     end;
 
-cmd(<<"cancel_invite">>, #nkreq{data=#{invite_id:=InvId}}) ->
-    nkchat_media_session_obj:cancel_invite(InvId);
+cmd(<<"cancel_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
+    case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
+        {ok, Id} ->
+            nkchat_media_session_obj:cancel_invite(Id, InviteId);
+        {error, Error} ->
+            {error, Error}
+    end;
 
 
 cmd(<<"accept_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
@@ -131,8 +136,14 @@ cmd(<<"accept_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
             {error, Error}
     end;
 
-cmd(<<"reject_invite">>, #nkreq{data=#{invite_id:=InviteId}}) ->
-    nkchat_media_session_obj:reject_invite(InviteId);
+cmd(<<"reject_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
+    case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
+        {ok, Id} ->
+            nkchat_media_session_obj:reject_invite(Id, InviteId);
+        {error, Error} ->
+            {error, Error}
+    end;
+
 
 cmd(<<"hangup_call">>, #nkreq{data=#{call_id:=CallId}}) ->
     nkchat_media_call_obj:hangup(CallId, user_hangup);
