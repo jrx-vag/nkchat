@@ -20,48 +20,30 @@
 
 %% @doc State Object
 
-Invite - Caller side
---------------------
-
-- API calls invite/3 to start a new 'direct' call. It should be in no active call.
-- It creates a call with type 'direct' and call nkchat_media_call_obj:invite/5 that
-    - adds a member to the call
-    - creates and launches "invite token" to the callee
-    - starts a new media session
-- We get the media session id and store the call info at the session
-- The call sends the media_ringing_out event and we wait for the answer
-    - if the call stops, it will send media_stopped event and call_hangup
-    - if the call fails, it is detected and the same
-    - if we call cancel_invite, we call stop_media and media_stopped will be received
-    - if the calling timeout fires, the same
-    - if the call is answered, we will receive media_answered event
-
-Callee side
------------
-
-- Callee receives the invite token through the notify_fun and sends invite event
-- If reject_invite is called, and the token is still valid, the media session is stopped
-    - caller received media_stopped
-    - no event is received
-- If accept_invite is called, and the token is valid
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+%% Invite - Caller side
+%% --------------------
+%%
+%% - API calls invite/3 to start a new 'direct' call. It should be in no active call.
+%% - It creates a call with type 'direct' and call nkchat_media_call_obj:invite/5 that
+%%     - adds a member to the call
+%%     - creates and launches "invite token" to the callee
+%%     - starts a new media session
+%% - We get the media session id and store the call info at the session
+%% - The call sends the media_ringing_out event and we wait for the answer
+%%     - if the call stops, it will send media_stopped event and call_hangup
+%%     - if the call fails, it is detected and the same
+%%     - if we call cancel_invite, we call stop_media and media_stopped will be received
+%%     - if the calling timeout fires, the same
+%%     - if the call is answered, we will receive media_answered event
+%%
+%% Callee side
+%% -----------
+%%
+%% - Callee receives the invite token through the notify_fun and sends invite event
+%% - If reject_invite is called, and the token is still valid, the media session is stopped
+%%     - caller received media_stopped
+%%     - no event is received
+%% - If accept_invite is called, and the token is valid
 
 
 -module(nkchat_media_session_obj).
@@ -101,13 +83,8 @@ Callee side
     {media_answered, MediaId::nkdomain:obj_id(), CallId::binary(), Opts::nkchat_media_call_obj:accept_opts()} |
     {media_started, MediaId::nkdomain:obj_id(), CallId::binary()} |
     {new_candidate, nkchat_media_call_obj:candidate(), CallId::binary()} |
-    {call_hangup, CallId::binary(), Reason::nkservice:error()}.
-
-
-
-    {invite, InviteId::binary(), CallerId::binary(), nkchat_media_call_obj:invite_opts()} |
-    {invite_removed, InviteId::binary(), Reason::nkservice:error()} |
-    {invite_accepted, InviteId::binary(), CallId::binary(), nkchat_media_call_obj:accept_opts()}.
+    {call_hangup, CallId::binary(), Reason::nkservice:error()} |
+    {invite, InviteId::binary(), CallerId::binary(), nkchat_media_call_obj:invite_opts()}.
 
 
 
@@ -120,7 +97,7 @@ Callee side
     {media_started, MediaId::nkdomain:obj_id()} |
     {new_candidate, nkchat_media_call_obj:candidate()} |
     {member_status, Member::binary(), nkchat_media_call_obj:status()} |
-    {call_hangup, Reason::nkservice:error()} |
+    {call_hangup, Reason::nkservice:error()}.
 
 
 
@@ -217,6 +194,9 @@ get_call_info(Id) ->
 
 
 %% @private To be called from nkmedia_call_obj
+-spec call_event(pid, nkdomain:obj_id(), call_event()) ->
+    ok.
+
 call_event(Pid, CallId, Event) ->
     nkdomain_obj:async_op(Pid, {?MODULE, call_event, CallId, Event}).
 
@@ -565,7 +545,7 @@ do_call_event({media_started, MediaId}, CallId, #obj_state{session=Session}=Stat
     #session{call_id=CallId, media_id=MediaId, media_status=answered} = Session,
     do_event({media_started, MediaId, CallId}, State);
 
-do_call_event({call_hangup, Reason}, CallId, #obj_state{session=Session}=State) ->
+do_call_event({call_hangup, Reason}, CallId, State) ->
     do_call_down(CallId, Reason, State);
 
 do_call_event({session_added, SessId, MemberId, Data}, CallId, State) ->
