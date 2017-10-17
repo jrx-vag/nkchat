@@ -62,6 +62,8 @@
     {message_created, nkdomain:obj()} |
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
+    {status_updated, nkchat_conversation_obj:status()} |
+    {is_closed_updated, boolean()} |
     {unread_counter_updated, ConvId::nkdomain:obj_id(), integer()} |
     {invited_to_conversation, TokenId::binary(), UserId::binary(), ConvId::binary()} |
     {remove_notification, TokenId::binary(), Reason::term()}.

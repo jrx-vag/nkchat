@@ -158,7 +158,7 @@ remove_member(Id, Member) ->
 
 %% @doc
 -spec get_status(nkdomain:id()) ->
-    {ConvId::nkdomain:obj_id(), Domaind::nkdomain:obj_id(), Status::status(), IsClosed::boolean()}.
+    {ConvId::nkdomain:obj_id(), DomainId::nkdomain:obj_id(), Status::status(), IsClosed::boolean()}.
 
 get_status(Id) ->
     nkdomain_obj:sync_op(Id, {?MODULE, get_status}).
@@ -611,16 +611,26 @@ object_sync_op({?MODULE, get_status}, _From, State) ->
     {reply, {ConvId, DomainId, Status, IsClosed}, State};
 
 object_sync_op({?MODULE, set_status, Status}, _From, #obj_state{session=Session}=State) ->
-    Session2 = Session#session{status=Status},
-    State2 = State#obj_state{session=Session2},
-    State3 = do_event({status_updated, Status}, State2),
-    {reply_and_save, ok, State3};
+    case Session of
+        #session{status=Status} ->
+            {reply, ok, State};
+        _ ->
+            Session2 = Session#session{status=Status},
+            State2 = State#obj_state{session=Session2},
+            State3 = do_event({status_updated, Status}, State2),
+            {reply_and_save, ok, State3}
+    end;
 
 object_sync_op({?MODULE, set_closed, Closed}, _From, #obj_state{session=Session}=State) ->
-    Session2 = Session#session{is_closed=Closed},
-    State2 = State#obj_state{session=Session2},
-    State3 = do_event({is_closed_updated, Closed}, State2),
-    {reply_and_save, ok, State3};
+    case Session of
+        #session{is_closed=Closed} ->
+            {reply, ok, State};
+        _ ->
+            Session2 = Session#session{is_closed=Closed},
+            State2 = State#obj_state{session=Session2},
+            State3 = do_event({is_closed_updated, Closed}, State2),
+            {reply_and_save, ok, State3}
+    end;
 
 object_sync_op({?MODULE, add_info, Info}, _From, State) ->
     #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
