@@ -274,25 +274,59 @@ find_conversations_with_members(Domain, MemberIds) ->
 get_messages(Id, Spec) ->
     case nkdomain_lib:load(Id) of
         #obj_id_ext{obj_id=ConvId} ->
-            Search1 = maps:with([from, size], Spec),
+            Search1 = case Spec of
+                #{start_date:=_, end_date:=_} ->
+                    #{};
+                #{start_date:=_} ->
+                    maps:with([size], Spec);
+                #{end_date:=_} ->
+                    maps:with([size], Spec);
+                _ ->
+                    maps:with([from, size], Spec)
+            end,
+            Inclusive = case Spec of
+                #{inclusive:=true} ->
+                    <<"=">>;
+                _ ->
+                    <<>>
+            end,
             Filters1 = #{
                 type => ?CHAT_MESSAGE,
                 parent_id => ConvId
             },
             Filters2 = case Spec of
+                #{start_date:=Date1, end_date:=Date2} ->
+                    Order = desc,
+                    case Spec of
+                        #{inclusive:=true} ->
+                            Filters1#{created_time => list_to_binary(["<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">"])};
+                        _ ->
+                            Filters1#{created_time => list_to_binary(["<<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">>"])}
+                    end;
                 #{start_date:=Date} ->
-                    Filters1#{created_time => {Date, none}};
+                    Order = desc,
+                    Filters1#{created_time => list_to_binary([">", Inclusive, nklib_util:to_binary(Date)])};
+                #{end_date:=Date} ->
+                    Order = desc,
+                    Filters1#{created_time => list_to_binary(["<", Inclusive, nklib_util:to_binary(Date)])};
                 _ ->
+                    Order = desc,
                     Filters1
             end,
             Search2 = Search1#{
-                sort => [#{created_time => #{order => desc}}],
+                sort => [#{created_time => #{order => Order}}],
                 fields => [created_time, ?CHAT_MESSAGE, created_by],
                 filters => Filters2
             },
             case nkdomain:search(Search2) of
                 {ok, N, List, _Meta} ->
-                    {ok, #{total=>N, data=>List}};
+                    List2 = case Order of
+                        asc ->
+                            lists:reverse(List);
+                        desc ->
+                            List
+                    end,
+                    {ok, #{total=>N, data=>List2}};
                 {error, Error} ->
                     {error, Error}
             end;
