@@ -63,9 +63,11 @@ syntax(<<"find_conversations_with_members">>, Syntax) ->
 syntax(<<"get_messages">>, Syntax) ->
     Syntax#{
         id => binary,
-        size => integer,
         from => integer,
+        size => integer,
         start_date => integer,
+        end_date => integer,
+        inclusive => boolean,
         '__mandatory' => [id]
     };
 
