@@ -284,34 +284,38 @@ get_messages(Id, Spec) ->
                 _ ->
                     maps:with([from, size], Spec)
             end,
-            Inclusive = case Spec of
-                #{inclusive:=true} ->
-                    <<"=">>;
-                _ ->
-                    <<>>
-            end,
             Filters1 = #{
                 type => ?CHAT_MESSAGE,
                 parent_id => ConvId
             },
-            Filters2 = case Spec of
+            CreatedFilterList = case Spec of
+                #{start_date:=Date1, end_date:=Date2, inclusive:=Inc} when Inc == true ->
+                    Order = desc,
+                    ["<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">"];
                 #{start_date:=Date1, end_date:=Date2} ->
                     Order = desc,
-                    case Spec of
-                        #{inclusive:=true} ->
-                            Filters1#{created_time => list_to_binary(["<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">"])};
-                        _ ->
-                            Filters1#{created_time => list_to_binary(["<<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">>"])}
-                    end;
+                    ["<<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">>"];
+                #{start_date:=Date, inclusive:=Inc} when Inc == true ->
+                    Order = asc,
+                    [">=", nklib_util:to_binary(Date)];
                 #{start_date:=Date} ->
+                    Order = asc,
+                    [">", nklib_util:to_binary(Date)];
+                #{end_date:=Date, inclusive:=Inc} when Inc == true ->
                     Order = desc,
-                    Filters1#{created_time => list_to_binary([">", Inclusive, nklib_util:to_binary(Date)])};
+                    ["<=", nklib_util:to_binary(Date)];
                 #{end_date:=Date} ->
                     Order = desc,
-                    Filters1#{created_time => list_to_binary(["<", Inclusive, nklib_util:to_binary(Date)])};
+                    ["<", nklib_util:to_binary(Date)];
                 _ ->
                     Order = desc,
-                    Filters1
+                    []
+            end,
+            Filters2 = case CreatedFilterList of
+                [] ->
+                    Filters1;
+                _ ->
+                    Filters1#{created_time => list_to_binary(CreatedFilterList)}
             end,
             Search2 = Search1#{
                 sort => [#{created_time => #{order => Order}}],
