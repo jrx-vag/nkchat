@@ -96,6 +96,33 @@ syntax(<<"reject_invite">>, Syntax) ->
         '__mandatory' => [invite_id]
     };
 
+syntax(<<"send_candidate">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        call_id => binary,
+        sdp_mid => binary,
+        sdp_line_index => binary,
+        candidate => binary,
+        '__mandatory' => [call_id, sdp_mid, sdp_line_index, candidate]
+    };
+
+syntax(<<"send_candidate_end">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        call_id => binary,
+        '__mandatory' => [call_id]
+    };
+
+syntax(<<"set_status">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        call_id => binary,
+        audio => boolean,
+        video => boolean,
+        screen => boolean,
+        '__mandatory' => [call_id]
+    };
+
 syntax(<<"launch_notifications">>, Syntax) ->
     Syntax#{
         id => binary
