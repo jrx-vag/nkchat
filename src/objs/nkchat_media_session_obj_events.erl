@@ -40,8 +40,8 @@ event({call_created, CallId}, State) ->
 event({media_invite, MediaId, CallId, CallerId, Media}, State) ->
     {event, {media_invite, #{media_id=>MediaId, call_id=>CallId, caller_id=>CallerId, media=>Media}}, State};
 
-event({media_ringing_out, MediaId, CallId}, State) ->
-    {event, {media_ringing_out, #{media_id=>MediaId, call_id=>CallId}}, State};
+event({media_ringing, MediaId, CallId}, State) ->
+    {event, {media_ringing, #{media_id=>MediaId, call_id=>CallId}}, State};
 
 event({media_answered, MediaId, CallId, Opts}, State) ->
     {event, {media_answered, #{media_id=>MediaId, call_id=>CallId, media=>Opts}}, State};
