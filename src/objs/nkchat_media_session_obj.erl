@@ -29,7 +29,7 @@
 %%     - creates and launches "invite token" to the callee
 %%     - starts a new media session
 %% - We get the media session id and store the call info at the session
-%% - The call sends the media_ringing_out event and we wait for the answer
+%% - The call sends the media_ringing event and we wait for the answer
 %%     - if the call stops, it will send media_stopped event and call_hangup
 %%     - if the call fails, it is detected and the same
 %%     - if we call cancel_invite, we call stop_media and media_stopped will be received
@@ -51,7 +51,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([start/3, get_call_info/1, launch_notifications/1]).
--export([invite/3, cancel_invite/2, accept_invite/3, reject_invite/2]).
+-export([invite/3, cancel_invite/1, accept_invite/3, reject_invite/1]).
 -export([object_info/0, object_es_mapping/0, object_parse/2,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
@@ -66,13 +66,13 @@
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
 -include_lib("nkevent/include/nkevent.hrl").
 
+-define(DEFAULT_INVITE_TTL, 3*60).     % Secs
+
+
 
 %% ===================================================================
 %% Types
 %% ===================================================================
-
-
-
 
 -type event() ::
     % Own events
@@ -81,7 +81,7 @@
              InviteOpts::nkchat_media_call_obj:invite_opts()} |
 
     % Events from call
-    {media_ringing_out, MediaId::nkdomain:obj_id(), CallId::nkdomain:obj_id()} |
+    {media_ringing, MediaId::nkdomain:obj_id(), CallId::nkdomain:obj_id()} |
     {media_answered,  MediaId::nkdomain:obj_id(), CallId::nkdomain:obj_id(), nkchat_media_call_obj:accept_opts()} |
     {media_started, MediaId::nkdomain:obj_id(), CallId::nkdomain:obj_id()} |
     {media_stopped, MediaId::nkdomain:obj_id(), CallId::nkdomain:obj_id(), Reason::term()} |
@@ -148,8 +148,15 @@ invite(Id, Callee, InviteOpts) ->
 
 
 %% @doc
-cancel_invite(Id, MediaId) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, cancel_invite, MediaId}).
+cancel_invite(MediaId) ->
+    case consume_token(MediaId, cancel_invite) of
+        {ok, CallId} ->
+            % We will receive the media_stopped event
+            % If not for some reason (call down) we will detect the stop of the token process
+            nkchat_media_call_obj:stop_media(CallId, MediaId, caller_cancelled);
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% @doc Accepts a invitation notification
@@ -157,14 +164,19 @@ cancel_invite(Id, MediaId) ->
     ok | {error, term()}.
 
 accept_invite(SessId, MediaId, AcceptOpts) ->
-    nkdomain_obj:sync_op(SessId, {?MODULE, accept_invite, MediaId, AcceptOpts}).
+    case consume_token(MediaId, accept_invite) of
+        {ok, CallId} ->
+            nkdomain_obj:sync_op(SessId, {?MODULE, accept_invite, MediaId, CallId, AcceptOpts});
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% @doc Rejects a invitation notification
--spec reject_invite(nkdomain:id(), nkdomain:obj_id()) ->
+-spec reject_invite(nkdomain:obj_id()) ->
     ok | {error, term()}.
 
-reject_invite(_SessId, MediaId) ->
+reject_invite(MediaId) ->
     case consume_token(MediaId, reject_invite) of
         {ok, CallId} ->
             nkchat_media_call_obj:stop_media(CallId, MediaId, callee_rejected);
@@ -209,11 +221,19 @@ notify_fun(Pid, Notify) ->
 %% nkdomain_obj behaviour
 %% ===================================================================
 
+
+-record(media, {
+    id :: nkdomain:obj_id(),
+    status :: created | ringing | answered,
+    call_id :: nkdomain:obj_id(),
+    call_mon :: reference(),
+    token_mon :: reference()
+}).
+
+
 -record(session, {
-    media_id = <<>> :: nkdomain:obj_id(),
-    media_status = no_media :: no_media | ringing | answered,
-    call_id = <<>> :: nkdomain:obj_id(),
-    call_monitor :: reference()
+    medias = [] :: [#media{}],
+    last_invite = 0 :: nkdomain:timestamp()
 }).
 
 
@@ -278,64 +298,51 @@ object_stop(_Reason, State) ->
 
 
 %% @private
-object_sync_op({?MODULE, get_call_info}, _From, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{media_status=no_media} ->
-            {reply, {ok, #{media_status=>no_media}}, State};
-        #session{media_status=Status, call_id=CallId, media_id=MediaId} ->
-            {reply, {ok, #{media_status=>Status, media_id=>MediaId, call_id=>CallId}}, State}
-    end;
+object_sync_op({?MODULE, get_call_info}, _From, #obj_state{session=#session{medias=Medias}}=State) ->
+    Calls = [
+        #{media_id=>Id, status=>Status, call_id=>CallId} ||
+        #media{id=Id, status=Status, call_id=CallId} <- Medias
+    ],
+    {reply, {ok, Calls}, State};
 
 object_sync_op({?MODULE, invite, CalleeId, InviteOpts}, _From, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{media_status=no_media} ->
-            case do_invite(CalleeId, InviteOpts, State) of
-                {ok, MediaId, _CallId, State2} ->
-                    {reply, {ok, MediaId}, State2};
+    #session{last_invite=LastInvite} = Session,
+    Now = nkdomain_util:timestamp(),
+    case (Now - LastInvite) > 2000 of
+        true ->
+            State2 = State#obj_state{session=Session#session{last_invite=Now}},
+            case do_invite(CalleeId, InviteOpts, State2) of
+                {ok, MediaId, State3} ->
+                    {reply, {ok, MediaId}, State3};
                 {error, Error} ->
                     {reply, {error, Error}, State}
             end;
-        #session{media_id=MediaId} ->
-            {reply, {error, {media_is_active, MediaId}}, State}
+        false ->
+            {reply, {error, invite_not_allowed}, State}
     end;
 
-object_sync_op({?MODULE, accept_invite, MediaId, CallId, AcceptOpts}, _From, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{media_status=no_media} ->
-            case consume_token(MediaId, call_accepted) of
-                {ok, CallId} ->
-                    case do_accept(MediaId, CallId, AcceptOpts, State) of
-                        {ok, State2} ->
-                            {reply, ok, State2};
-                        {error, Error} ->
-                            {reply, {error, Error}, State}
-                    end;
-                {error, Error} ->
-                    {reply, {error, Error}, State}
-            end;
-        #session{media_id=MediaId} ->
-            {reply, {error, {media_is_active, MediaId}}, State}
+object_sync_op({?MODULE, accept_invite, MediaId, CallId, Opts}, _From, State) ->
+    #obj_state{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
+    case nkchat_media_call_obj:answer_media(CallId, MediaId, SessId, UserId, Opts) of
+        {ok, CallId, CallPid} ->
+            Media2 = case do_get_media(MediaId, State) of
+                {ok, #media{call_id=CallId, token_mon=Mon}=Media} ->
+                    nklib_util:demonitor(Mon),
+                    Media#media{status=answered};
+                not_found ->
+                    % We may have just started, but the call has been accepted any case
+                    #media{
+                        id = MediaId,
+                        status = answered,
+                        call_id = CallId,
+                        call_mon = monitor(process, CallPid)
+                    }
+            end,
+            State2 = do_update_media(Media2, State),
+            {reply, ok, State2};
+        {error, Error} ->
+            {reply, {error, Error}, State}
     end;
-
-object_sync_op({?MODULE, cancel_invite, MediaId}, _From, #obj_state{session=Session}=State) ->
-    Reply = case Session of
-        #session{call_id=CallId, media_id=MediaId} ->
-            nkchat_media_call_obj:stop_media(CallId, MediaId, caller_cancelled);
-        _ ->
-            {error, media_unknown, State}
-    end,
-    {reply, Reply, State};
-
-object_sync_op({?MODULE, reject_invite, MediaId}, _From, #obj_state{session=Session}=State) ->
-    Reply = case Session of
-        #session{call_id=CallId, media_id=MediaId} ->
-            nkchat_media_call_obj:stop_media(CallId, MediaId, callee_rejected);
-        _ ->
-            {error, media_unknown, State}
-    end,
-    {reply, Reply, State};
-
-
 
 object_sync_op(_Op, _From, _State) ->
     continue.
@@ -352,37 +359,56 @@ object_async_op({?MODULE, launch_notifications}, State) ->
     {noreply, State};
 
 object_async_op({?MODULE, notify_fun, {token_created, MediaId, Msg}}, State) ->
-    case nkchat_media_call_obj:get_invite_token(Msg) of
-        {ok, #{call_id:=CallId, caller_id:=CallerId, invite_opts:=InviteOpts}} ->
-            State2 = do_event({media_invite, MediaId, CallId, CallerId, InviteOpts}, State),
-            {noreply, State2};
+    case read_invite_token(Msg) of
+        {ok, CallId, CallerId, _CalleeId, InviteOpts} ->
+            case nkdomain_lib:load(CallId) of
+                #obj_id_ext{pid=CallPid} ->
+                    Media = #media{
+                        id = MediaId,
+                        status = answered,
+                        call_id = CallId,
+                        call_mon = monitor(process, CallPid)
+                    },
+                    State2 = do_update_media(Media, State),
+                    State3 = do_event({media_invite, MediaId, CallId, CallerId, InviteOpts}, State2),
+                    {noreply, State3};
+                {error, object_not_found} ->
+                    ?LLOG(notice, "cannot process incoming invite for call ~s: call not found", [CallId], State),
+                    {noreply, State};
+                {error, Error} ->
+                    ?LLOG(notice, "cannot process incoming invite for call ~s: ~p", [CallId, Error], State),
+                    {noreply, State}
+            end;
         {error, Error} ->
             ?LLOG(warning, "invalid token ~s: ~p", [MediaId, Error], State),
             {noreply, State}
     end;
 
-object_async_op({?MODULE, notify_fun, {token_removed, MediaId, Msg, Reason}}, State) ->
-    case nkchat_media_call_obj:get_invite_token(Msg) of
-        {ok, #{call_id:=CallId}} ->
-            State2 = do_event({media_stopped, MediaId, CallId, Reason}, State),
-            {noreply, State2};
-        {error, Error} ->
-            ?LLOG(warning, "invalid token ~s: ~p", [MediaId, Error], State),
-            {noreply, State}
-    end;
+object_async_op({?MODULE, notify_fun, {token_removed, MediaId, Reason}}, State) ->
+    State2 = do_rm_media(MediaId, Reason, State),
+    {noreply, State2};
 
 object_async_op(_Op, _State) ->
     continue.
 
 
 %% @private
-object_handle_info({'DOWN', Ref, process, _Pid, _Reason}, State) ->
-    case State of
-        #obj_state{session=#session{call_id=CallId, call_monitor=Ref}} ->
+object_handle_info({'DOWN', Ref, process, _Pid, _Reason}, #obj_state{session=Session}=State) ->
+    #session{medias=Medias} = Session,
+    case lists:keyfind(Ref, #media.call_mon, Medias) of
+        #media{id=MediaId, call_id=CallId} ->
             ?LLOG(notice, "call down ~s", [CallId], State),
-            {noreply, do_call_down(CallId, process_down, State)};
-        _ ->
-            continue
+            State2 = do_rm_media(MediaId, call_down, State),
+            {noreply, State2};
+        false ->
+            case lists:keyfind(Ref, #media.token_mon, Medias) of
+                #media{id=MediaId, call_id=CallId} ->
+                    ?LLOG(notice, "token down ~s", [CallId], State),
+                    State2 = do_rm_media(MediaId, token_down, State),
+                    {noreply, State2};
+                false ->
+                    continue
+            end
     end;
 
 object_handle_info(_Msg, _State) ->
@@ -397,25 +423,23 @@ object_handle_info(_Msg, _State) ->
 %% @private
 consume_token(MediaId, Reason) ->
     case nkdomain_token_obj:consume_token(MediaId, Reason) of
-        {ok, Msg} ->
-            case nkchat_media_call_obj:get_invite_token(Msg) of
-                {ok, #{call_id:=CallId}} ->
+        {ok, #{data:=Data}} ->
+            case read_invite_token(Data) of
+                {ok, CallId, _CallerId, _CalleeId, _Opts} ->
                     {ok, CallId};
                 {error, _Error} ->
+                    lager:error("NKLOG TOKEN CONSUME ERROR ~s ~p", [MediaId, Data]),
                     {error, token_invalid}
             end;
-        {error, _} ->
+        {error, _Error} ->
+            lager:error("NKLOG TOKEN CONSUME ERROR2 ~s ~p", [MediaId, _Error]),
             {error, token_invalid}
     end.
 
 
 %% @private
 do_invite(CalleeId, InviteOpts, State) ->
-    #obj_state{
-        domain_id = DomainId,
-        parent_id = UserId,
-        id = #obj_id_ext{obj_id=SessId}
-    } = State,
+    #obj_state{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
     CallOpts1 = #{
         type => direct,
         parent_id => UserId,
@@ -429,16 +453,31 @@ do_invite(CalleeId, InviteOpts, State) ->
     end,
     case nkchat_media_call_obj:create(DomainId, CallOpts2) of
         {ok, CallId, CallPid} ->
-            State2 = do_event({call_created, CallId}, State),
-            case nkchat_media_call_obj:invite(CallId, SessId, UserId, CalleeId, InviteOpts) of
-                {ok, MediaId} ->
-                    % Event media_ringing_out will come immediately from the call
-                    % We however store it already to avoid a second quick call from the client
-                    State3 = do_add_media(MediaId, ringing, CallId, CallPid, State2),
-                    {ok, MediaId, CallId, State3};
+            case make_invite_token(CallId, CalleeId, InviteOpts, State) of
+                {ok, MediaId, TokenPid, Secs} ->
+                    State2 = do_event({call_created, CallId}, State),
+                    Meta = maps:get(meta, InviteOpts, #{}),
+                    InviteOpts2 = InviteOpts#{ttl => Secs+2, meta => Meta#{callee_id=>CalleeId}},
+                    case nkchat_media_call_obj:invite(CallId, MediaId, SessId, UserId, InviteOpts2) of
+                        ok ->
+                            Media = #media{
+                                id = MediaId,
+                                status = created,
+                                call_id = CallId,
+                                call_mon = monitor(process, CallPid),
+                                token_mon = monitor(process, TokenPid)
+                            },
+                            State3 = do_update_media(Media, State2),
+
+                            {ok, MediaId, State3};
+                        {error, Error} ->
+                            consume_token(MediaId, call_failed),
+                            ?LLOG(warning, "error sending invite: ~p", [Error], State),
+                            nkchat_media_call_obj:hangup_async(CallPid, invite_error),
+                            {error, Error}
+                    end;
                 {error, Error} ->
-                    ?LLOG(warning, "error sending invite: ~p", [Error], State),
-                    nkchat_media_call_obj:hangup_async(CallPid, invite_error),
+                    ?LLOG(warning, "error creating token: ~p", [Error], State),
                     {error, Error}
             end;
         {error, Error} ->
@@ -448,96 +487,94 @@ do_invite(CalleeId, InviteOpts, State) ->
 
 
 %% @private
-do_accept(MediaId, CallId, AcceptOpts, #obj_state{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State) ->
-    case nkchat_media_call_obj:answer_media(CallId, MediaId, SessId, UserId, AcceptOpts) of
-        {ok, CallId, CallPid} ->
-            State2 = do_add_media(MediaId, answered, CallId, CallPid, State),
-            {ok, State2};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @private
 update_presence(State) ->
-    #obj_state{
-        id = #obj_id_ext{obj_id=SessId},
-        parent_id = UserId,
-        session = #session{media_status=Status}
-    }=State,
+    #obj_state{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId, session=Session} = State,
+    #session{medias=Medias} = Session,
+    Statuses = [Status || #media{status=Status} <- Medias],
+    Status = case lists:member(answered, Statuses) of
+        true ->
+            answered;
+        false ->
+            case lists:member(ringing, Statuses) of
+                true ->
+                    ringing;
+                false ->
+                    none
+            end
+    end,
     nkdomain_user_obj:update_presence(UserId, SessId, nklib_util:to_binary(Status)),
     State.
 
 
 %% @private
-do_add_media(MediaId, Status, CallId, CallPid, #obj_state{session=Session} = State) ->
-    Session2 = Session#session{
-        media_status = Status,
-        call_id = CallId,
-        call_monitor = monitor(process, CallPid),
-        media_id = MediaId
-    },
-    State2 = State#obj_state{session=Session2},
-    update_presence(State2).
-
-
-%% @private
-do_rm_media(#obj_state{session=Session}=State) ->
-    #session{call_monitor=Mon} = Session,
-    demonitor(Mon),
-    Session2 = Session#session{
-        media_status = no_media,
-        media_id = <<>>,
-        call_id = <<>>,
-        call_monitor = undefined
-    },
-    State2 = State#obj_state{session=Session2},
-    update_presence(State2).
-
-
-%% @private
-do_update_call(Status, #obj_state{session=Session}=State) ->
-    Session2 = Session#session{media_status=Status},
-    State2 = State#obj_state{session=Session2},
-    update_presence(State2).
-
-
-%% @private
-do_call_down(Reason, CallId, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{call_id=CallId, media_id=MediaId} ->
-            State2 = do_rm_media(State),
-            State3 = do_event({media_stopped, MediaId, CallId, Reason}, State2),
-            do_event({call_hangup, CallId, Reason}, State3);
-        _ ->
-            % Media stopped should have been sent already
-            do_event({call_hangup, CallId, Reason}, State)
+do_get_media(MediaId, #obj_state{session=Session}) ->
+    #session{medias=Medias} = Session,
+    case lists:keyfind(MediaId, #media.id, Medias) of
+        #media{}=Media ->
+            {ok, Media};
+        false ->
+            not_found
     end.
 
 
 %% @private
-do_call_event({media_ringing_out, MediaId}, CallId, #obj_state{session=Session}=State) ->
-    #session{call_id=CallId, media_status=ringing, media_id=MediaId} = Session,
-    do_event({media_ringing_out, MediaId, CallId}, State);
+do_rm_media(MediaId, Reason, #obj_state{session=Session}=State) ->
+    #session{medias=Medias} = Session,
+    case lists:keytake(MediaId, #media.id, Medias) of
+        {value, #media{call_id=CallId, call_mon=CallMon, token_mon=TokenMon}, Medias2} ->
+            nklib_util:demonitor(CallMon),
+            nklib_util:demonitor(TokenMon),
+            State2 = State#obj_state{session=Session#session{medias=Medias2}},
+            State3 = do_event({media_stopped, MediaId, CallId, Reason}, State2),
+            update_presence(State3);
+        false ->
+            State
+    end.
 
-do_call_event({media_answered, MediaId, AcceptOpts}, CallId, #obj_state{session=Session}=State) ->
-    #session{call_id=CallId, media_id=MediaId, media_status=ringing} = Session,
-    State2 = do_update_call(answered, State),
-    do_event({media_answered, MediaId, CallId, AcceptOpts}, State2);
 
-do_call_event({media_started, MediaId}, CallId, #obj_state{session=Session}=State) ->
-    #session{call_id=CallId, media_id=MediaId, media_status=answered} = Session,
-    do_event({media_started, MediaId, CallId}, State);
+%% @private
+do_update_media(#media{id=MediaId}=Media, #obj_state{session=Session}=State) ->
+    #session{medias=Medias} = Session,
+    Medias2 = lists:keystore(MediaId, #media.id, Medias, Media),
+    State2 = State#obj_state{session=Session#session{medias=Medias2}},
+    update_presence(State2).
 
-do_call_event({media_stopped, MediaId, Reason}, CallId, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{call_id=CallId, media_id=MediaId} ->
-            State2 = do_rm_media(State),
-            do_event({media_stopped, MediaId, CallId, Reason}, State2);
-        _ ->
-            ?LLOG(warning, "received media_stopped for unknown_call ~s", [CallId], State),
+
+%% @private
+do_call_event({media_ringing, MediaId}, CallId, State) ->
+    case do_get_media(MediaId, State) of
+        {ok, Media} ->
+            State2 = do_update_media(Media#media{status=ringing}, State),
+            do_event({media_ringing, MediaId, CallId}, State2);
+        not_found ->
+            ?LLOG(notice, "received media_ringing for unknown media", [], State),
             State
     end;
+
+do_call_event({media_answered, MediaId, AcceptOpts}, CallId, State) ->
+    case do_get_media(MediaId, State) of
+        {ok, Media} ->
+            State2 = do_update_media(Media#media{status=answered}, State),
+            do_event({media_answered, MediaId, CallId, AcceptOpts}, State2);
+        not_found ->
+            ?LLOG(notice, "received media_answered for unknown media", [], State),
+            State
+    end;
+
+do_call_event({media_started, MediaId}, CallId, State) ->
+    case do_get_media(MediaId, State) of
+        {ok, Media} ->
+            State2 = do_update_media(Media#media{status=answered}, State),
+            do_event({media_started, MediaId, CallId}, State2);
+        not_found ->
+            ?LLOG(error, "NO MEDIA: ~s, ~p", [MediaId, State#obj_state.session#session.medias], State),
+
+            ?LLOG(notice, "received media_started for unknown media", [], State),
+            State
+    end;
+
+do_call_event({media_stopped, MediaId, Reason}, _CallId, State) ->
+    do_rm_media(MediaId, Reason, State);
 
 do_call_event({new_candidate, Candidate}, CallId, State) ->
     do_event({new_candidate, CallId, Candidate}, State);
@@ -554,8 +591,15 @@ do_call_event({session_removed, SessId, MemberId, Data}, CallId, State) ->
 do_call_event({session_status, SessId, Status}, CallId, State) ->
     do_event({session_status, SessId, CallId, Status}, State);
 
-do_call_event({call_hangup, Reason}, CallId, State) ->
-    do_call_down(CallId, Reason, State);
+do_call_event({call_hangup, Reason}, CallId, #obj_state{session=Session}=State) ->
+    #session{medias=Medias} = Session,
+    State2 = case lists:keyfind(CallId, #media.call_id, Medias) of
+        #media{id=MediaId} ->
+            do_rm_media(MediaId, Reason, State);
+        _ ->
+            State
+    end,
+    do_event({call_hangup, CallId, Reason}, State2);
 
 do_call_event(_Event, _CallId, State) ->
     lager:error("SESS EV2: ~p", [_Event]),
@@ -565,3 +609,85 @@ do_call_event(_Event, _CallId, State) ->
 %% @private
 do_event(Event, State) ->
     nkdomain_obj_util:event(Event, State).
+
+
+%% @private
+make_invite_token(CallId, CalleeId, InviteOpts, State) ->
+    #obj_state{parent_id=UserId, domain_id=DomainId, id=#obj_id_ext{srv_id=SrvId}} = State,
+    TokenData1 = gen_invite_token(CallId, UserId, CalleeId, InviteOpts),
+    Push = make_invite_push(UserId, InviteOpts),
+    Opts = #{srv_id=>SrvId, wakeup_push => Push},
+    case nkdomain_user_obj:add_token_notification(CalleeId, ?MEDIA_SESSION, Opts, TokenData1) of
+        {ok, _MemberId, TokenData2} ->
+            TTL = case InviteOpts of
+                #{ttl:=TTL0} when is_integer(TTL0), TTL0>0 ->
+                    TTL0;
+                _ ->
+                    ?DEFAULT_INVITE_TTL
+            end,
+            TokenOpts = #{
+                parent_id => CalleeId,
+                created_by => UserId,
+                subtype => <<"media.call">>,
+                ttl => TTL
+            },
+            case nkdomain_token_obj:create(DomainId, TokenOpts, TokenData2) of
+                {ok, MediaId, Pid, Secs} ->
+                    {ok, MediaId, Pid, Secs};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @private
+gen_invite_token(CallId, CallerId, CalleeId, InviteOpts) ->
+    #{
+        ?MEDIA_SESSION =>
+        #{
+            <<"invite_op">> =>
+            #{
+                <<"call_id">> => CallId,
+                <<"caller_id">> => CallerId,
+                <<"callee_id">> => CalleeId,
+                <<"invite_opts">> => InviteOpts
+            }
+        }
+    }.
+
+-compile(export_all).
+%% @private
+read_invite_token(Token) ->
+    case Token of
+        #{
+            ?MEDIA_SESSION := #{
+                <<"invite_op">> :=
+                #{
+                    <<"call_id">> := CallId,
+                    <<"caller_id">> := CallerId,
+                    <<"callee_id">> := CalleeId,
+                    <<"invite_opts">> := InviteOpts
+                }
+            }
+        } ->
+            {ok, CallId, CallerId, CalleeId, InviteOpts};
+        _ ->
+            {error, invalid_token}
+    end.
+
+
+%% @private
+make_invite_push(CallerId, InviteOpts) ->
+    {ok, #{fullname:=FullName}} = nkdomain_user_obj:get_name(CallerId),
+    #{
+        type => ?MEDIA_SESSION,
+        class => invite,
+        media_id => <<>>,
+        full_name => FullName,
+        audio => maps:get(audio, InviteOpts, false),
+        video => maps:get(video, InviteOpts, false),
+        screen => maps:get(screen, InviteOpts, false),
+        conversation_id => maps:get(conversation_id, InviteOpts, <<>>)
+    }.

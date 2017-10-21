@@ -115,8 +115,8 @@ cmd(<<"invite">>, #nkreq{data=#{user_id:=UserId}=Data}=Req) ->
 
 cmd(<<"cancel_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
-        {ok, Id} ->
-            nkchat_media_session_obj:cancel_invite(Id, InviteId);
+        {ok, _Id} ->
+            nkchat_media_session_obj:cancel_invite(InviteId);
         {error, Error} ->
             {error, Error}
     end;
@@ -127,8 +127,8 @@ cmd(<<"accept_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
         {ok, Id} ->
             Opts = maps:with([sdp, trickle_ice, audio, video, screen], Data),
             case nkchat_media_session_obj:accept_invite(Id, InviteId, Opts) of
-                {ok, CallId} ->
-                    {ok, #{call_id=>CallId}};
+                ok ->
+                    {ok, #{}};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -138,8 +138,8 @@ cmd(<<"accept_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
 
 cmd(<<"reject_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
-        {ok, Id} ->
-            nkchat_media_session_obj:reject_invite(Id, InviteId);
+        {ok, _Id} ->
+            nkchat_media_session_obj:reject_invite(InviteId);
         {error, Error} ->
             {error, Error}
     end;
