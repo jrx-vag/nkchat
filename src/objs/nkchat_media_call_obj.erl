@@ -41,6 +41,7 @@
 -export([find_member_calls/2, find_calls_with_members/2]).
 -export([send_candidate/3, set_status/3]).
 -export([heartbeat/1]).
+-export([find_calls/0, remove_calls/0]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_stop/2, object_sync_op/3, object_async_op/2,
@@ -54,10 +55,9 @@
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
 -include_lib("nkservice/include/nkservice.hrl").
 
--define(CHECK_DOWN_TIME, 5*60).     % Secs
 
--define(MAX_NEW_TIME, 300).
--define(MAX_RINGING_TIME, 300).
+-define(MAX_NEW_TIME, 5).
+-define(MAX_RINGING_TIME, 15).
 -define(MAX_CALL_TIME, 4*60*60).
 
 
@@ -297,6 +297,12 @@ send_candidate(CallId, SessId, Candidate) ->
 set_status(CallId, SessId, Status) ->
     nkdomain_obj:sync_op(CallId, {?MODULE, set_status, SessId, Status}).
 
+
+find_calls() ->
+    nkdomain:search(#{filters=>#{type=>?MEDIA_CALL}}).
+
+remove_calls() ->
+    nkdomain:delete_all_childs_type("/", ?MEDIA_CALL).
 
 
 %% =================================================================
@@ -772,7 +778,7 @@ rm_media_session(Media, Reason, #obj_state{session=Session} = State) ->
     case Medias2 of
         [] ->
             case get_type_status(State) of
-                {direct, _} when Medias==[] ->
+                {direct, _} when length(Medias) < 2 ->
                     hangup_async(self(), no_remaining_medias);
                 _ ->
                     ok

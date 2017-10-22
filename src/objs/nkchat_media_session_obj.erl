@@ -405,6 +405,8 @@ object_handle_info({'DOWN', Ref, process, _Pid, _Reason}, #obj_state{session=Ses
             case lists:keyfind(Ref, #media.token_mon, Medias) of
                 #media{id=MediaId, call_id=CallId, status=ringing_out} ->
                     ?LLOG(notice, "token down ~s: ~p", [CallId], State),
+                    % If we are monitoring the token, we are the caller
+                    nkchat_media_call_obj:hangup_async(CallId, caller_token_down),
                     State2 = do_rm_media(MediaId, token_down, State),
                     {noreply, State2};
                 #media{} ->
