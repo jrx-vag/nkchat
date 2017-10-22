@@ -110,6 +110,7 @@
         parent_id => nkdomain:id(),
         created_by => nkdomain:id(),
         obj_name => nkdomain:obj_name(),
+        conversation_id => nkdomain:obj_id(),
         name => binary()
     }.
 
@@ -147,13 +148,12 @@
 
 create(Domain, #{type:=_}=Opts) ->
     Base = maps:with([parent_id, created_by, obj_name, name], Opts),
+    CallObj = maps:with([type, conversation_id], Opts),
     Obj =Base#{
         type => ?MEDIA_CALL,
         domain_id => Domain,
         active => true,
-        ?MEDIA_CALL => #{
-            type => maps:get(type, Opts)
-        }
+        ?MEDIA_CALL => CallObj
     },
     case nkdomain_obj_make:create(Obj) of
         {ok, #obj_id_ext{obj_id=CallId, pid=Pid}, _} ->
@@ -336,6 +336,7 @@ remove_calls() ->
 -record(session, {
     type :: call_type(),
     status :: call_status(),
+    message_id :: nkdomain:obj_id(),
     roles :: #{MemberId::nkdomain:obj_id() => [role()]},
     members :: [#member_session{}],
     medias :: [#media_session{}]
@@ -364,6 +365,8 @@ object_admin_info() ->
 object_es_mapping() ->
     #{
         type => #{type => keyword},
+        conversation_id => #{type => keyword},
+        message_id => #{type => keyword},
         members_hash => #{type => keyword},
         members => #{
             type => object,
@@ -382,6 +385,8 @@ object_parse(update, _Obj) ->
 object_parse(_Mode, _Obj) ->
     #{
         type => {atom, [direct, one2one, room]},
+        conversation_id => binary,
+        message_id => binary,
         members_hash => binary,
         members =>
             {list,
@@ -419,14 +424,26 @@ object_api_cmd(Cmd, Req) ->
 %% @private
 %% Client must start a session or it will be destroyed after timeout
 object_init(#obj_state{obj=Obj}=State) ->
-    #{?MEDIA_CALL := #{type:=Type}} = Obj,
-    Session = #session{
+    #{?MEDIA_CALL := #{type:=Type}=CallObj} = Obj,
+    Session1 = #session{
         type = Type,
         roles = #{},
         members = [],
         medias = []
     },
-    State2 = State#obj_state{session=Session},
+    Session2 = case maps:find(conversation_id, CallObj) of
+        {ok, ConvId} ->
+            case create_chat_msg(ConvId, State) of
+                {ok, MsgId} ->
+                    Session1#session{message_id=MsgId};
+                {error, Error} ->
+                    ?LLOG(warning, "could not create msg at ~s: ~p", [ConvId, Error], State),
+                    <<>>
+            end;
+        error ->
+            Session1
+    end,
+    State2 = State#obj_state{session=Session2},
     State3 = update_call_status(new, State2),
     {ok, State3}.
 
@@ -645,7 +662,8 @@ get_type_status(#obj_state{session=#session{type=Type, status=Status}}) ->
 %% @doc
 update_call_status(hangup, #obj_state{session=Session} = State) ->
     ?LLOG(info, "call is now in 'hangup' status", [], State),
-    State#obj_state{session=Session#session{status=hangup}};
+    State2 = State#obj_state{session=Session#session{status=hangup}},
+    update_chat_msg(State2);
 
 update_call_status(Status, #obj_state{session=Session} = State) ->
     State2 = State#obj_state{session=Session#session{status=Status}},
@@ -659,7 +677,8 @@ update_call_status(Status, #obj_state{session=Session} = State) ->
     end,
     ?LLOG(info, "call is now in '~s' status (timeout:~p)", [Status, Time], State),
     State3 = nkdomain_obj_util:set_next_status_timer(Time*1000, State2),
-    #obj_state{} = do_all_member_sessions_event({call_status, Status}, State3).
+    State4 = update_chat_msg(State3),
+    do_all_member_sessions_event({call_status, Status}, State4).
 
 
 %% @private
@@ -892,3 +911,55 @@ expand_members(#obj_state{session=Session}) ->
             }
         end,
         Members).
+
+
+%% @private
+create_chat_msg(ConvId, #obj_state{id=#obj_id_ext{obj_id=CallId}}) ->
+    Msg = #{
+        type => ?MEDIA_CALL,
+        created_by => <<"admin">>,
+        body => #{
+            call_id => CallId,
+            status => <<"ringing">>,
+            member_ids => []
+        },
+        text => <<"Call ", CallId/binary, " created">>
+    },
+    case nkchat_message_obj:create(ConvId, Msg) of
+        {ok, MsgId, _Pid} ->
+            {ok, MsgId};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @private
+update_chat_msg(#obj_state{session=#session{message_id = <<>>}}=State) ->
+    State;
+
+update_chat_msg(State) ->
+    #obj_state{session=Session, id=#obj_id_ext{obj_id=CallId}} = State,
+    #session{status=Status, members=Members, message_id=MsgId} = Session,
+    Members2 = case Status of
+        hangup ->
+            [];
+        _ ->
+            [UserId || #member_session{user_id=UserId}<-Members]
+    end,
+    Status2 = nklib_util:to_binary(Status),
+    Update = #{
+        body => #{
+            call_id => CallId,
+            status => Status2,
+            members => Members2
+        },
+        text => list_to_binary(["Call ", CallId, " status: ", Status2, " members: ", nklib_util:bjoin(Members2)])
+    },
+    case nkchat_message_obj:update(MsgId, Update) of
+        ok ->
+            ok;
+        {error, Error} ->
+            ?LLOG(warning, "could not update msg ~s: ~p", [MsgId, Error], State)
+    end,
+    State.
+

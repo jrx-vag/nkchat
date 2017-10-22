@@ -470,18 +470,19 @@ consume_token(MediaId, Reason) ->
 %% @private
 do_invite(CalleeId, InviteOpts, State) ->
     #obj_state{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
-    CallOpts1 = #{
+    CallOpts1 = maps:with([conversation_id], InviteOpts),
+    CallOpts2 = CallOpts1#{
         type => direct,
         parent_id => UserId,
         created_by => UserId
     },
-    CallOpts2 = case InviteOpts of
+    CallOpts3 = case InviteOpts of
         #{call_name:=Name} ->
-            CallOpts1#{name=>Name};
+            CallOpts2#{name=>Name};
         _ ->
-            CallOpts1
+            CallOpts2
     end,
-    case nkchat_media_call_obj:create(DomainId, CallOpts2) of
+    case nkchat_media_call_obj:create(DomainId, CallOpts3) of
         {ok, CallId, CallPid} ->
             case make_invite_token(CallId, CalleeId, InviteOpts, State) of
                 {ok, MediaId, TokenPid, Secs} ->
