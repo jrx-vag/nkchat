@@ -40,6 +40,9 @@ event({call_created, CallId}, State) ->
 event({media_invite, MediaId, CallId, CallerId, Media}, State) ->
     {event, {media_invite, #{media_id=>MediaId, call_id=>CallId, caller_id=>CallerId, media=>Media}}, State};
 
+event({media_invite_removed, MediaId, Reason}, State) ->
+    {event, {media_invite_removed, #{media_id=>MediaId, reason=>Reason}}, State};
+
 event({media_ringing, MediaId, CallId}, State) ->
     {event, {media_ringing, #{media_id=>MediaId, call_id=>CallId}}, State};
 
@@ -49,9 +52,8 @@ event({media_answered, MediaId, CallId, Opts}, State) ->
 event({media_started, MediaId, CallId}, State) ->
     {event, {media_started, #{media_id=>MediaId, call_id=>CallId}}, State};
 
-event({media_stopped, MediaId, CallId, Reason}, #obj_state{callback_srv_id=SrvId}=State) ->
-    {Code, Txt} = nkservice_util:error(SrvId, Reason),
-    {event, {media_stopped, #{media_id=>MediaId, call_id=>CallId, status=>Code, reason=>Txt}}, State};
+event({media_stopped, MediaId, CallId, Reason}, State) ->
+    {event, {media_stopped, #{media_id=>MediaId, call_id=>CallId, reason=>Reason}}, State};
 
 event({new_candidate, CallId, #sdp_candidate{mid=MId, index=Index, candidate=Candidate}}, State) ->
     {event, {new_candidate, #{call_id=>CallId, sdp_mid=>MId, sdp_line_index=>Index, candidate=>Candidate}}, State};
@@ -65,9 +67,8 @@ event({session_started, SessId, CallId}, State) ->
 event({session_removed, SessId, CallId}, State) ->
     {event, {session_removed, #{call_id=>CallId, session_id=>SessId}}, State};
 
-event({call_hangup, CallId, Reason}, #obj_state{callback_srv_id=SrvId}=State) ->
-    {Code, Txt} = nkservice_util:error(SrvId, Reason),
-    {event, {call_hangup, #{call_id=>CallId, status=>Code, reason=>Txt}}, State};
+event({call_hangup, CallId, Reason}, State) ->
+    {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
 
 event(_Event, #obj_state{parent_id=_ParentId}=State) ->
     %%lager:warning("NKLOG Media Event (~s) ~p", [_ParentId, _Event]),

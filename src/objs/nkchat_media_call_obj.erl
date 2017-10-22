@@ -639,6 +639,7 @@ get_type_status(#obj_state{session=#session{type=Type, status=Status}}) ->
 
 %% @doc
 update_call_status(hangup, #obj_state{session=Session} = State) ->
+    ?LLOG(info, "call is now in 'hangup' status", [], State),
     State#obj_state{session=Session#session{status=hangup}};
 
 update_call_status(Status, #obj_state{session=Session} = State) ->
@@ -651,7 +652,7 @@ update_call_status(Status, #obj_state{session=Session} = State) ->
         in_call ->
             ?MAX_CALL_TIME
     end,
-    ?LLOG(info, "call is now in '~s' status", [Status], State),
+    ?LLOG(info, "call is now in '~s' status (timeout:~p)", [Status, Time], State),
     State3 = nkdomain_obj_util:set_next_status_timer(Time*1000, State2),
     #obj_state{} = do_all_member_sessions_event({call_status, Status}, State3).
 
@@ -699,7 +700,7 @@ rm_member_session(SessId, #obj_state{session=Session} = State) ->
             demonitor(Mon),
             Session2 = Session#session{members=Members2},
             State2 = set_members_hash(State#obj_state{session=Session2}),
-            State3 = do_all_member_sessions_event({session_removed, UserId, #{}}, State2),
+            State3 = do_all_member_sessions_event({session_removed, SessId, UserId, #{}}, State2),
             Medias = lists:filter(
                 fun(#media_session{caller_session_id=Caller, callee_session_id=Callee}) ->
                     Caller==SessId orelse Callee==SessId

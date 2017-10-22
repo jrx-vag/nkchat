@@ -79,6 +79,7 @@
     {call_created, CallId::binary()} |
     {media_invite, MediaId::nkdomain:obj_id(), CallId::nkdomain:obj_id(), CallerId::nkdomain:obj_id(),
              InviteOpts::nkchat_media_call_obj:invite_opts()} |
+    {media_invite_removed, MediaId::nkdomain:obj_id(), Reason::term()} |
 
     % Events from call
     {media_ringing, MediaId::nkdomain:obj_id(), CallId::nkdomain:obj_id()} |
@@ -224,7 +225,7 @@ notify_fun(Pid, Notify) ->
 
 -record(media, {
     id :: nkdomain:obj_id(),
-    status :: created | ringing | answered,
+    status :: created | ringing_in | ringing_out | answered,
     call_id :: nkdomain:obj_id(),
     call_mon :: reference(),
     token_mon :: reference()
@@ -365,7 +366,7 @@ object_async_op({?MODULE, notify_fun, {token_created, MediaId, Msg}}, State) ->
                 #obj_id_ext{pid=CallPid} ->
                     Media = #media{
                         id = MediaId,
-                        status = answered,
+                        status = ringing_in,
                         call_id = CallId,
                         call_mon = monitor(process, CallPid)
                     },
@@ -385,7 +386,7 @@ object_async_op({?MODULE, notify_fun, {token_created, MediaId, Msg}}, State) ->
     end;
 
 object_async_op({?MODULE, notify_fun, {token_removed, MediaId, Reason}}, State) ->
-    State2 = do_rm_media(MediaId, Reason, State),
+    State2 = do_event({media_invite_removed, MediaId, Reason}, State),
     {noreply, State2};
 
 object_async_op(_Op, _State) ->
@@ -402,10 +403,12 @@ object_handle_info({'DOWN', Ref, process, _Pid, _Reason}, #obj_state{session=Ses
             {noreply, State2};
         false ->
             case lists:keyfind(Ref, #media.token_mon, Medias) of
-                #media{id=MediaId, call_id=CallId} ->
-                    ?LLOG(notice, "token down ~s", [CallId], State),
+                #media{id=MediaId, call_id=CallId, status=ringing_out} ->
+                    ?LLOG(notice, "token down ~s: ~p", [CallId], State),
                     State2 = do_rm_media(MediaId, token_down, State),
                     {noreply, State2};
+                #media{} ->
+                    {noreply, State};
                 false ->
                     continue
             end
@@ -428,11 +431,9 @@ consume_token(MediaId, Reason) ->
                 {ok, CallId, _CallerId, _CalleeId, _Opts} ->
                     {ok, CallId};
                 {error, _Error} ->
-                    lager:error("NKLOG TOKEN CONSUME ERROR ~s ~p", [MediaId, Data]),
                     {error, token_invalid}
             end;
         {error, _Error} ->
-            lager:error("NKLOG TOKEN CONSUME ERROR2 ~s ~p", [MediaId, _Error]),
             {error, token_invalid}
     end.
 
@@ -495,11 +496,16 @@ update_presence(State) ->
         true ->
             answered;
         false ->
-            case lists:member(ringing, Statuses) of
+            case lists:member(ringing_in, Statuses) of
                 true ->
                     ringing;
                 false ->
-                    none
+                    case lists:member(ringing_out, Statuses) of
+                        true ->
+                            ringing;
+                        false ->
+                            none
+                    end
             end
     end,
     nkdomain_user_obj:update_presence(UserId, SessId, nklib_util:to_binary(Status)),
@@ -522,6 +528,7 @@ do_rm_media(MediaId, Reason, #obj_state{session=Session}=State) ->
     #session{medias=Medias} = Session,
     case lists:keytake(MediaId, #media.id, Medias) of
         {value, #media{call_id=CallId, call_mon=CallMon, token_mon=TokenMon}, Medias2} ->
+            ?LLOG(error, "media ~s removed", [MediaId], State),
             nklib_util:demonitor(CallMon),
             nklib_util:demonitor(TokenMon),
             State2 = State#obj_state{session=Session#session{medias=Medias2}},
@@ -533,7 +540,15 @@ do_rm_media(MediaId, Reason, #obj_state{session=Session}=State) ->
 
 
 %% @private
-do_update_media(#media{id=MediaId}=Media, #obj_state{session=Session}=State) ->
+do_update_media(#media{id=MediaId, status=Status}=Media, #obj_state{session=Session}=State) ->
+    case do_get_media(MediaId, State) of
+        {ok, #media{status=OldStatus}} when Status /= OldStatus ->
+            ?LLOG(error, "media ~s updated: ~s", [MediaId, Status], State);
+        not_found ->
+            ?LLOG(error, "media ~s created: ~s", [MediaId, Status], State);
+        _ ->
+            ok
+    end,
     #session{medias=Medias} = Session,
     Medias2 = lists:keystore(MediaId, #media.id, Medias, Media),
     State2 = State#obj_state{session=Session#session{medias=Medias2}},
@@ -544,7 +559,7 @@ do_update_media(#media{id=MediaId}=Media, #obj_state{session=Session}=State) ->
 do_call_event({media_ringing, MediaId}, CallId, State) ->
     case do_get_media(MediaId, State) of
         {ok, Media} ->
-            State2 = do_update_media(Media#media{status=ringing}, State),
+            State2 = do_update_media(Media#media{status=ringing_out}, State),
             do_event({media_ringing, MediaId, CallId}, State2);
         not_found ->
             ?LLOG(notice, "received media_ringing for unknown media", [], State),
