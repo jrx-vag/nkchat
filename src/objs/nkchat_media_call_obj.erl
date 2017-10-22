@@ -539,7 +539,6 @@ object_sync_op({?MODULE, send_candidate, SessId, Candidate}, _From, State) ->
                     {reply, ok, State}
             end;
         {callee, #media_session{caller_session_id=Remote}} ->
-            lager:error("NKLOG CAND IS CALLEE ~p ~p", [SessId, Remote]),
             do_member_session_event(Remote, {new_candidate, Candidate}, State),
             {reply, ok, State};
         not_found ->

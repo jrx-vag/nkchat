@@ -51,9 +51,8 @@ event({session_removed, SessId, MemberId, _Data}, State) ->
 event({session_status, SessId, Status}, State) ->
     {event, {session_status, #{session_id=>SessId, status=>Status}}, State};
 
-event({call_hangup, Reason}, #obj_state{callback_srv_id=SrvId}=State) ->
-    {Code, Txt} = nkservice_util:error(SrvId, Reason),
-    {event, {call_hangup, #{status=>Code, reason=>Txt}}, State};
+event({call_hangup, Reason},State) ->
+    {event, {call_hangup, #{reason=>Reason}}, State};
 
 event(_Event, State) ->
     {ok, State}.

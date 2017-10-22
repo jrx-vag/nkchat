@@ -216,6 +216,29 @@ notify_fun(Pid, Notify) ->
     nkdomain_obj:async_op(Pid, {?MODULE, notify_fun, Notify}).
 
 
+%% @private To be called from nkdomain_user_obj
+-spec presence_fun(nkdomain:user_id(), [nkdomain_user_obj:session_presence()]) ->
+    {ok, nkdomain_user_obj:user_presence()}.
+
+presence_fun(_UserId, []) ->
+    % lager:info("NKLOG Chat Presence down"),
+    {ok, #{status=><<"none">>}};
+
+presence_fun(_UserId, List) ->
+    Status = case lists:member(<<"answered">>, List) of
+        true ->
+            <<"talking">>;
+        false ->
+            case lists:member(<<"ringing">>, List) of
+                true ->
+                    <<"ringing">>;
+                false ->
+                    <<"none">>
+            end
+    end,
+    {ok, #{status=>Status}}.
+
+
 
 
 %% ===================================================================
@@ -287,7 +310,11 @@ object_init(#obj_state{id=Id, parent_id=UserId, domain_id=DomainId}=State) ->
     #obj_id_ext{obj_id=SessId} = Id,
     Session = #session{},
     State2 = State#obj_state{session=Session},
-    Opts = #{notify_fun => fun ?MODULE:notify_fun/2},
+    Opts = #{
+        notify_fun => fun ?MODULE:notify_fun/2,
+        presence_fun => fun ?MODULE:presence_fun/2,
+        presence => <<"none">>
+    },
     ok = nkdomain_user_obj:register_session(UserId, DomainId, ?MEDIA_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State2),
     {ok, State4}.
@@ -530,7 +557,7 @@ do_rm_media(MediaId, Reason, #obj_state{session=Session}=State) ->
     #session{medias=Medias} = Session,
     case lists:keytake(MediaId, #media.id, Medias) of
         {value, #media{call_id=CallId, call_mon=CallMon, token_mon=TokenMon}, Medias2} ->
-            ?LLOG(error, "media ~s removed", [MediaId], State),
+            ?LLOG(info, "media ~s removed", [MediaId], State),
             nklib_util:demonitor(CallMon),
             nklib_util:demonitor(TokenMon),
             State2 = State#obj_state{session=Session#session{medias=Medias2}},
@@ -545,9 +572,9 @@ do_rm_media(MediaId, Reason, #obj_state{session=Session}=State) ->
 do_update_media(#media{id=MediaId, status=Status}=Media, #obj_state{session=Session}=State) ->
     case do_get_media(MediaId, State) of
         {ok, #media{status=OldStatus}} when Status /= OldStatus ->
-            ?LLOG(error, "media ~s updated: ~s", [MediaId, Status], State);
+            ?LLOG(info, "media ~s updated: ~s", [MediaId, Status], State);
         not_found ->
-            ?LLOG(error, "media ~s created: ~s", [MediaId, Status], State);
+            ?LLOG(info, "media ~s created: ~s", [MediaId, Status], State);
         _ ->
             ok
     end,
