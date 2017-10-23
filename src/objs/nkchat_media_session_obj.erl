@@ -221,8 +221,7 @@ notify_fun(Pid, Notify) ->
     {ok, nkdomain_user_obj:user_presence()}.
 
 presence_fun(_UserId, []) ->
-    % lager:info("NKLOG Chat Presence down"),
-    {ok, #{status=><<"none">>}};
+    {ok, #{status => <<"offline">>}};
 
 presence_fun(_UserId, List) ->
     Status = case lists:member(<<"answered">>, List) of
@@ -233,7 +232,7 @@ presence_fun(_UserId, List) ->
                 true ->
                     <<"ringing">>;
                 false ->
-                    <<"none">>
+                    <<"online">>
             end
     end,
     {ok, #{status=>Status}}.
