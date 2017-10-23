@@ -594,8 +594,8 @@ do_conversation_event({is_closed_updated, IsClosed}, ConvId, State) ->
 do_conversation_event({counter_updated, Counter}, ConvId, State) ->
     {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
 
-do_conversation_event({session_removed, UserId, SessId}, ConvId, State) ->
-    ?LLOG(info, "unexpected conversation event: session_removed (~s, ~s, ~s)", [UserId, SessId, ConvId], State),
+do_conversation_event({session_removed, _UserId, _SessId}, _ConvId, State) ->
+    % ?LLOG(info, "unexpected conversation event: session_removed (~s, ~s, ~s)", [UserId, SessId, ConvId], State),
     {noreply, State};
 
 do_conversation_event(_Event, _ConvId, State) ->
