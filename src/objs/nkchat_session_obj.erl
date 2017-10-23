@@ -316,7 +316,9 @@ object_init(#obj_state{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         user_is_active = true
     },
     State2 = State#obj_state{session=Session},
+    ?LLOG(info, "start find conversations", [], State),
     {ok, Convs1} = nkchat_conversation_obj:find_member_conversations(DomainId, UserId),
+    ?LLOG(info, "start adding conversations", [], State),
     State3 = lists:foldl(
         fun({ConvId, _Type}, Acc) ->
             case do_add_conv(ConvId, Acc) of
@@ -336,6 +338,7 @@ object_init(#obj_state{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     },
     ok = nkdomain_user_obj:register_session(UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State3),
+    ?LLOG(info, "start session ok", [], State),
     {ok, restart_timer(State4)}.
 
 
