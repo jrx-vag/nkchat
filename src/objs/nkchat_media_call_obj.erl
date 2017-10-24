@@ -569,7 +569,7 @@ object_sync_op({?MODULE, set_status, SessId, Status}, _From, State) ->
             Media2 = Media#media_session{caller_status=NewStatus},
              State2 = update_media_session(Media2, State),
             do_all_member_sessions_event({session_status, SessId, Status}, State),
-            {repl, ok, State2};
+            {reply, ok, State2};
         {callee, #media_session{callee_status=OldStatus}=Media} ->
             NewStatus = maps:merge(OldStatus, Status),
             Media2 = Media#media_session{callee_status=NewStatus},
