@@ -336,7 +336,7 @@ remove_calls() ->
 -record(session, {
     type :: call_type(),
     status :: call_status(),
-    message_id :: nkdomain:obj_id(),
+    message_id = <<>> :: nkdomain:obj_id(),
     roles :: #{MemberId::nkdomain:obj_id() => [role()]},
     members :: [#member_session{}],
     medias :: [#media_session{}]

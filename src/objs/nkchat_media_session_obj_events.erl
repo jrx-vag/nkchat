@@ -70,8 +70,8 @@ event({session_removed, SessId, CallId}, State) ->
 event({call_hangup, CallId, Reason}, State) ->
     {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
 
-event(_Event, #obj_state{parent_id=_ParentId}=State) ->
-    %%lager:warning("NKLOG Media Event (~s) ~p", [_ParentId, _Event]),
+event(_Event, State) ->
+    lager:warning("NKLOG Media Event ~p", [_Event]),
     {ok, State}.
 
 
