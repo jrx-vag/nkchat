@@ -71,7 +71,7 @@ event({call_hangup, CallId, Reason}, State) ->
     {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
 
 event(_Event, State) ->
-    lager:warning("NKLOG Media Event ~p", [_Event]),
+    % lager:warning("NKLOG Media Event ~p", [_Event]),
     {ok, State}.
 
 
