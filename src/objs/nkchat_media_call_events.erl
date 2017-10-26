@@ -39,20 +39,20 @@
 
 
 %% @private
-event({member_added, MemberId, Roles, SessId, _Pid}, State) ->
-    {event, {member_added, #{member_id=>MemberId, roles=>Roles, session_id=>SessId}}, State};
+event({call_status, Status}, State) ->
+    {event, {call_status, #{status=>Status}}, State};
 
-event({member_removed, MemberId, Roles, SessId}, State) ->
-    {event, {member_removed, #{member_id=>MemberId, roles=>Roles, session_id=>SessId}}, State};
+event({session_added, SessId, MemberId, _Data}, State) ->
+    {event, {session_added, #{member_id=>MemberId, session_id=>SessId}}, State};
 
-event({member_down, MemberId, Roles}, State) ->
-    {event, {member_down, #{member_id=>MemberId, roles=>Roles}}, State};
+event({session_removed, SessId, MemberId, _Data}, State) ->
+    {event, {session_removed, #{member_id=>MemberId, session_id=>SessId}}, State};
 
-event({new_candidate, #sdp_candidate{mid=MId, index=Index, candidate=Candidate}}, State) ->
-    {event, {new_candidate, #{sdp_mid=>MId, sdp_line_index=>Index, candidate=>Candidate}}, State};
+event({session_status, SessId, Status}, State) ->
+    {event, {session_status, #{session_id=>SessId, status=>Status}}, State};
 
-event({member_status, MemberId, Status}, State) ->
-    {event, {member_status, #{member_id=>MemberId, status=>Status}}, State};
+event({call_hangup, Reason},State) ->
+    {event, {call_hangup, #{reason=>Reason}}, State};
 
 event(_Event, State) ->
     {ok, State}.

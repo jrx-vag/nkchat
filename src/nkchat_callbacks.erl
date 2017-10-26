@@ -39,6 +39,18 @@ plugin_deps() ->
 %% ===================================================================
 
 %% @doc
+error(call_hangup)                      -> "Call has hangup";
+error(call_down)                        -> "Call process down";
+error(call_status_invalid)              -> "Invalid call status";
+error(caller_cancelled)                 -> "Caller cancelled call";
+error(callee_rejected)                  -> "Callee rejected call";
+error(media_not_found)                  -> "Media not found";
+error(no_remaining_medias)              -> "No remaining media session";
+error(invite_not_allowed)               -> "Invite is not allowed now";
+error(media_already_answered)         -> "Media session already answered";
+error(user_hangup)                    -> "User started hangup";
+
+
 error(conversation_not_found)           -> "Conversation not found";
 error(conversation_is_already_present)   -> "Conversation is already a member";
 error(conversation_is_disabled)         -> "Conversation is currently disabled";

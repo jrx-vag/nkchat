@@ -96,27 +96,16 @@ cmd(<<"get_calls">>, #nkreq{data=Data}=Req) ->
             {error, Error}
     end;
 
-cmd(<<"get_call_info">>, #nkreq{data=#{conversation_id:=ConvId}=Data}=Req) ->
-    case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
-        {ok, Id} ->
-            case nkchat_media_session_obj:get_call_info(Id, ConvId) of
-                {ok, Data2} ->
-                    {ok, Data2};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        {error, Error} ->
-            {error, Error}
-    end;
-
+cmd(<<"get_call_info">>, #nkreq{data=#{call_id:=CallId}}) ->
+    nkchat_media_call_obj:get_info(CallId);
 
 cmd(<<"invite">>, #nkreq{data=#{user_id:=UserId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
         {ok, Id} ->
             Opts = maps:with([call_name, sdp, trickle_ice, ttl, audio, video, screen, conversation_id], Data),
             case nkchat_media_session_obj:invite(Id, UserId, Opts) of
-                {ok, TokenId} ->
-                    {ok, #{<<"invite_id">> => TokenId}};
+                {ok, InviteId} ->
+                    {ok, #{<<"invite_id">> => InviteId}};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -124,10 +113,10 @@ cmd(<<"invite">>, #nkreq{data=#{user_id:=UserId}=Data}=Req) ->
             {error, Error}
     end;
 
-cmd(<<"cancel_invite">>, #nkreq{data=#{invite_id:=InvId}=Data}=Req) ->
+cmd(<<"cancel_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
-        {ok, Id} ->
-            nkchat_media_session_obj:cancel_invite(Id, InvId);
+        {ok, _Id} ->
+            nkchat_media_session_obj:cancel_invite(InviteId);
         {error, Error} ->
             {error, Error}
     end;
@@ -138,8 +127,8 @@ cmd(<<"accept_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
         {ok, Id} ->
             Opts = maps:with([sdp, trickle_ice, audio, video, screen], Data),
             case nkchat_media_session_obj:accept_invite(Id, InviteId, Opts) of
-                {ok, CallId} ->
-                    {ok, #{call_id=>CallId}};
+                ok ->
+                    {ok, #{}};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -149,19 +138,42 @@ cmd(<<"accept_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
 
 cmd(<<"reject_invite">>, #nkreq{data=#{invite_id:=InviteId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
-        {ok, Id} ->
-            nkchat_media_session_obj:reject_invite(Id, InviteId);
+        {ok, _Id} ->
+            nkchat_media_session_obj:reject_invite(InviteId);
         {error, Error} ->
             {error, Error}
     end;
 
-cmd(<<"hangup_call">>, #nkreq{data=#{call_id:=CallId}=Data}=Req) ->
+cmd(<<"send_candidate">>, #nkreq{data=Data}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
         {ok, Id} ->
-            nkchat_media_session_obj:call_hangup(Id, CallId);
+            #{call_id:=CallId, sdp_mid:=MId, sdp_line_index:=Index, candidate:=Line} = Data,
+            Candidate = #sdp_candidate{mid=MId, index=Index, candidate=Line},
+            nkchat_media_call_obj:send_candidate(CallId, Id, Candidate);
         {error, Error} ->
             {error, Error}
     end;
+
+cmd(<<"send_candidate_end">>, #nkreq{data=Data}=Req) ->
+    case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
+        {ok, Id} ->
+            #{call_id:=CallId} = Data,
+            nkchat_media_call_obj:send_candidate(CallId, Id, #sdp_candidate{});
+        {error, Error} ->
+            {error, Error}
+    end;
+
+cmd(<<"set_status">>, #nkreq{data=#{call_id:=CallId}=Data}=Req) ->
+    case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
+        {ok, Id} ->
+            Opts = maps:with([audio, video, screen], Data),
+            nkchat_media_call_obj:set_status(CallId, Id, Opts);
+        {error, Error} ->
+            {error, Error}
+    end;
+
+cmd(<<"hangup_call">>, #nkreq{data=#{call_id:=CallId}}) ->
+    nkchat_media_call_obj:hangup(CallId, user_hangup);
 
 cmd(Cmd, Req) ->
     nkdomain_obj_cmd:cmd(Cmd, ?MEDIA_SESSION, Req).

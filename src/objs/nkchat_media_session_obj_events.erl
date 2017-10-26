@@ -34,39 +34,44 @@
 
 
 %% @private
-event({invite, InviteId, CallerId, InviteOpts}, State) ->
-    Body = #{invite_id=>InviteId, caller_id=>CallerId, call_data=>InviteOpts},
-    {event, {invite, Body}, State};
+event({call_created, CallId}, State) ->
+    {event, {call_created, #{call_id=>CallId}}, State};
 
-event({invite_removed, InviteId, Reason}, State) ->
-    {event, {invite_removed, #{invite_id=>InviteId, reason=>Reason}}, State};
+event({media_invite, MediaId, CallId, CallerId, Media}, State) ->
+    {event, {media_invite, #{media_id=>MediaId, call_id=>CallId, caller_id=>CallerId, media=>Media}}, State};
 
-event({invite_accepted, InviteId, CallId, AcceptOpts}, State) ->
-    {event, {invite_accepted, #{invite_id=>InviteId, call_id=>CallId, call_data=>AcceptOpts}}, State};
+event({media_invite_removed, MediaId, Reason}, State) ->
+    {event, {media_invite_removed, #{media_id=>MediaId, reason=>Reason}}, State};
 
-event({member_added, CallId, MemberId, Roles}, State) ->
-    {event, {member_added, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
+event({media_ringing, MediaId, CallId}, State) ->
+    {event, {media_ringing, #{media_id=>MediaId, call_id=>CallId}}, State};
 
-event({member_removed, CallId, MemberId, Roles}, State) ->
-    {event, {member_removed, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
+event({media_answered, MediaId, CallId, Opts}, State) ->
+    {event, {media_answered, #{media_id=>MediaId, call_id=>CallId, media=>Opts}}, State};
 
-event({member_down, CallId, MemberId, Roles}, State) ->
-    {event, {member_down, #{call_id=>CallId, user_id=>MemberId, roles=>Roles}}, State};
+event({media_started, MediaId, CallId}, State) ->
+    {event, {media_started, #{media_id=>MediaId, call_id=>CallId}}, State};
 
-event({call_created, InviteId, CallId, _CallOpts}, State) ->
-    {event, {call_created, #{invite_id=>InviteId, call_id=>CallId}}, State};
-
-event({call_hangup, CallId, Reason}, State) ->
-    {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
+event({media_stopped, MediaId, CallId, Reason}, State) ->
+    {event, {media_stopped, #{media_id=>MediaId, call_id=>CallId, reason=>Reason}}, State};
 
 event({new_candidate, CallId, #sdp_candidate{mid=MId, index=Index, candidate=Candidate}}, State) ->
     {event, {new_candidate, #{call_id=>CallId, sdp_mid=>MId, sdp_line_index=>Index, candidate=>Candidate}}, State};
 
-event({member_status, CallId, MemberId, Status}, State) ->
-    {event, {member_status, #{call_id=>CallId, member_id=>MemberId, status=>Status}}, State};
+event({session_status, SessId, CallId, Status}, State) ->
+    {event, {session_status, #{call_id=>CallId, session_id=>SessId, status=>Status}}, State};
 
-event(_Event, #obj_state{parent_id=_ParentId}=State) ->
-    %%lager:warning("NKLOG Media Event (~s) ~p", [_ParentId, _Event]),
+event({session_started, SessId, CallId}, State) ->
+    {event, {session_started, #{call_id=>CallId, session_id=>SessId}}, State};
+
+event({session_removed, SessId, CallId}, State) ->
+    {event, {session_removed, #{call_id=>CallId, session_id=>SessId}}, State};
+
+event({call_hangup, CallId, Reason}, State) ->
+    {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
+
+event(_Event, State) ->
+    lager:warning("NKLOG Media Event ~p", [_Event]),
     {ok, State}.
 
 
