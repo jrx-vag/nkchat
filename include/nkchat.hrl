@@ -31,6 +31,8 @@
 -define(MEDIA_SESSION, <<"media.session">>).
 -define(MEDIA_CALL, <<"media.call">>).
 
+-define(CHAT_MSG_TYPE_ADDED_MEMBER, <<"chat.member_added">>).
+-define(CHAT_MSG_TYPE_REMOVED_MEMBER, <<"chat.member_removed">>).
 
 
 %% ===================================================================
