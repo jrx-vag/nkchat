@@ -124,7 +124,7 @@
     {session_added, SessId::nkdomain:obj_id(), User::nkdomain:obj_id(), #{}} |
     {session_removed, SessId::nkdomain:obj_id(), User::nkdomain:obj_id(), #{}} |
     {session_status, SessId::nkdomain:obj_id(), session_status()} |
-    {call_hangup, Reason::nkservice:error()}.
+    {call_hangup, Reason::nkservice:error(), Time::integer()}.
 
 
 %% Events sent to a single member session
@@ -367,6 +367,8 @@ object_es_mapping() ->
         type => #{type => keyword},
         conversation_id => #{type => keyword},
         message_id => #{type => keyword},
+        started_time => #{type => date},
+        stopped_time => #{type => date},
         members_hash => #{type => keyword},
         members => #{
             type => object,
@@ -386,6 +388,8 @@ object_parse(_Mode, _Obj) ->
     #{
         type => {atom, [direct, one2one, room]},
         conversation_id => binary,
+        started_time => binary,
+        stopped_time => binary,
         message_id => binary,
         members_hash => binary,
         members =>
@@ -443,7 +447,14 @@ object_init(#obj_state{obj=Obj}=State) ->
         error ->
             Session1
     end,
-    State2 = State#obj_state{session=Session2},
+    Obj2 = case CallObj of
+        #{started_time:=_} ->
+            Obj;
+        _ ->
+            CallObj2 = CallObj#{started_time=>nkdomain_util:timestamp()},
+            ?ADD_TO_OBJ(?MEDIA_CALL, CallObj2, Obj)
+    end,
+    State2 = State#obj_state{session=Session2, obj=Obj2},
     State3 = update_call_status(new, State2),
     {ok, State3}.
 
@@ -833,7 +844,8 @@ do_hangup(Reason, State) ->
         _ ->
             #obj_state{session=#session{medias=Medias}} = State,
             State2 = rm_media_sessions(Medias, call_hangup, State),
-            State3 = do_all_member_sessions_event({call_hangup, Reason}, State2),
+            Time = get_duration(State2),
+            State3 = do_all_member_sessions_event({call_hangup, Reason, Time}, State2),
             update_call_status(hangup, State3)
     end.
 
@@ -947,12 +959,20 @@ update_chat_msg(State) ->
             [UserId || #member_session{user_id=UserId}<-Members]
     end,
     Status2 = nklib_util:to_binary(Status),
+    Body1 = #{
+        call_id => CallId,
+        status => Status2,
+        members => Members2,
+        time => nkdomain_util:timestamp()
+    },
+    Body2 = case Status of
+        hangup ->
+            Body1#{duration => get_duration(State)};
+        _ ->
+            Body1
+    end,
     Update = #{
-        body => #{
-            call_id => CallId,
-            status => Status2,
-            members => Members2
-        },
+        body => Body2,
         text => list_to_binary(["Call ", CallId, " status: ", Status2, " members: ", nklib_util:bjoin(Members2)])
     },
     case nkchat_message_obj:update(MsgId, Update) of
@@ -963,3 +983,7 @@ update_chat_msg(State) ->
     end,
     State.
 
+
+%% @private
+get_duration(#obj_state{obj=#{?MEDIA_CALL:=#{started_time:=Start}}}) ->
+    (nkdomain_util:timestamp() - Start) div 1000.

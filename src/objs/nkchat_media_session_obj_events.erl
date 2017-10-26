@@ -67,8 +67,8 @@ event({session_started, SessId, CallId}, State) ->
 event({session_removed, SessId, CallId}, State) ->
     {event, {session_removed, #{call_id=>CallId, session_id=>SessId}}, State};
 
-event({call_hangup, CallId, Reason}, State) ->
-    {event, {call_hangup, #{call_id=>CallId, reason=>Reason}}, State};
+event({call_hangup, CallId, Reason, Time}, State) ->
+    {event, {call_hangup, #{call_id=>CallId, reason=>Reason, duration=>Time}}, State};
 
 event(_Event, State) ->
     % lager:warning("NKLOG Media Event ~p", [_Event]),

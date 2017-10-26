@@ -51,8 +51,8 @@ event({session_removed, SessId, MemberId, _Data}, State) ->
 event({session_status, SessId, Status}, State) ->
     {event, {session_status, #{session_id=>SessId, status=>Status}}, State};
 
-event({call_hangup, Reason},State) ->
-    {event, {call_hangup, #{reason=>Reason}}, State};
+event({call_hangup, Reason, Time},State) ->
+    {event, {call_hangup, #{reason=>Reason, duration=>Time}}, State};
 
 event(_Event, State) ->
     {ok, State}.

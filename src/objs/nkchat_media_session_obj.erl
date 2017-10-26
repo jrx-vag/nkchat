@@ -91,7 +91,7 @@
     {call_status, CallId::nkdomain:obj_id(), nkchat_media_call_obj:call_status()} |
     {session_added, SessId::nkdomain:obj_id(), User::nkdomain:obj_id(), CallId::nkdomain:obj_id(), #{}} |
     {session_removed, SessId::nkdomain:obj_id(), User::nkdomain:obj_id(), CallId::nkdomain:obj_id(), #{}} |
-    {call_hangup, Reason::nkservice:error(), CallId::nkdomain:obj_id()}.
+    {call_hangup, Reason::nkservice:error(), CallId::nkdomain:obj_id(), Time::integer()}.
 
 
 
@@ -635,7 +635,7 @@ do_call_event({session_removed, SessId, MemberId, Data}, CallId, State) ->
 do_call_event({session_status, SessId, Status}, CallId, State) ->
     do_event({session_status, SessId, CallId, Status}, State);
 
-do_call_event({call_hangup, Reason}, CallId, #obj_state{session=Session}=State) ->
+do_call_event({call_hangup, Reason, Time}, CallId, #obj_state{session=Session}=State) ->
     #session{medias=Medias} = Session,
     State2 = case lists:keyfind(CallId, #media.call_id, Medias) of
         #media{id=MediaId} ->
@@ -643,7 +643,7 @@ do_call_event({call_hangup, Reason}, CallId, #obj_state{session=Session}=State) 
         _ ->
             State
     end,
-    do_event({call_hangup, CallId, Reason}, State2);
+    do_event({call_hangup, CallId, Reason, Time}, State2);
 
 do_call_event(_Event, _CallId, State) ->
     lager:error("SESS EV2: ~p", [_Event]),
