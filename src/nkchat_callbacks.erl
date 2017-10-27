@@ -20,18 +20,7 @@
 
 -module(nkchat_callbacks).
 
--export([plugin_deps/0, error/1]).
-
-
-%% ===================================================================
-%% Config callbacks
-%% ===================================================================
-
-
-plugin_deps() ->
-    [nkdomain].
-
-
+-export([error/1]).
 
 
 %% ===================================================================
@@ -47,8 +36,8 @@ error(callee_rejected)                  -> "Callee rejected call";
 error(media_not_found)                  -> "Media not found";
 error(no_remaining_medias)              -> "No remaining media session";
 error(invite_not_allowed)               -> "Invite is not allowed now";
-error(media_already_answered)         -> "Media session already answered";
-error(user_hangup)                    -> "User started hangup";
+error(media_already_answered)           -> "Media session already answered";
+error(user_hangup)                      -> "User started hangup";
 
 
 error(conversation_not_found)           -> "Conversation not found";
