@@ -1315,6 +1315,8 @@ do_get_member_info(Member, State) ->
     #{
         path:=Path,
         parent_id:=ParentId,
+        created_by:=CreatedBy,
+        created_time:=CreatedTime,
         ?CHAT_CONVERSATION:=#{
             type:=Type,
             members:=Members,
@@ -1328,6 +1330,8 @@ do_get_member_info(Member, State) ->
         name => maps:get(name, Obj, <<>>),
         description => maps:get(description, Obj, <<>>),
         type => Type,
+        created_by => CreatedBy,
+        created_time => CreatedTime,
         info => Info,
         status => Status,
         is_closed => IsClosed,
