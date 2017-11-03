@@ -210,7 +210,7 @@ call_event(Pid, CallId, Event) ->
 
 
 %% @private To be called from nkdomain_user_obj
--spec notify_fun(pid(), nkdomain_user_obj:notify_msg()) ->
+-spec notify_fun(pid(), nkdomain_user:notify_msg()) ->
     any.
 
 notify_fun(Pid, Notify) ->
@@ -218,8 +218,8 @@ notify_fun(Pid, Notify) ->
 
 
 %% @private To be called from nkdomain_user_obj
--spec presence_fun(nkdomain:user_id(), [nkdomain_user_obj:session_presence()]) ->
-    {ok, nkdomain_user_obj:user_presence()}.
+-spec presence_fun(nkdomain:user_id(), [nkdomain_user:session_presence()]) ->
+    {ok, nkdomain_user:user_presence()}.
 
 presence_fun(_UserId, []) ->
     {ok, #{status => <<"offline">>}};
@@ -315,7 +315,7 @@ object_init(#obj_state{id=Id, parent_id=UserId, domain_id=DomainId}=State) ->
         presence_fun => fun ?MODULE:presence_fun/2,
         presence => <<"none">>
     },
-    ok = nkdomain_user_obj:register_session(UserId, DomainId, ?MEDIA_SESSION, SessId, Opts),
+    ok = nkdomain_user:register_session(UserId, DomainId, ?MEDIA_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State2),
     {ok, State4}.
 
@@ -383,7 +383,7 @@ object_async_op({?MODULE, call_event, CallId, Event}, State) ->
 
 object_async_op({?MODULE, launch_notifications}, State) ->
     #obj_state{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
-    nkdomain_user_obj:launch_session_notifications(UserId, SessId),
+    nkdomain_user:launch_session_notifications(UserId, SessId),
     {noreply, State};
 
 object_async_op({?MODULE, notify_fun, {token_created, MediaId, Msg}}, State) ->
@@ -538,7 +538,7 @@ update_presence(State) ->
                     end
             end
     end,
-    nkdomain_user_obj:update_presence(UserId, SessId, nklib_util:to_binary(Status)),
+    nkdomain_user:update_presence(UserId, SessId, nklib_util:to_binary(Status)),
     State.
 
 
@@ -662,7 +662,7 @@ make_invite_token(CallId, CalleeId, InviteOpts, State) ->
     TokenData1 = gen_invite_token(CallId, UserId, CalleeId, InviteOpts),
     Push = make_invite_push(UserId, InviteOpts),
     Opts = #{srv_id=>SrvId, wakeup_push => Push},
-    case nkdomain_user_obj:add_token_notification(CalleeId, ?MEDIA_SESSION, Opts, TokenData1) of
+    case nkdomain_user:add_token_notification(CalleeId, ?MEDIA_SESSION, Opts, TokenData1) of
         {ok, _MemberId, TokenData2} ->
             TTL = case InviteOpts of
                 #{ttl:=TTL0} when is_integer(TTL0), TTL0>0 ->
@@ -725,7 +725,7 @@ read_invite_token(Token) ->
 
 %% @private
 make_invite_push(CallerId, InviteOpts) ->
-    {ok, #{fullname:=FullName}} = nkdomain_user_obj:get_name(CallerId),
+    {ok, #{fullname:=FullName}} = nkdomain_user:get_name(CallerId),
     #{
         type => ?MEDIA_SESSION,
         class => invite,

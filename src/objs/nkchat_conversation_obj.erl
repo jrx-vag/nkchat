@@ -1345,7 +1345,7 @@ do_get_member_info(Member, State) ->
 
 %% @private
 send_push(MemberId, Push, #obj_state{session=#session{push_srv_id=SrvId}}) ->
-    nkdomain_user_obj:send_push(MemberId, SrvId, Push).
+    nkdomain_user:send_push(MemberId, SrvId, Push).
 
 
 %% @private

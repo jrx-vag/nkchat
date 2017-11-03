@@ -217,7 +217,7 @@ conversation_event(Pid, ConvId, _Meta, Event) ->
 
 
 %% @private To be called from nkdomain_user_obj
--spec notify_fun(pid(), nkdomain_user_obj:notify_msg()) ->
+-spec notify_fun(pid(), nkdomain_user:notify_msg()) ->
     any.
 
 notify_fun(Pid, Notify) ->
@@ -225,8 +225,8 @@ notify_fun(Pid, Notify) ->
 
 
 %% @private To be called from nkdomain_user_obj
--spec presence_fun(nkdomain:user_id(), [nkdomain_user_obj:session_presence()]) ->
-    {ok, nkdomain_user_obj:user_presence()}.
+-spec presence_fun(nkdomain:user_id(), [nkdomain_user:session_presence()]) ->
+    {ok, nkdomain_user:user_presence()}.
 
 presence_fun(_UserId, []) ->
     % lager:info("NKLOG Chat Presence down"),
@@ -336,7 +336,7 @@ object_init(#obj_state{id=Id, obj=Obj, domain_id=DomainId}=State) ->
         presence_fun => fun ?MODULE:presence_fun/2,
         presence => <<"online">>
     },
-    ok = nkdomain_user_obj:register_session(UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
+    ok = nkdomain_user:register_session(UserId, DomainId, ?CHAT_SESSION, SessId, Opts),
     State4 = nkdomain_obj_util:link_to_session_server(?MODULE, State3),
     ?LLOG(info, "start session ok", [], State),
     {ok, restart_timer(State4)}.
@@ -408,7 +408,7 @@ object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
     #obj_state{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
     Reply = case nkchat_conversation_obj:add_invite_op(Conv, UserId, Member, #{}) of
         {ok, ConvId, MemberId, UserId, Op1} ->
-            case nkdomain_user_obj:add_token_notification(MemberId, ?CHAT_SESSION, #{}, Op1) of
+            case nkdomain_user:add_token_notification(MemberId, ?CHAT_SESSION, #{}, Op1) of
                 {ok, MemberId, Op2} ->
                     Op3 = Op2#{
                         ?CHAT_SESSION => #{
@@ -478,7 +478,7 @@ object_async_op({?MODULE, notify_fun, {token_created, TokenId, Msg}}, State) ->
 
 object_async_op({?MODULE, launch_notifications}, State) ->
     #obj_state{id=#obj_id_ext{obj_id=SessId}, parent_id=UserId} = State,
-    nkdomain_user_obj:launch_session_notifications(UserId, SessId),
+    nkdomain_user:launch_session_notifications(UserId, SessId),
     {noreply, State};
 
 object_async_op({?MODULE, wakeup}, State) ->
@@ -634,7 +634,7 @@ set_user_active(Active, #obj_state{id=Id, parent_id=UserId, session=Session} = S
         true -> <<"online">>;
         false -> <<"inactive">>
     end,
-    nkdomain_user_obj:update_presence(UserId, SessId, Presence),
+    nkdomain_user:update_presence(UserId, SessId, Presence),
     Session2 = Session#session{user_is_active=Active},
     State2 = State#obj_state{session=Session2},
     case Active of
