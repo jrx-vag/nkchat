@@ -182,7 +182,7 @@ session1(Pid, _Ref) ->
     {error, {<<"object_not_started">>, _}} = cmd_session(Pid, stop, #{}),
     {error, {<<"session_not_found">>, _}} = cmd_session(Pid, stop, #{id=><<"a">>}),
     {ok, #{<<"obj_id">>:=S, <<"conversations">>:=[]}} = cmd_session(Pid, start, #{id=>S}),
-    {ok, _, _, _, _SPid} = nkdomain:find(S),
+    {ok, _, _, _SPid} = nkdomain:find(S),
 
     % Adds C1 and C3
     {ok, #{<<"conversation_id">>:=_C1}} =
