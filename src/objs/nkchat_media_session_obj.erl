@@ -658,7 +658,7 @@ do_event(Event, State) ->
 
 %% @private
 make_invite_token(CallId, CalleeId, InviteOpts, State) ->
-    #obj_state{parent_id=UserId, domain_id=DomainId, id=#obj_id_ext{srv_id=SrvId}} = State,
+    #obj_state{parent_id=UserId, domain_id=DomainId, effective_srv_id=SrvId} = State,
     TokenData1 = gen_invite_token(CallId, UserId, CalleeId, InviteOpts),
     Push = make_invite_push(UserId, InviteOpts),
     Opts = #{srv_id=>SrvId, wakeup_push => Push},
