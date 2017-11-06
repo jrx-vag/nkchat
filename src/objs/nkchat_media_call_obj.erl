@@ -47,7 +47,7 @@
          object_init/1, object_save/1, object_stop/2, object_sync_op/3, object_async_op/2,
          object_handle_info/2]).
 -export([object_next_status_timer/1, object_check_active/1]).
--export([object_admin_info/0]).
+-export([object_admin_info/0, object_schema_types/0]).
 -export_type([event/0, session_event/0, member_session_event/0]).
 
 -include("nkchat.hrl").
@@ -348,6 +348,7 @@ remove_calls() ->
 object_info() ->
     #{
         type => ?MEDIA_CALL,
+        schema_type => 'MediaCall',
         stop_after_disabled => true,
         remove_after_stop => true
     }.
@@ -360,6 +361,16 @@ object_admin_info() ->
         tree_id => <<"domain_tree_sessions_media.calls">>
     }.
 
+%% @doc
+object_schema_types() ->
+    #{
+        'MediaCall' => #{
+            fields => #{
+            },
+            is_object => true,
+            comment => "A Media Call"
+        }
+    }.
 
 %% @private
 object_es_mapping() ->

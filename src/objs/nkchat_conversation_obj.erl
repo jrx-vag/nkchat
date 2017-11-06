@@ -42,7 +42,7 @@
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
          object_event/2, object_link_down/2]).
--export([object_admin_info/0]).
+-export([object_admin_info/0, object_schema_types/0]).
 -export_type([event/0]).
 
 -include("nkchat.hrl").
@@ -471,6 +471,7 @@ perform_op(_Data) ->
 object_info() ->
     #{
         type => ?CHAT_CONVERSATION,
+        schema_type => 'ChatConversation',
         default_ttl => 5*60*1000,
         dont_create_childs_on_disabled => true,
         dont_update_on_disabled => true
@@ -482,6 +483,18 @@ object_admin_info() ->
         class => resource,
         weight => 2000,
         type_view_mod => nkchat_conversation_obj_type_view
+    }.
+
+
+%% @doc
+object_schema_types() ->
+    #{
+        'ChatConversation' => #{
+            fields => #{
+            },
+            is_object => true,
+            comment => "A Chat Conversation"
+        }
     }.
 
 

@@ -29,7 +29,7 @@
 
 -export([create/2, update/2]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1, object_event/2]).
--export([object_admin_info/0]).
+-export([object_admin_info/0, object_schema_types/0]).
 -export([syntax_check_file/3]).
 
 -include("nkchat.hrl").
@@ -122,6 +122,7 @@ update(MsgId, Opts) ->
 object_info() ->
     #{
         type => ?CHAT_MESSAGE,
+        schema_type => 'ChatMessage',
         dont_update_on_disabled => true,
         dont_delete_on_disabled => true,
         default_ttl => 5*60*1000
@@ -134,6 +135,18 @@ object_admin_info() ->
         class => resource,
         weight => 2001,
         type_view_mod => nkchat_message_obj_type_view
+    }.
+
+
+%% @doc
+object_schema_types() ->
+    #{
+        'ChatMessage' => #{
+            fields => #{
+            },
+            is_object => true,
+            comment => "A Chat Message"
+        }
     }.
 
 

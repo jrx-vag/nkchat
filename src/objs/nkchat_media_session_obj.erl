@@ -266,6 +266,7 @@ presence_fun(_UserId, List) ->
 object_info() ->
     #{
         type => ?MEDIA_SESSION,
+        schema_type => 'MediaSession',
         stop_after_disabled => true,
         remove_after_stop => true
     }.
@@ -277,6 +278,18 @@ object_admin_info() ->
         class => session,
         weight => 2000,
         type_view_mod => nkchat_media_session_obj_type_view
+    }.
+
+
+%% @doc
+object_schema_types() ->
+    #{
+        'MediaSession' => #{
+            fields => #{
+            },
+            is_object => true,
+            comment => "A Media Session"
+        }
     }.
 
 
