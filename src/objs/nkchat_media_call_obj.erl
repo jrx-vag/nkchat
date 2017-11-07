@@ -46,7 +46,7 @@
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_stop/2, object_sync_op/3, object_async_op/2,
          object_handle_info/2]).
--export([object_next_status_timer/1, object_check_active/1]).
+-export([object_next_status_timer/1, object_do_active/1]).
 -export([object_admin_info/0, object_schema_types/0]).
 -export_type([event/0, session_event/0, member_session_event/0]).
 
@@ -672,8 +672,7 @@ object_next_status_timer(#obj_state{session=#session{status=Status}}=State) ->
 
 
 %% @private
-object_check_active(_Id) ->
-    lager:notice("NKLOG CALL Checked ~p", [_Id]),
+object_do_active(_Id) ->
     force_load.
 
 
