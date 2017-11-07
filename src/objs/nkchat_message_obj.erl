@@ -85,7 +85,6 @@ create(Conv, Opts) ->
                 created_by => maps:get(created_by, Opts, <<"admin">>),
                 ?CHAT_MESSAGE => Msg
             },
-            lager:error("NKLOG OBJ ~p", [Obj]),
             case nkdomain_obj_make:create(Obj#{domain_id=>DomainId}) of
                 {ok, #obj_id_ext{obj_id=MsgId, pid=MsgPid}, _Unknown} ->
                     {ok, MsgId, MsgPid};
@@ -187,7 +186,6 @@ object_parse(_Mode, Obj) ->
 
 %% @doc
 object_create(#{parent_id:=ConvId}=Obj) ->
-    lager:error("NKLOG CREATE ~p", [Obj]),
     case nkdomain:get_domain_id(ConvId) of
         {ok, DomainId} ->
             nkdomain_obj_make:create(Obj#{domain_id=>DomainId});
