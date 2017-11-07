@@ -491,9 +491,20 @@ object_schema_types() ->
     #{
         'ChatConversation' => #{
             fields => #{
+                conversationType => {no_null, string},
+                conversationStatus => string,
+                conversationIsClosed => {no_null, boolean},
+                conversationInfo => {list, string},
+                conversationMembers => {list, 'ChatConversationMember'}
             },
             is_object => true,
             comment => "A Chat Conversation"
+        },
+        'ChatConversationMember' => #{
+            fields => #{
+                memberId => {no_null, string},
+                addedTime => {no_null, int}
+            }
         }
     }.
 
