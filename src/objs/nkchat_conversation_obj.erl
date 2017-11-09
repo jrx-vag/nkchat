@@ -1237,6 +1237,8 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
         sessions = Sessions
     } = Member,
     IsActive = lists:keymember(true, #chat_session.is_active, Sessions),
+    #{created_by:=CreatedBy} = Msg,
+    IsFromThatUser = MemberId =:= CreatedBy,
     Acc2 = case Sessions of
         [] ->
             Count2 = Count + 1,
@@ -1267,6 +1269,12 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
                 _ ->
                     do_event_member_sessions(Member2, {counter_updated, 0}, State)
             end,
+            [Member2|Acc];
+        _ when IsFromThatUser ->
+            Member2 = Member#member{
+                unread_count = Count
+            },
+            do_event_member_sessions(Member2, {message_created, Msg}, State),
             [Member2|Acc];
         _ ->
             Count2 = Count + 1,
