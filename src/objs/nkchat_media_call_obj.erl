@@ -654,8 +654,12 @@ object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, State) ->
     #obj_state{session=#session{members=Members}} = State,
     case lists:keyfind(Pid, #member_session.session_pid, Members) of
         #member_session{session_id=SessId} ->
-            State2 = rm_member_session(SessId, State),
-            {noreply, State2};
+            case rm_member_session(SessId, State) of
+                {ok, State2} ->
+                    {noreply, State2};
+                {error, _} ->
+                    {noreply, State}
+            end;
         false ->
             continue
     end;
