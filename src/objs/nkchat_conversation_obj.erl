@@ -958,7 +958,9 @@ object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
         messages = Msgs3
     },
     State2 = do_new_msg_event(Time, Msg, State#obj_state{session=Session2}),
-    {ok, State2};
+    % is_dirty is already true
+    State3 = nkdomain_obj_util:do_save_timer(State2),
+    {ok, State3};
 
 object_event({message_updated, Msg}, #obj_state{session=Session}=State) ->
     #session{messages=Msgs} = Session,
