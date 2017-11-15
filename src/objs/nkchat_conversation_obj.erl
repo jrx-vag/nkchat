@@ -1225,16 +1225,21 @@ do_event_sessions(Sessions, Event, #obj_state{id=Id}) when is_list(Sessions) ->
 
 
 %% @private
-do_new_msg_event(Time, Msg, State) ->
+do_new_msg_event(Time, Msg, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
     Members = get_members(State),
-    do_new_msg_event(Members, Time, Msg, [], State).
+    MembersIds = [M#member.member_id || M <- Members],
+    MembersData = [{Id, get_member_data(Id, all)} || Id <- MembersIds],
+    Opts = #{
+        members_map => maps:from_list(MembersData)
+    },
+    do_new_msg_event(Members, Time, Msg, [], Opts, State).
 
 
 %% @private
-do_new_msg_event([], _Time, _Msg, Acc, State) ->
+do_new_msg_event([], _Time, _Msg, Acc, _Opts, State) ->
     set_members(Acc, State);
 
-do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
+do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
     #member{
         member_id = MemberId,
         unread_count = Count,
@@ -1249,14 +1254,22 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
             Member2 = Member#member{
                 unread_count = Count2
             },
-            #{?CHAT_MESSAGE:=#{text:=Txt}} = Msg,
-            #obj_state{session=#session{name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
+            #{type:=ConvType} = ChatConv,
+            #{?CHAT_MESSAGE:=#{text:=Txt, type:=MsgType}=MsgData} = Msg,
+            MsgBody = maps:get(body, MsgData, #{}),
+            #obj_state{session=#session{members=Members, name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
             Push = #{
                 type => ?CHAT_CONVERSATION,
                 class => new_msg,
-                conversation_name => Name,
-                message_text => Txt,
                 conversation_id => ConvId,
+                conversation_name => Name,
+                conversation_type => ConvType,
+                created_by => CreatedBy,
+                member_id => MemberId,
+                members_map => MembersMap,
+                message_body => MsgBody,
+                message_text => Txt,
+                message_type => MsgType,
                 unread_counter => Count2
             },
             send_push(MemberId, Push, State),
@@ -1289,7 +1302,7 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, State) ->
             do_event_member_sessions(Member2, {counter_updated, Count2}, State),
             [Member2|Acc]
     end,
-    do_new_msg_event(Rest, Time, Msg, Acc2, State).
+    do_new_msg_event(Rest, Time, Msg, Acc2, Opts, State).
 
 
 
@@ -1417,4 +1430,25 @@ check_members([Member|Rest], Acc) ->
             check_members(Rest, [MemberId|Acc]);
         _ ->
             {error, member_not_found}
+    end.
+
+
+%% @private
+get_member_data(UserId, Field) ->
+    case nkdomain_user:get_name(UserId) of
+        {ok, #{obj_id := UserId}=User} ->
+            case Field of
+                all ->
+                    User;
+                _ ->
+                    maps:get(Field, User, <<>>)
+            end;
+        {error, Error2} ->
+            lager:warning("nkchat_conversation_obj: could not find user obj ~p: ~p", [UserId, Error2]),
+            case Field of
+                all ->
+                    #{};
+                _ ->
+                    <<>>
+            end
     end.
