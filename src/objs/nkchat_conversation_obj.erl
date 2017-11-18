@@ -1225,7 +1225,7 @@ do_event_sessions(Sessions, Event, #obj_state{id=Id}) when is_list(Sessions) ->
 
 
 %% @private
-do_new_msg_event(Time, Msg, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
+do_new_msg_event(Time, Msg, #obj_state{obj=#{?CHAT_CONVERSATION:=_ChatConv}} = State) ->
     Members = get_members(State),
     MembersIds = [M#member.member_id || M <- Members],
     MembersData = [{Id, get_member_data(Id, all)} || Id <- MembersIds],
@@ -1257,7 +1257,7 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
             #{type:=ConvType} = ChatConv,
             #{?CHAT_MESSAGE:=#{text:=Txt, type:=MsgType}=MsgData} = Msg,
             MsgBody = maps:get(body, MsgData, #{}),
-            #obj_state{session=#session{members=Members, name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
+            #obj_state{session=#session{members=_Members, name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
             Push = #{
                 type => ?CHAT_CONVERSATION,
                 class => new_msg,
