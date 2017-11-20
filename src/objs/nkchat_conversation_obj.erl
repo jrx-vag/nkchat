@@ -100,29 +100,7 @@ object_admin_info() ->
         type_view_mod => nkchat_conversation_obj_type_view
     }.
 
-%%
-%%%% @doc
-%%object_schema_types() ->
-%%    #{
-%%        'ChatConversation' => #{
-%%            fields => #{
-%%                conversationType => {no_null, string},
-%%                conversationStatus => string,
-%%                conversationIsClosed => {no_null, boolean},
-%%                conversationInfo => {list, string},
-%%                conversationMembers => {list, 'ChatConversationMember'}
-%%            },
-%%            is_object => true,
-%%            comment => "A Chat Conversation"
-%%        },
-%%        'ChatConversationMember' => #{
-%%            fields => #{
-%%                memberId => {no_null, string},
-%%                addedTime => {no_null, int}
-%%            }
-%%        }
-%%    }.
-%%
+
 
 %% @private
 object_parse(update, _Obj) ->

@@ -29,6 +29,7 @@
 
 -export([create/2, update/2]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1, object_event/2]).
+-export([object_execute/5, object_schema/1, object_query/3, object_mutation/3]).
 -export([object_admin_info/0]).
 -export([syntax_check_file/3]).
 
@@ -121,7 +122,7 @@ update(MsgId, Opts) ->
 object_info() ->
     #{
         type => ?CHAT_MESSAGE,
-        % schema_type => 'ChatMessage',
+        schema_type => 'ChatMessage',
         dont_update_on_disabled => true,
         dont_delete_on_disabled => true,
         default_ttl => 5*60*1000
@@ -135,20 +136,6 @@ object_admin_info() ->
         weight => 2001,
         type_view_mod => nkchat_message_obj_type_view
     }.
-
-
-%% @private
-object_es_mapping() ->
-    #{
-        type => #{type => keyword},
-        layout => #{type => keyword},
-        text => #{type => text},
-        file_id => #{type => keyword},
-        body => #{enabled => false},
-        meta => #{enabled => false},
-        member_roles => #{type => keyword}
-    }.
-
 
 
 %% @private
@@ -169,6 +156,39 @@ object_parse(_Mode, Obj) ->
         '__defaults' => #{type => text},
         '__mandatory' => [text]
     }.
+
+
+%% @private
+object_es_mapping() ->
+    #{
+        type => #{type => keyword},
+        layout => #{type => keyword},
+        text => #{type => text},
+        file_id => #{type => keyword},
+        body => #{enabled => false},
+        meta => #{enabled => false},
+        member_roles => #{type => keyword}
+    }.
+
+
+%% @doc
+object_schema(Type) ->
+    nkchat_message_obj_schema:object_schema(Type).
+
+
+%% @doc
+object_execute(Field, ObjIdExt, #{?CHAT_MESSAGE:=Msg}, Args, Ctx) ->
+    nkchat_message_obj_schema:object_execute(Field, ObjIdExt, Msg, Args, Ctx).
+
+
+%% @doc
+object_query(QueryName, Params, Ctx) ->
+    nkchat_message_obj_schema:object_query(QueryName, Params, Ctx).
+
+
+%% @doc
+object_mutation(MutationName, Params, Ctx) ->
+    nkchat_message_obj_schema:object_mutation(MutationName, Params, Ctx).
 
 
 
