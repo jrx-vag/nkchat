@@ -63,7 +63,7 @@
     {message_created, nkdomain:obj()} |
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
-    {status_updated, nkchat_conversation_obj:status()} |
+    {status_updated, nkchat_conversation:status()} |
     {is_closed_updated, boolean()} |
     {unread_counter_updated, ConvId::nkdomain:obj_id(), integer()} |
     {invited_to_conversation, TokenId::binary(), UserId::binary(), ConvId::binary()} |
@@ -331,7 +331,7 @@ object_init(#obj_state{id=Id, obj=Obj, domain_id=DomainId}=State) ->
     },
     State2 = State#obj_state{session=Session},
     ?LLOG(info, "start find conversations", [], State),
-    {ok, Convs1} = nkchat_conversation_obj:find_member_conversations(DomainId, UserId),
+    {ok, Convs1} = nkchat_conversation:find_member_conversations(DomainId, UserId),
     ?LLOG(info, "start adding conversations", [], State),
     State3 = lists:foldl(
         fun({ConvId, _Type}, Acc) ->
@@ -370,7 +370,7 @@ object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #obj_state{sessi
     #session{user_id=UserId} = Session,
     case get_conv_pid(ConvId, State) of
         {ok, Pid} ->
-            case nkchat_conversation_obj:get_member_info(Pid, UserId) of
+            case nkchat_conversation:get_member_info(Pid, UserId) of
                 {ok, Info} -> 
                     {reply, {ok, Info}, State};
                 {error, Error} ->
@@ -420,7 +420,7 @@ object_sync_op({?MODULE, rm_conv, ConvId}, _From, State) ->
 
 object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
     #obj_state{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
-    Reply = case nkchat_conversation_obj:add_invite_op(Conv, UserId, Member, #{}) of
+    Reply = case nkchat_conversation:add_invite_op(Conv, UserId, Member, #{}) of
         {ok, ConvId, MemberId, UserId, Op1} ->
             case nkdomain_user:add_token_notification(MemberId, ?CHAT_SESSION, #{}, Op1) of
                 {ok, MemberId, Op2} ->
@@ -455,7 +455,7 @@ object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
     {reply, Reply, State};
 
 object_sync_op({?MODULE, accept_invitation, Data}, _From, State) ->
-    Reply = nkchat_conversation_obj:perform_op(Data),
+    Reply = nkchat_conversation:perform_op(Data),
     {reply, Reply, State};
 
 object_sync_op(_Op, _From, _State) ->
@@ -534,7 +534,7 @@ do_set_active_conv([], _ActiveId, _UserId, _SessId) ->
 
 do_set_active_conv([{ConvId, Pid}|Rest], ActiveId, UserId, SessId) ->
     Active = (ActiveId == ConvId),
-    nkchat_conversation_obj:set_session_active(Pid, UserId, SessId, Active),
+    nkchat_conversation:set_session_active(Pid, UserId, SessId, Active),
     do_set_active_conv(Rest, ActiveId, UserId, SessId).
 
 %% @private
@@ -542,7 +542,7 @@ do_add_conv(ConvId, State) ->
     #obj_state{id=#obj_id_ext{obj_id=SessId}} = State,
     #obj_state{session=Session} = State,
     #session{user_id=UserId, conv_pids=Convs1} = Session,
-    case nkchat_conversation_obj:add_session(ConvId, UserId, SessId, #{}) of
+    case nkchat_conversation:add_session(ConvId, UserId, SessId, #{}) of
         {ok, Pid} ->
             monitor(process, Pid),
             Convs2 = Convs1#{ConvId => Pid},
@@ -560,7 +560,7 @@ do_rm_conv(ConvId, State) ->
             #obj_state{id=#obj_id_ext{obj_id=SessId}} = State,
             #obj_state{session=Session} = State,
             #session{user_id=UserId, conv_pids=ConvPids1, active_id=ActiveId} = Session,
-            nkchat_conversation_obj:remove_session(Pid, UserId, SessId),
+            nkchat_conversation:remove_session(Pid, UserId, SessId),
             ConvPids2 = maps:remove(ConvId, ConvPids1),
             Session2 = Session#session{conv_pids=ConvPids2},
             Session3 = case ActiveId of

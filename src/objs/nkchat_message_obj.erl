@@ -29,7 +29,7 @@
 
 -export([create/2, update/2]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1, object_event/2]).
--export([object_admin_info/0, object_schema_types/0]).
+-export([object_admin_info/0]).
 -export([syntax_check_file/3]).
 
 -include("nkchat.hrl").
@@ -54,7 +54,7 @@
         body => map(),
         file_id => nkdomain:obj_id(),
         meta => map(),
-        member_roles => [nkchat_conversation_obj:member_role()]
+        member_roles => [nkchat_conversation:member_role()]
     }.
 
 -type update_opts() ::
@@ -75,7 +75,7 @@
     {ok, MsgId::nkdomain:obj_id(), pid()} | {error, term()}.
 
 create(Conv, Opts) ->
-    case nkchat_conversation_obj:get_status(Conv) of
+    case nkchat_conversation:get_status(Conv) of
         {ConvId, DomainId, _Status, false} ->
             Msg = maps:with([text, type, layout, body, file_id, meta, member_roles], Opts),
             Obj = #{
@@ -121,7 +121,7 @@ update(MsgId, Opts) ->
 object_info() ->
     #{
         type => ?CHAT_MESSAGE,
-        schema_type => 'ChatMessage',
+        % schema_type => 'ChatMessage',
         dont_update_on_disabled => true,
         dont_delete_on_disabled => true,
         default_ttl => 5*60*1000
@@ -134,18 +134,6 @@ object_admin_info() ->
         class => resource,
         weight => 2001,
         type_view_mod => nkchat_message_obj_type_view
-    }.
-
-
-%% @doc
-object_schema_types() ->
-    #{
-        'ChatMessage' => #{
-            fields => #{
-            },
-            is_object => true,
-            comment => "A Chat Message"
-        }
     }.
 
 
@@ -203,12 +191,12 @@ object_event(Event, #obj_state{id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=State) ->
     case Event of
         created ->
             Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),
-            ok = nkchat_conversation_obj:message_event(ConvId, {created, Msg});
+            ok = nkchat_conversation:message_event(ConvId, {created, Msg});
         deleted ->
-            ok = nkchat_conversation_obj:message_event(ConvId, {deleted, ObjId});
+            ok = nkchat_conversation:message_event(ConvId, {deleted, ObjId});
         {updated, _} ->
             Msg = maps:with([obj_id, created_by, created_time, updated_time, ?CHAT_MESSAGE], Obj),
-            ok = nkchat_conversation_obj:message_event(ConvId, {updated, Msg});
+            ok = nkchat_conversation:message_event(ConvId, {updated, Msg});
         _ ->
             ok
     end,

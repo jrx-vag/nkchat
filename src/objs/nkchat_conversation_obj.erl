@@ -30,20 +30,13 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([create/2]).
--export([add_info/2, add_member/3, remove_member/3]).
--export([add_session/4, set_session_active/4, remove_session/3, get_member_info/2]).
--export([get_status/1, set_status/2, set_closed/2]).
--export([get_info/1, get_messages/2, find_member_conversations/2,
-         find_conversations_with_members/2, get_last_messages/1]).
--export([add_invite_op/4, perform_op/1]).
--export([message_event/2]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
          object_event/2, object_link_down/2]).
--export([object_admin_info/0, object_schema_types/0]).
--export_type([event/0]).
+-export([object_execute/5, object_schema/1, object_query/3, object_mutation/3]).
+-export([object_admin_info/0]).
+-export([make_members_hash/1]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -53,395 +46,6 @@
 -define(MSG_CACHE_SIZE, 25).
 -define(INVITE_TTL, 3*24*60*60).
 
-
-
-%% ===================================================================
-%% Types
-%% ===================================================================
-
-
--type create_opts() ::
-    #{
-        parent_id => nkdomain:id(),
-        created_by => nkdomain:id(),
-        obj_name => nkdomain:obj_name(),
-        type => binary(),
-        obj_name_follows_members => boolean(),
-        push_srv_id => atom() | binary(),
-        status => status(),
-        initial_member_ids => [binary()]
-    }.
-
--type member_role() :: binary().
-
--type info() :: map().
-
--type event() ::
-    {added_info, info()} |
-    {message_created, nkdomain:obj()} |
-    {message_updated, nkdomain:obj()} |
-    {message_deleted, nkdomain:obj_id()} |
-    {member_added, nkdomain:obj_id()} |
-    {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
-    {member_removed, nkdomain:obj_id()} |
-    {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
-    {session_added, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
-    {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
-    {status_updated, status()} |
-    {is_closed_updated, boolean()}.
-
-
--type status() :: binary().
-
-
-%% ===================================================================
-%% Public
-%% ===================================================================
-
-
-%% @doc
-
--spec create(nkdomain:id(), create_opts()) ->
-    {ok, ConfId::nkdomain:id(), pid()} | {error, term()}.
-
-create(Domain, Opts) ->
-    Core = maps:with([created_by, obj_name, name, parent_id], Opts),
-    Conv = maps:with([type, status, obj_name_follows_members, push_srv_id, initial_member_ids], Opts),
-    Obj = Core#{
-        type => ?CHAT_CONVERSATION,
-        domain_id => Domain,
-        ?CHAT_CONVERSATION => Conv
-    },
-    case nkdomain_obj_make:create(Obj) of
-        {ok, #obj_id_ext{obj_id=ConvId, pid=Pid}, []} ->
-            {ok, ConvId, Pid};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @doc
-add_info(Id, Info) when is_map(Info) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, add_info, Info}).
-
-
-%% @doc Members will be changed for roles
--spec add_member(nkdomain:id(), nkdomain:id(), map()) ->
-    {ok, nkdomain:obj_id()} | {error, term()}.
-
-add_member(Id, Member, Opts) ->
-    case nkdomain_lib:find(Member) of
-        #obj_id_ext{type= ?DOMAIN_USER, obj_id=MemberId} ->
-            case nkdomain_obj:sync_op(Id, {?MODULE, add_member, MemberId}) of
-                {ok, ObjId} ->
-                    Silent = maps:get(silent, Opts, false),
-                    case Silent of
-                        false ->
-                            Msg = #{
-                                type => ?CHAT_MSG_TYPE_ADDED_MEMBER,
-                                text => <<"member added">>,
-                                created_by => <<"admin">>,
-                                body => #{
-                                    member_id => MemberId
-                                }
-                            },
-                            case nkchat_message_obj:create(Id, Msg) of
-                                {ok, _MsgId, _Pid} ->
-                                    ok;
-                                {error, Error2} ->
-                                    lager:warning("could not add member_added msg to conversation ~s: ~p", [Id, Error2])
-                            end;
-                        true ->
-                            ok
-                    end,
-                    {ok, ObjId};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        {ok, _, _, _} ->
-            {error, member_invalid};
-        {error, object_not_found} ->
-            {error, member_not_found};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @doc
--spec remove_member(nkdomain:id(), nkdomain:id(), map()) ->
-    ok | {error, term()}.
-
-remove_member(Id, Member, Opts) ->
-    MemberId = case nkdomain_lib:find(Member) of
-        #obj_id_ext{obj_id=ObjId} ->
-            ObjId;
-        _ ->
-            Member
-    end,
-    case nkdomain_obj:sync_op(Id, {?MODULE, remove_member, MemberId}) of
-        ok ->
-            Silent = maps:get(silent, Opts, false),
-            case Silent of
-                false ->
-                    Msg = #{
-                        type => ?CHAT_MSG_TYPE_REMOVED_MEMBER,
-                        text => <<"member removed">>,
-                        created_by => <<"admin">>,
-                        body => #{
-                            member_id => MemberId
-                        }
-                    },
-                    case nkchat_message_obj:create(Id, Msg) of
-                        {ok, _MsgId, _Pid} ->
-                            ok;
-                        {error, Error2} ->
-                            lager:warning("could not add member_removed msg to conversation ~s: ~p", [Id, Error2])
-                    end;
-                true ->
-                    ok
-                end;
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @doc
--spec get_status(nkdomain:id()) ->
-    {ConvId::nkdomain:obj_id(), DomainId::nkdomain:obj_id(), Status::status(), IsClosed::boolean()}.
-
-get_status(Id) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, get_status}).
-
-
-%% @doc
--spec set_status(nkdomain:id(), status()) ->
-    ok | {error, term()}.
-
-set_status(Id, Status) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, set_status, nklib_util:to_binary(Status)}).
-
-
-%% @doc
--spec set_closed(nkdomain:id(), boolean()) ->
-    ok | {error, term()}.
-
-set_closed(Id, Closed) when is_boolean(Closed) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, set_closed, Closed}).
-
-
-%% @private Called from nkchat_session_obj
-%% Sessions receive notifications for every message, calling
--spec add_session(nkdomain:obj_id(), nkdomain:obj_id(), nkdomain:obj_id(), map()) ->
-    {ok, pid()} | {error, term()}.
-
-add_session(ConvId, MemberId, SessId, Meta) ->
-    nkdomain_obj:sync_op(ConvId, {?MODULE, add_session, MemberId, SessId, Meta, self()}).
-
-
-%% @private
-set_session_active(ConvId, MemberId, SessId, Bool) when is_boolean(Bool)->
-    nkdomain_obj:async_op(ConvId, {?MODULE, set_active, MemberId, SessId, Bool}).
-
-
-%% @private Called from nkchat_session_obj
-%% Sessions receive notifications for every message, calling
-remove_session(ConvId, MemberId, SessId) ->
-    nkdomain_obj:sync_op(ConvId, {?MODULE, remove_session, MemberId, SessId}).
-
-
-%% @private
--spec get_member_info(nkdomain:obj_id(), nkdomain:obj_id()) ->
-    {ok, map()} | {error, term()}.
-
-get_member_info(ConvId, MemberId) ->
-    nkdomain_obj:sync_op(ConvId, {?MODULE, get_member_info, MemberId}).
-
-
-%% @private
-get_info(Pid) ->
-    nkdomain_obj:sync_op(Pid, {?MODULE, get_info}).
-
-
-%% @doc
-find_member_conversations(Domain, MemberId) ->
-    case nkdomain_lib:find(Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
-            Filters = #{
-                type => ?CHAT_CONVERSATION,
-                domain_id => DomainId,
-                << ?CHAT_CONVERSATION/binary, ".members.member_id">> => MemberId
-            },
-            Search2 = #{
-                fields => [<<?CHAT_CONVERSATION/binary, ".type">>],
-                filters => Filters,
-                size => 9999
-            },
-            case nkdomain:search(Search2) of
-                {ok, _N, List, _Meta} ->
-                    List2 = lists:map(
-                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
-                        List),
-                    {ok, List2};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        _ ->
-            {error, domain_unknown}
-    end.
-
-
-%% @doc
-find_conversations_with_members(Domain, MemberIds) ->
-    case nkdomain_lib:find(Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
-            Hash = make_members_hash(MemberIds),
-            Filters = #{
-                type => ?CHAT_CONVERSATION,
-                domain_id => DomainId,
-                << ?CHAT_CONVERSATION/binary, ".members_hash">> => Hash
-            },
-            Search2 = #{
-                fields => [<<?CHAT_CONVERSATION/binary, ".type">>],
-                filters => Filters,
-                size => 9999
-            },
-            case nkdomain:search(Search2) of
-                {ok, N, List, _Meta} ->
-                    List2 = lists:map(
-                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
-                        List),
-                    {ok, N, List2};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        _ ->
-            {error, domain_unknown}
-    end.
-
-
-%% @doc
-get_messages(Id, Spec) ->
-    case nkdomain_lib:load(Id) of
-        #obj_id_ext{obj_id=ConvId} ->
-            Search1 = case Spec of
-                #{start_date:=_, end_date:=_} ->
-                    #{};
-                #{start_date:=_} ->
-                    maps:with([size], Spec);
-                #{end_date:=_} ->
-                    maps:with([size], Spec);
-                _ ->
-                    maps:with([from, size], Spec)
-            end,
-            Filters1 = #{
-                type => ?CHAT_MESSAGE,
-                parent_id => ConvId
-            },
-            CreatedFilterList = case Spec of
-                #{start_date:=Date1, end_date:=Date2, inclusive:=Inc} when Inc == true ->
-                    Order = desc,
-                    ["<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">"];
-                #{start_date:=Date1, end_date:=Date2} ->
-                    Order = desc,
-                    ["<<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">>"];
-                #{start_date:=Date, inclusive:=Inc} when Inc == true ->
-                    Order = asc,
-                    [">=", nklib_util:to_binary(Date)];
-                #{start_date:=Date} ->
-                    Order = asc,
-                    [">", nklib_util:to_binary(Date)];
-                #{end_date:=Date, inclusive:=Inc} when Inc == true ->
-                    Order = desc,
-                    ["<=", nklib_util:to_binary(Date)];
-                #{end_date:=Date} ->
-                    Order = desc,
-                    ["<", nklib_util:to_binary(Date)];
-                _ ->
-                    Order = desc,
-                    []
-            end,
-            Filters2 = case CreatedFilterList of
-                [] ->
-                    Filters1;
-                _ ->
-                    Filters1#{created_time => list_to_binary(CreatedFilterList)}
-            end,
-            Search2 = Search1#{
-                sort => [#{created_time => #{order => Order}}],
-                fields => [created_time, ?CHAT_MESSAGE, created_by],
-                filters => Filters2
-            },
-            case nkdomain:search(Search2) of
-                {ok, N, List, _Meta} ->
-                    List2 = case Order of
-                        asc ->
-                            lists:reverse(List);
-                        desc ->
-                            List
-                    end,
-                    {ok, #{total=>N, data=>List2}};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        {error, object_not_found} ->
-            {error, conversation_not_found};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-
-%% @doc
-get_last_messages(Id) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, get_last_messages}).
-
-
-%% @private Called from nkchat_message_obj
-%% The message object generates an event that inserts into the conversation object
-%% and it sends it as if it were an own message
-%% Is is captured at object_event/2 and sent to the sessions in send_to_sessions/3
-message_event(ConvId, Event) ->
-    Event2 = case Event of
-        {created, Msg} ->
-            {message_created, Msg};
-        {deleted, MsgId} ->
-            {message_deleted, MsgId};
-        {updated, Msg} ->
-            {message_updated, Msg};
-        _ ->
-            ignore
-    end,
-    case Event2 of
-        ignore ->
-            ok;
-        _ ->
-            nkdomain_obj:async_op(ConvId, {send_event, Event2})
-    end.
-
-
-%% @doc Adds info on a token to invite an user
--spec add_invite_op(nkdomain:id(), nkdomain:id(), nkdomain:id(), map()) ->
-    {ok, ConvId::nkdomain:obj_id(), MemberId::nkdomain:obj_id(), UserId::nkdomain:obj_id(), map()} | {error, term()}.
-
-add_invite_op(Conv, UserId, Member, Base) ->
-    nkdomain_obj:sync_op(Conv, {?MODULE, add_invite_op, UserId, Member, Base}).
-
-
-%% @doc
-perform_op(#{?CHAT_CONVERSATION:=#{<<"add_member_op">>:=Op}}) ->
-    #{
-        <<"conversation_id">> := ConvId,
-        <<"member_id">> := MemberId,
-        <<"user_id">> := _UserId
-    } = Op,
-    case add_member(ConvId, MemberId, #{silent => false}) of
-        {ok, _MemberId} ->
-            ok;
-        {error, Error} ->
-            {error, Error}
-    end;
-
-perform_op(_Data) ->
-    {error, operation_token_invalid}.
 
 
 %% =================================================================
@@ -458,7 +62,7 @@ perform_op(_Data) ->
 -record(member, {
     member_id :: nkdomain:obj_id(),
     added_time :: nkdomain:timestamp(),
-    roles :: [member_role()],
+    roles :: [nkchat_conversation:member_role()],
     last_active_time = 0:: nkdomain:timestamp(),
     last_seen_msg_time = 0 :: nkdomain:timestamp(),
     unread_count = -1 :: integer(),
@@ -469,7 +73,7 @@ perform_op(_Data) ->
     name :: binary(),
     type :: binary(),
     members :: [#member{}],
-    status :: status(),
+    status :: nkchat_conversation:status(),
     is_closed :: boolean(),
     total_messages :: integer(),
     messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
@@ -496,53 +100,29 @@ object_admin_info() ->
         type_view_mod => nkchat_conversation_obj_type_view
     }.
 
-
-%% @doc
-object_schema_types() ->
-    #{
-        'ChatConversation' => #{
-            fields => #{
-                conversationType => {no_null, string},
-                conversationStatus => string,
-                conversationIsClosed => {no_null, boolean},
-                conversationInfo => {list, string},
-                conversationMembers => {list, 'ChatConversationMember'}
-            },
-            is_object => true,
-            comment => "A Chat Conversation"
-        },
-        'ChatConversationMember' => #{
-            fields => #{
-                memberId => {no_null, string},
-                addedTime => {no_null, int}
-            }
-        }
-    }.
-
-
-%% @private
-object_es_mapping() ->
-    #{
-        type => #{type => keyword},
-        status => #{type => keyword},
-        is_closed => #{type => boolean},
-        members => #{
-            type => object,
-            dynamic => false,
-            properties => #{
-                member_id => #{type => keyword},
-                added_time => #{type => date},
-                member_roles => #{type => keyword},
-                last_active_time => #{type => date},
-                last_seen_message_time => #{type => date}
-            }
-        },
-        info => #{enabled => false},
-        members_hash => #{type => keyword},
-        obj_name_follows_members => #{type => boolean},
-        push_srv_id => #{type => keyword}
-    }.
-
+%%
+%%%% @doc
+%%object_schema_types() ->
+%%    #{
+%%        'ChatConversation' => #{
+%%            fields => #{
+%%                conversationType => {no_null, string},
+%%                conversationStatus => string,
+%%                conversationIsClosed => {no_null, boolean},
+%%                conversationInfo => {list, string},
+%%                conversationMembers => {list, 'ChatConversationMember'}
+%%            },
+%%            is_object => true,
+%%            comment => "A Chat Conversation"
+%%        },
+%%        'ChatConversationMember' => #{
+%%            fields => #{
+%%                memberId => {no_null, string},
+%%                addedTime => {no_null, int}
+%%            }
+%%        }
+%%    }.
+%%
 
 %% @private
 object_parse(update, _Obj) ->
@@ -571,6 +151,50 @@ object_parse(_Mode, _Obj) ->
         initial_member_ids => {list, binary},
         '__defaults' => #{type => <<"private">>, info => [], members => []}
     }.
+
+%% @private
+object_es_mapping() ->
+    #{
+        type => #{type => keyword},
+        status => #{type => keyword},
+        is_closed => #{type => boolean},
+        members => #{
+            type => object,
+            dynamic => false,
+            properties => #{
+                member_id => #{type => keyword},
+                added_time => #{type => date},
+                member_roles => #{type => keyword},
+                last_active_time => #{type => date},
+                last_seen_message_time => #{type => date}
+            }
+        },
+        info => #{enabled => false},
+        members_hash => #{type => keyword},
+        obj_name_follows_members => #{type => boolean},
+        push_srv_id => #{type => keyword}
+    }.
+
+
+%% @doc
+object_schema(Type) ->
+    nkchat_conversation_obj_schema:object_schema(Type).
+
+
+%% @doc
+object_execute(Field, ObjIdExt, #{?CHAT_CONVERSATION:=Conv}, Args, Ctx) ->
+    nkchat_conversation_obj_schema:object_execute(Field, ObjIdExt, Conv, Args, Ctx).
+
+
+%% @doc
+object_query(QueryName, Params, Ctx) ->
+    nkchat_conversation_obj_schema:object_query(QueryName, Params, Ctx).
+
+
+%% @doc
+object_mutation(MutationName, Params, Ctx) ->
+    nkchat_conversation_obj_schema:object_mutation(MutationName, Params, Ctx).
+
 
 
 %% @doc
@@ -1444,7 +1068,7 @@ get_member_data(UserId, Field) ->
                     maps:get(Field, User, <<>>)
             end;
         {error, Error2} ->
-            lager:warning("nkchat_conversation_obj: could not find user obj ~p: ~p", [UserId, Error2]),
+            lager:warning("nkchat_conversation: could not find user obj ~p: ~p", [UserId, Error2]),
             case Field of
                 all ->
                     #{};
