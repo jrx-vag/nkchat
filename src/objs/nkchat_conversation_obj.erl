@@ -76,6 +76,7 @@
     status :: nkchat_conversation:status(),
     is_closed :: boolean(),
     total_messages :: integer(),
+    sent_invitations = #{} :: #{pid() => nkdomain:obj_id()},
     messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
     obj_name_follows_members :: boolean(),
     push_srv_id :: binary()
@@ -123,12 +124,24 @@ object_parse(_Mode, _Obj) ->
                  }
             },
         info => {list, map},
+        invitations =>
+            {list,
+                #{
+                    token_id => binary,
+                    invited_by => binary,
+                    user_id => binary,
+                    created_time => integer,
+                    expires_time => integer
+                }},
         members_hash => binary,
         obj_name_follows_members => boolean,
         push_srv_id => binary,
         initial_member_ids => {list, binary},
-        '__defaults' => #{type => <<"private">>, info => [], members => []}
+        '__defaults' => #{type => <<"private">>, info => [], members => [], invitations=>[]}
     }.
+
+
+
 
 %% @private
 object_es_mapping() ->
@@ -145,6 +158,17 @@ object_es_mapping() ->
                 member_roles => #{type => keyword},
                 last_active_time => #{type => date},
                 last_seen_message_time => #{type => date}
+            }
+        },
+        invitations => #{
+            type => object,
+            dynamic => false,
+            properties => #{
+                token_id => #{type => keyword},
+                invited_by => #{type => keyword},
+                user_id => #{type => keyword},
+                created_time => #{type => date},
+                expires_time => #{type => date}
             }
         },
         info => #{enabled => false},
@@ -622,6 +646,15 @@ object_event({updated, _Update}, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=
 object_event(_Event, State) ->
     {ok, State}.
 
+
+%% @private
+object_handle_info({'DOWN', _Ref, process, _Pid, _Reason}, State) ->
+
+    State2 = nkdomain_obj_util:do_save_timer(State#obj_state{is_dirty=true}),
+    {noreply, State2};
+
+object_handle_info(_Info, _State) ->
+    continue.
 
 
 
