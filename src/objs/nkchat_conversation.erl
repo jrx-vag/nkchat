@@ -29,7 +29,7 @@
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
--export([add_invite_op/4, perform_op/1]).
+-export([add_invite/2, add_invite_op/4, perform_op/1]).
 -export([message_event/2]).
 -export_type([event/0]).
 
@@ -421,4 +421,12 @@ perform_op(#{?CHAT_CONVERSATION:=#{<<"add_member_op">>:=Op}}) ->
 
 perform_op(_Data) ->
     {error, operation_token_invalid}.
+
+
+%% @doc Adds a new invitation token
+- spec add_invite(nkdomain:id(), nkdomain:id()) ->
+    ok | {error, term()}.
+
+add_invite(Conv, TokenId) ->
+    nkdomain_obj:async_op(Conv, {?MODULE, add_invite, TokenId}).
 
