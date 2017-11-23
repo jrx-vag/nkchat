@@ -442,7 +442,7 @@ object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
                     },
                     case nkdomain_token_obj:create(DomainId, TokenOpts, Op3) of
                         {ok, TokenId, _Pid, _Secs} ->
-                            %nkchat_conversation:invite_created(TokenId),
+                            nkchat_conversation:add_invite(ConvId, TokenId),
                             {ok, TokenId};
                         {error, Error} ->
                             {error, Error}

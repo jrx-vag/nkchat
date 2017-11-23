@@ -31,6 +31,8 @@
          find_conversations_with_members/2, get_last_messages/1]).
 -export([add_invite/2, add_invite_op/4, perform_op/1]).
 -export([message_event/2]).
+-export([sync_op/2, async_op/2]).
+
 -export_type([event/0]).
 
 -include("nkchat.hrl").
@@ -108,7 +110,7 @@ create(Domain, Opts) ->
 
 %% @doc
 add_info(Id, Info) when is_map(Info) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, add_info, Info}).
+    sync_op(Id, {add_info, Info}).
 
 
 %% @doc Members will be changed for roles
@@ -118,7 +120,7 @@ add_info(Id, Info) when is_map(Info) ->
 add_member(Id, Member, Opts) ->
     case nkdomain_lib:find(Member) of
         #obj_id_ext{type= ?DOMAIN_USER, obj_id=MemberId} ->
-            case nkdomain_obj:sync_op(Id, {?MODULE, add_member, MemberId}) of
+            case sync_op(Id, {add_member, MemberId}) of
                 {ok, ObjId} ->
                     Silent = maps:get(silent, Opts, false),
                     case Silent of
@@ -164,7 +166,7 @@ remove_member(Id, Member, Opts) ->
         _ ->
             Member
     end,
-    case nkdomain_obj:sync_op(Id, {?MODULE, remove_member, MemberId}) of
+    case sync_op(Id, {remove_member, MemberId}) of
         ok ->
             Silent = maps:get(silent, Opts, false),
             case Silent of
@@ -196,7 +198,7 @@ remove_member(Id, Member, Opts) ->
     {ConvId::nkdomain:obj_id(), DomainId::nkdomain:obj_id(), Status::status(), IsClosed::boolean()}.
 
 get_status(Id) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, get_status}).
+    sync_op(Id, {get_status}).
 
 
 %% @doc
@@ -204,7 +206,7 @@ get_status(Id) ->
     ok | {error, term()}.
 
 set_status(Id, Status) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, set_status, nklib_util:to_binary(Status)}).
+    sync_op(Id, {set_status, nklib_util:to_binary(Status)}).
 
 
 %% @doc
@@ -212,7 +214,7 @@ set_status(Id, Status) ->
     ok | {error, term()}.
 
 set_closed(Id, Closed) when is_boolean(Closed) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, set_closed, Closed}).
+    sync_op(Id, {set_closed, Closed}).
 
 
 %% @private Called from nkchat_session_obj
@@ -221,18 +223,18 @@ set_closed(Id, Closed) when is_boolean(Closed) ->
     {ok, pid()} | {error, term()}.
 
 add_session(ConvId, MemberId, SessId, Meta) ->
-    nkdomain_obj:sync_op(ConvId, {?MODULE, add_session, MemberId, SessId, Meta, self()}).
+    sync_op(ConvId, {add_session, MemberId, SessId, Meta, self()}).
 
 
 %% @private
 set_session_active(ConvId, MemberId, SessId, Bool) when is_boolean(Bool)->
-    nkdomain_obj:async_op(ConvId, {?MODULE, set_active, MemberId, SessId, Bool}).
+    async_op(ConvId, {set_active, MemberId, SessId, Bool}).
 
 
 %% @private Called from nkchat_session_obj
 %% Sessions receive notifications for every message, calling
 remove_session(ConvId, MemberId, SessId) ->
-    nkdomain_obj:sync_op(ConvId, {?MODULE, remove_session, MemberId, SessId}).
+    sync_op(ConvId, {remove_session, MemberId, SessId}).
 
 
 %% @private
@@ -240,12 +242,12 @@ remove_session(ConvId, MemberId, SessId) ->
     {ok, map()} | {error, term()}.
 
 get_member_info(ConvId, MemberId) ->
-    nkdomain_obj:sync_op(ConvId, {?MODULE, get_member_info, MemberId}).
+    sync_op(ConvId, {get_member_info, MemberId}).
 
 
 %% @private
 get_info(Pid) ->
-    nkdomain_obj:sync_op(Pid, {?MODULE, get_info}).
+    sync_op(Pid, {get_info}).
 
 
 %% @doc
@@ -371,7 +373,7 @@ get_messages(Id, Spec) ->
 
 %% @doc
 get_last_messages(Id) ->
-    nkdomain_obj:sync_op(Id, {?MODULE, get_last_messages}).
+    sync_op(Id, {get_last_messages}).
 
 
 %% @private Called from nkchat_message_obj
@@ -402,7 +404,7 @@ message_event(ConvId, Event) ->
     {ok, ConvId::nkdomain:obj_id(), MemberId::nkdomain:obj_id(), UserId::nkdomain:obj_id(), map()} | {error, term()}.
 
 add_invite_op(Conv, UserId, Member, Base) ->
-    nkdomain_obj:sync_op(Conv, {?MODULE, add_invite_op, UserId, Member, Base}).
+    sync_op(Conv, {add_invite_op, UserId, Member, Base}).
 
 
 %% @doc
@@ -428,5 +430,14 @@ perform_op(_Data) ->
     ok | {error, term()}.
 
 add_invite(Conv, TokenId) ->
-    nkdomain_obj:async_op(Conv, {?MODULE, add_invite, TokenId}).
+    async_op(Conv, {add_invite, TokenId}).
 
+
+%% @private
+sync_op(Conv, Op) ->
+    nkdomain_obj:sync_op(Conv, {nkchat_conversation_obj, Op}).
+
+
+%% @private
+async_op(Conv, Op) ->
+    nkdomain_obj:async_op(Conv, {nkchat_conversation_obj, Op}).

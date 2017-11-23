@@ -33,7 +33,7 @@
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
-         object_event/2, object_link_down/2]).
+         object_event/2, object_link_down/2, object_handle_info/2]).
 -export([object_execute/5, object_schema/1, object_query/3, object_mutation/3]).
 -export([object_admin_info/0]).
 -export([make_members_hash/1]).
@@ -81,6 +81,7 @@
     name :: binary(),
     type :: binary(),
     members :: [#member{}],
+    invitations :: [#invitation{}],
     status :: nkchat_conversation:status(),
     is_closed :: boolean(),
     total_messages :: integer(),
@@ -249,7 +250,7 @@ object_api_cmd(Cmd, Req) ->
 % @private When the object is loaded, we make our cache
 object_init(#obj_state{id=Id, obj=Obj}=State) ->
     #obj_id_ext{obj_id=ConvId} = Id,
-    #{obj_name:=ObjName, ?CHAT_CONVERSATION := #{members:=MemberList, invitations:=InvitationsList, type:=Type}=Conv} = Obj,
+    #{obj_name:=ObjName, ?CHAT_CONVERSATION := #{members:=MemberList, invitations:=InvitationList, type:=Type}=Conv} = Obj,
     Members = lists:map(
         fun(Data) ->
             #{
@@ -267,8 +268,25 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
             }
         end,
         MemberList),
-    State2 = load_initial_invitations(InvitationsList, State),
-    case read_messages(ConvId, State2) of
+    Invitations = lists:map(
+        fun(Data) ->
+            #{
+                token_id := TokenId,
+                invited_by := InvitedBy,
+                user_id := UserId,
+                created_time := CreatedTime,
+                expires_time := ExpiresTime
+            } = Data,
+            #invitation{
+                token_id = TokenId,
+                invited_by = InvitedBy,
+                user_id = UserId,
+                created_time = CreatedTime,
+                expires_time = ExpiresTime
+            }
+        end,
+        InvitationList),
+    case read_messages(ConvId, State) of
         {ok, Total, Msgs} ->
             Msgs2 = lists:map(
                 fun(#{<<"obj_id">>:=MsgId, <<"created_time">>:=Time}=Msg) -> {Time, MsgId, Msg} end,
@@ -279,12 +297,15 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 status = maps:get(status, Conv, <<>>),
                 is_closed = maps:get(is_closed, Conv, false),
                 members = Members,
+                invitations = Invitations,
+                sent_invitations = #{},
                 total_messages = Total,
                 messages = Msgs2,
                 push_srv_id = maps:get(push_srv_id, Conv, <<>>),
                 obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
-            State3 = State2#obj_state{session=Session},
+            State2 = State#obj_state{session=Session},
+            State3 = load_initial_invitations(InvitationList, State2),
             case maps:take(initial_member_ids, Conv) of
                 error ->
                     {ok, State3};
@@ -304,6 +325,7 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
 object_save(#obj_state{obj=Obj, session=Session}=State) ->
     #session{
         members = Members,
+        invitations = Invitations,
         is_closed = IsClosed,
         status = Status
     } = Session,
@@ -325,9 +347,28 @@ object_save(#obj_state{obj=Obj, session=Session}=State) ->
             }
         end,
         Members),
+    InvitationList = lists:map(
+        fun(Invitation) ->
+            #invitation{
+                token_id = TokenId,
+                invited_by = InvitedBy,
+                user_id = UserId,
+                created_time = CreatedTime,
+                expires_time = ExpiresTime
+            } = Invitation,
+            #{
+                token_id => TokenId,
+                invited_by => InvitedBy,
+                user_id => UserId,
+                created_time => CreatedTime,
+                expires_time => ExpiresTime
+            }
+        end,
+        Invitations),
     #{?CHAT_CONVERSATION:=Conv1} = Obj,
     Conv2 = Conv1#{
         members => MemberList,
+        invitations => InvitationList,
         is_closed => IsClosed,
         status => Status
     },
@@ -335,242 +376,17 @@ object_save(#obj_state{obj=Obj, session=Session}=State) ->
     {ok, State#obj_state{obj = Obj2}}.
 
 
-%% @private
-object_sync_op({?MODULE, get_info}, _From, State) ->
-    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj, session=Session} = State,
-    #session{status=Status, is_closed=IsClosed} = Session,
-    #{type:=Type, members:=Members} = ChatConv,
-    Data = #{
-        name => maps:get(name, Obj, <<>>),
-        description => maps:get(description, Obj, <<>>),
-        type => Type,
-        is_closed => IsClosed,
-        status => Status,
-        members => Members,
-        info => maps:get(info, ChatConv, [])
-    },
-    {reply, {ok, Data}, State};
-
-%% @private
-object_sync_op({?MODULE, get_status}, _From, State) ->
-    #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}, session=Session} = State,
-    #session{is_closed=IsClosed, status=Status} = Session,
-    {reply, {ConvId, DomainId, Status, IsClosed}, State};
-
-object_sync_op({?MODULE, set_status, Status}, _From, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{status=Status} ->
-            {reply, ok, State};
-        _ ->
-            Session2 = Session#session{status=Status},
-            State2 = State#obj_state{session=Session2},
-            State3 = do_event({status_updated, Status}, State2),
-            {reply_and_save, ok, State3}
-    end;
-
-object_sync_op({?MODULE, set_closed, Closed}, _From, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{is_closed=Closed} ->
-            {reply, ok, State};
-        _ ->
-            Session2 = Session#session{is_closed=Closed},
-            State2 = State#obj_state{session=Session2},
-            State3 = do_event({is_closed_updated, Closed}, State2),
-            {reply_and_save, ok, State3}
-    end;
-
-object_sync_op({?MODULE, add_info, Info}, _From, State) ->
-    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
-    Infos1 = maps:get(info, ChatConv, []),
-    Infos2 = [Info|Infos1],
-    ChatConv2 = ChatConv#{info=>Infos2},
-    Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, ChatConv2, Obj),
-    State2 = State#obj_state{obj=Obj2},
-    State3 = do_event({added_info, Info}, State2),
-    {reply_and_save, ok, State3};
-
-object_sync_op({?MODULE, is_closed}, _From, State) ->
-    #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}, session=Session} = State,
-    #session{is_closed=IsClosed} = Session,
-    {reply, {IsClosed, ConvId, DomainId}, State};
-
-object_sync_op({?MODULE, set_status, #{is_closed:=Closed}}, _From, #obj_state{session=Session}=State) ->
-    case Session of
-        #session{is_closed=Closed} ->
-            {reply, ok, State};
-        _ ->
-            Session2 = Session#session{is_closed=true},
-            State2 = State#obj_state{session=Session2},
-            {reply_and_save, ok, State2}
-    end;
-
-object_sync_op({?MODULE, set_status, _Status}, _From, State) ->
-    {reply, {error, unknown_status}, State};
-
-
-object_sync_op({?MODULE, add_member, MemberId}, _From, State) ->
-    case do_add_member(MemberId, State) of
-        {ok, State2} ->
-            {reply_and_save, {ok, MemberId}, State2};
-        {error, Error} ->
-            {reply, {error, Error}, State}
-    end;
-
-object_sync_op({?MODULE, remove_member, MemberId}, _From, State) ->
-    case find_member(MemberId, State) of
-        {true, _} ->
-            State2 = do_event({member_removed, MemberId}, State),              % Using original state
-            case do_remove_member(MemberId, State2) of
-                {ok, State3} ->
-                    State4 = do_event({removed_from_conversation, MemberId}, State3),
-                    {reply_and_save, ok, State4};
-                {error, Error} ->
-                    % Can fail if obj_name_follows_members
-                    {reply, {error, Error}, State2}
-            end;
-        false ->
-            {reply, {error, member_not_found}, State}
-    end;
-
-object_sync_op({?MODULE, add_session, MemberId, SessId, Meta, Pid}, _From, State) ->
-    case do_add_session(MemberId, SessId, Meta, Pid, State) of
-        {ok, State2} ->
-            State3 = do_event({session_added, MemberId, SessId}, State2),
-            {reply, {ok, self()}, State3};
-        {error, Error} ->
-            {reply, {error, Error}, State}
-    end;
-
-object_sync_op({?MODULE, remove_session, UserId, SessId}, _From, State) ->
-    case do_remove_session(UserId, SessId, State) of
-        {ok, State2} ->
-            {reply, ok, State2};
-        {error, Error} ->
-            {reply, {error, Error}, State}
-    end;
-
-object_sync_op({?MODULE, get_member_info, MemberId}, _From, State) ->
-    case find_member(MemberId, State) of
-        {true, Member} ->
-            Info = do_get_member_info(Member, State),
-            {reply, {ok, Info}, State};
-        false ->
-            {reply, {error, member_not_found}, State}
-    end;
-
-object_sync_op({?MODULE, get_last_messages}, _From, #obj_state{session=Session}=State) ->
-    #session{total_messages=Total, messages=Messages} = Session,
-    Messages2 = [M || {_Time, _Id, M} <- Messages],
-    {reply, {ok, #{total=>Total, data=>Messages2}}, State};
-
-
-object_sync_op({?MODULE, make_invite_token, UserId, Member, TTL}, From, State) ->
-    #obj_state{id=#obj_id_ext{obj_id=ConvId}, domain_id=DomainId} = State,
-    TTL2 = case TTL of
-        0 -> ?INVITE_TTL;
-        _ -> TTL
-    end,
-    case nkdomain_lib:find(Member) of
-        #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
-            Data = #{
-                <<"op">> => <<"invite_member">>,
-                <<"conversation_id">> => ConvId,
-                <<"member_id">> => MemberId
-            },
-            % Since the parent is ours, it would block
-            spawn_link(
-                fun() ->
-                    TokenOpts = #{
-                        parent_id => ConvId,
-                        created_by => UserId,
-                        subtype => ?CHAT_CONVERSATION,
-                        ttl => TTL2
-                    },
-                    Reply = case nkdomain_token_obj:create(DomainId, TokenOpts, Data) of
-                        {ok, TokenId, _Pid, _Secs} ->
-                            {ok, ConvId, TokenId, TTL2};
-                        {error, Error} ->
-                            {error, Error}
-                    end,
-                    gen_server:reply(From, Reply)
-                end),
-            {noreply, State};
-        _ ->
-            {reply, {error, member_invalid}, State}
-    end;
-
-object_sync_op({?MODULE, add_invite_op, User, Member, Base}, _From, State) ->
-    %% TODO check permission
-    #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
-    case nkdomain_lib:find(Member) of
-        #obj_id_ext{obj_id=MemberId} ->
-            case nkdomain_lib:find(User) of
-                #obj_id_ext{obj_id=UserId} ->
-                    ConvData1 = maps:get(?CHAT_CONVERSATION, Base, #{}),
-                    ConvData2 = ConvData1#{
-                        <<"add_member_op">> => #{
-                            <<"conversation_id">> => ConvId,
-                            <<"member_id">> => MemberId,
-                            <<"user_id">> => UserId,
-                            <<"date">> => nkdomain_util:timestamp()
-                        }
-                    },
-                    Base2 = Base#{?CHAT_CONVERSATION => ConvData2},
-                    {reply, {ok, ConvId, MemberId, UserId, Base2}, State};
-                _ ->
-                    {error, member_invalid}
-            end;
-        _ ->
-            {error, user_invalid}
-    end;
+% @private
+object_sync_op({?MODULE, Op}, From, State) ->
+    sync_op(Op, From, State);
 
 object_sync_op(_Op, _From, _State) ->
     continue.
 
 
 %% @private
-object_async_op({?MODULE, set_active, MemberId, SessId, Bool}, State) ->
-    case find_member(MemberId, State) of
-        {true, #member{sessions=ChatSessions}=Member} ->
-            case lists:keytake(SessId, #chat_session.session_id, ChatSessions) of
-                {value, #chat_session{}=ChatSession, ChatSessions2} ->
-                    ChatSession2 = ChatSession#chat_session{is_active=Bool},
-                    ChatSessions3 = [ChatSession2|ChatSessions2],
-                    Member2 = Member#member{sessions=ChatSessions3},
-                    Member3 = case Bool of
-                        true ->
-                            #obj_state{session=#session{messages=Msgs}} = State,
-                            Time = case Msgs of
-                                [{Time0, _, _}|_] -> Time0;
-                                _ -> 0
-                            end,
-                            do_event_member_sessions(Member2, {counter_updated, 0}, State),
-                            Member2#member{
-                                last_active_time = nkdomain_util:timestamp(),
-                                last_seen_msg_time = Time,
-                                unread_count = 0
-                            };
-                        false ->
-                            Member2
-                    end,
-                    {noreply, set_member(MemberId, Member3, State)};
-                false ->
-                    ?LLOG(warning, "set_active for unknown session", [], State),
-                    {noreply, State}
-            end;
-        false ->
-            ?LLOG(warning, "set_active for unknown member", [], State),
-            {noreply, State}
-    end;
-
-%% @private
-object_async_op({?MODULE, add_invite, TokenId}, _State) ->
-    case nkdomain_token_obj:get_token_data(TokenId) of
-        {ok, #{domain_id := _DomainId, data := TokenData}} ->
-            ok;
-        {error, Error} ->
-            {error, Error}
-    end;
+object_async_op({?MODULE, Op}, State) ->
+    async_op(Op, State);
 
 object_async_op(_Op, _State) ->
     continue.
@@ -667,26 +483,16 @@ object_event(_Event, State) ->
 
 
 %% @private
-object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj, session=#session{sent_invitations=SentInvitations}}=State) ->
-    case maps:is_key(Pid, SentInvitations) of
-        true ->
-            % This invitation doesn't exist anymore
-            TokenId = maps:get(Pid, SentInvitations),
-            case do_remove_invitation(TokenId, State) of
-                {ok, State2} ->
-                    State3 = nkdomain_obj_util:do_save_timer(State2),
-                    % TODO: send new event invitation_removed
-                    {noreply, State3};
-                {error, Error} ->
-                    lager:error("NKLOG ~p:do_remove_invitation: ~p", [?MODULE, Error]),
-                    {noreply, State}
-            end;
-        false ->
-            lager:warning("NKLOG ~p: received DOWN for an unknown PID: ~p", [?MODULE, Pid]),
-            {noreply, State}
-    end;
+object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, #obj_state{session=#session{sent_invitations=SentInvitations}=Session}=State) ->
+    TokenId = maps:get(Pid, SentInvitations),
+    {ok, State2} = do_remove_invitation(TokenId, State),
+    SentInvitations2 = maps:remove(Pid, SentInvitations),
+    State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{session=Session#session{sent_invitations=SentInvitations2}}),
+    %% TODO send invitation removed event
+    {noreply, State3};
 
 object_handle_info(_Info, _State) ->
+    lager:warning("[~p] Unhandled DOWN process ~p~n~p~n", [?MODULE, _Info, _State]),
     continue.
 
 
@@ -694,6 +500,266 @@ object_handle_info(_Info, _State) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+
+%% @private
+sync_op({get_info}, _From, State) ->
+    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj, session=Session} = State,
+    #session{status=Status, is_closed=IsClosed} = Session,
+    #{type:=Type, members:=Members} = ChatConv,
+    Data = #{
+        name => maps:get(name, Obj, <<>>),
+        description => maps:get(description, Obj, <<>>),
+        type => Type,
+        is_closed => IsClosed,
+        status => Status,
+        members => Members,
+        info => maps:get(info, ChatConv, [])
+    },
+    {reply, {ok, Data}, State};
+
+%% @private
+sync_op({get_status}, _From, State) ->
+    #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}, session=Session} = State,
+    #session{is_closed=IsClosed, status=Status} = Session,
+    {reply, {ConvId, DomainId, Status, IsClosed}, State};
+
+sync_op({set_status, Status}, _From, #obj_state{session=Session}=State) ->
+    case Session of
+        #session{status=Status} ->
+            {reply, ok, State};
+        _ ->
+            Session2 = Session#session{status=Status},
+            State2 = State#obj_state{session=Session2},
+            State3 = do_event({status_updated, Status}, State2),
+            {reply_and_save, ok, State3}
+    end;
+
+sync_op({set_closed, Closed}, _From, #obj_state{session=Session}=State) ->
+    case Session of
+        #session{is_closed=Closed} ->
+            {reply, ok, State};
+        _ ->
+            Session2 = Session#session{is_closed=Closed},
+            State2 = State#obj_state{session=Session2},
+            State3 = do_event({is_closed_updated, Closed}, State2),
+            {reply_and_save, ok, State3}
+    end;
+
+sync_op({add_info, Info}, _From, State) ->
+    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
+    Infos1 = maps:get(info, ChatConv, []),
+    Infos2 = [Info|Infos1],
+    ChatConv2 = ChatConv#{info=>Infos2},
+    Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, ChatConv2, Obj),
+    State2 = State#obj_state{obj=Obj2},
+    State3 = do_event({added_info, Info}, State2),
+    {reply_and_save, ok, State3};
+
+sync_op({is_closed}, _From, State) ->
+    #obj_state{domain_id=DomainId, id=#obj_id_ext{obj_id=ConvId}, session=Session} = State,
+    #session{is_closed=IsClosed} = Session,
+    {reply, {IsClosed, ConvId, DomainId}, State};
+
+sync_op({set_status, #{is_closed:=Closed}}, _From, #obj_state{session=Session}=State) ->
+    case Session of
+        #session{is_closed=Closed} ->
+            {reply, ok, State};
+        _ ->
+            Session2 = Session#session{is_closed=true},
+            State2 = State#obj_state{session=Session2},
+            {reply_and_save, ok, State2}
+    end;
+
+sync_op({set_status, _Status}, _From, State) ->
+    {reply, {error, unknown_status}, State};
+
+
+sync_op({add_member, MemberId}, _From, State) ->
+    case do_add_member(MemberId, State) of
+        {ok, State2} ->
+            {reply_and_save, {ok, MemberId}, State2};
+        {error, Error} ->
+            {reply, {error, Error}, State}
+    end;
+
+sync_op({remove_member, MemberId}, _From, State) ->
+    case find_member(MemberId, State) of
+        {true, _} ->
+            State2 = do_event({member_removed, MemberId}, State),              % Using original state
+            case do_remove_member(MemberId, State2) of
+                {ok, State3} ->
+                    State4 = do_event({removed_from_conversation, MemberId}, State3),
+                    {reply_and_save, ok, State4};
+                {error, Error} ->
+                    % Can fail if obj_name_follows_members
+                    {reply, {error, Error}, State2}
+            end;
+        false ->
+            {reply, {error, member_not_found}, State}
+    end;
+
+sync_op({add_session, MemberId, SessId, Meta, Pid}, _From, State) ->
+    case do_add_session(MemberId, SessId, Meta, Pid, State) of
+        {ok, State2} ->
+            State3 = do_event({session_added, MemberId, SessId}, State2),
+            {reply, {ok, self()}, State3};
+        {error, Error} ->
+            {reply, {error, Error}, State}
+    end;
+
+sync_op({remove_session, UserId, SessId}, _From, State) ->
+    case do_remove_session(UserId, SessId, State) of
+        {ok, State2} ->
+            {reply, ok, State2};
+        {error, Error} ->
+            {reply, {error, Error}, State}
+    end;
+
+sync_op({get_member_info, MemberId}, _From, State) ->
+    case find_member(MemberId, State) of
+        {true, Member} ->
+            Info = do_get_member_info(Member, State),
+            {reply, {ok, Info}, State};
+        false ->
+            {reply, {error, member_not_found}, State}
+    end;
+
+sync_op({get_last_messages}, _From, #obj_state{session=Session}=State) ->
+    #session{total_messages=Total, messages=Messages} = Session,
+    Messages2 = [M || {_Time, _Id, M} <- Messages],
+    {reply, {ok, #{total=>Total, data=>Messages2}}, State};
+
+
+sync_op({make_invite_token, UserId, Member, TTL}, From, State) ->
+    #obj_state{id=#obj_id_ext{obj_id=ConvId}, domain_id=DomainId} = State,
+    TTL2 = case TTL of
+        0 -> ?INVITE_TTL;
+        _ -> TTL
+    end,
+    case nkdomain_lib:find(Member) of
+        #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
+            Data = #{
+                <<"op">> => <<"invite_member">>,
+                <<"conversation_id">> => ConvId,
+                <<"member_id">> => MemberId
+            },
+            % Since the parent is ours, it would block
+            spawn_link(
+                fun() ->
+                    TokenOpts = #{
+                        parent_id => ConvId,
+                        created_by => UserId,
+                        subtype => ?CHAT_CONVERSATION,
+                        ttl => TTL2
+                    },
+                    Reply = case nkdomain_token_obj:create(DomainId, TokenOpts, Data) of
+                        {ok, TokenId, _Pid, _Secs} ->
+                            {ok, ConvId, TokenId, TTL2};
+                        {error, Error} ->
+                            {error, Error}
+                    end,
+                    gen_server:reply(From, Reply)
+                end),
+            {noreply, State};
+        _ ->
+            {reply, {error, member_invalid}, State}
+    end;
+
+sync_op({add_invite_op, User, Member, Base}, _From, State) ->
+    %% TODO check permission
+    #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
+    case nkdomain_lib:find(Member) of
+        #obj_id_ext{obj_id=MemberId} ->
+            case nkdomain_lib:find(User) of
+                #obj_id_ext{obj_id=UserId} ->
+                    ConvData1 = maps:get(?CHAT_CONVERSATION, Base, #{}),
+                    ConvData2 = ConvData1#{
+                        <<"add_member_op">> => #{
+                            <<"conversation_id">> => ConvId,
+                            <<"member_id">> => MemberId,
+                            <<"user_id">> => UserId,
+                            <<"date">> => nkdomain_util:timestamp()
+                        }
+                    },
+                    Base2 = Base#{?CHAT_CONVERSATION => ConvData2},
+                    {reply, {ok, ConvId, MemberId, UserId, Base2}, State};
+                _ ->
+                    {error, member_invalid}
+            end;
+        _ ->
+            {error, user_invalid}
+    end;
+
+sync_op(_Op, _From, _State) ->
+    continue.
+
+
+%% @private
+async_op({set_active, MemberId, SessId, Bool}, State) ->
+    case find_member(MemberId, State) of
+        {true, #member{sessions=ChatSessions}=Member} ->
+            case lists:keytake(SessId, #chat_session.session_id, ChatSessions) of
+                {value, #chat_session{}=ChatSession, ChatSessions2} ->
+                    ChatSession2 = ChatSession#chat_session{is_active=Bool},
+                    ChatSessions3 = [ChatSession2|ChatSessions2],
+                    Member2 = Member#member{sessions=ChatSessions3},
+                    Member3 = case Bool of
+                        true ->
+                            #obj_state{session=#session{messages=Msgs}} = State,
+                            Time = case Msgs of
+                                [{Time0, _, _}|_] -> Time0;
+                                _ -> 0
+                            end,
+                            do_event_member_sessions(Member2, {counter_updated, 0}, State),
+                            Member2#member{
+                                last_active_time = nkdomain_util:timestamp(),
+                                last_seen_msg_time = Time,
+                                unread_count = 0
+                            };
+                        false ->
+                            Member2
+                    end,
+                    {noreply, set_member(MemberId, Member3, State)};
+                false ->
+                    ?LLOG(warning, "set_active for unknown session", [], State),
+                    {noreply, State}
+            end;
+        false ->
+            ?LLOG(warning, "set_active for unknown member", [], State),
+            {noreply, State}
+    end;
+
+%% @private
+async_op({add_invite, TokenId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+    case nkdomain_token_obj:get_token_data(TokenId) of
+        {ok, #{domain_id:=_DomainId, data:=TokenData, created_time:=CreatedTime, expires_time:=ExpiresTime}} ->
+            #{
+                ?CHAT_CONVERSATION := #{
+                    <<"add_member_op">> := #{
+                        <<"conversation_id">> := ConvId,
+                        <<"member_id">> := UserId,
+                        <<"user_id">> := InvitedBy
+                    }
+                }
+            }=TokenData,
+            Invite = #invitation{
+                token_id = TokenId,
+                invited_by = InvitedBy,
+                user_id = UserId,
+                created_time = CreatedTime,
+                expires_time = ExpiresTime
+            },
+            State2 = set_invitation(TokenId, Invite, State),
+            {ok, State3} = monitor_token_process(TokenId, State2),
+            %% TODO send invitation added event
+            {noreply, State3};
+        {error, Error} ->
+            {error, Error}
+    end;
+
+async_op(_Op, _State) ->
+    continue.
+
 
 %% @private
 load_initial_members(MemberIds, #obj_state{session=#session{obj_name_follows_members=true}=Session}=State) ->
@@ -715,14 +781,24 @@ load_initial_members(MemberIds, State) ->
 load_initial_invitations([], State) ->
     State;
 
-load_initial_invitations([#invitation{token_id=TokenId}=Invitation|Invitations], #obj_state{session=#session{sent_invitations=SentInvitations}=Session}=State) ->
+load_initial_invitations([#{token_id:=TokenId}|Invitations], State) ->
+    case monitor_token_process(TokenId, State) of
+        {ok, State2} ->
+            load_initial_invitations(Invitations, State2);
+        {error, _Error} ->
+            load_initial_invitations(Invitations, State)
+    end.
+
+
+%% @private
+monitor_token_process(TokenId, #obj_state{session=#session{sent_invitations=SentInvitations}=Session}=State) ->
     case nkdomain:load(TokenId) of
         {ok, ?DOMAIN_TOKEN, ObjId, _Path, Pid} ->
             monitor(process, Pid),
             SentInvitations2 = SentInvitations#{Pid => ObjId},
-            load_initial_invitations(Invitations, State#obj_state{session=Session#session{sent_invitations=SentInvitations2}});
-        {error, _Error} ->
-            load_initial_invitations(Invitations, State)
+            {ok, State#obj_state{session=Session#session{sent_invitations=SentInvitations2}}};
+        {error, Error} ->
+            {error, Error}
     end.
 
 
@@ -894,19 +970,15 @@ find_invitation(InvitationId, State) ->
 
 
 %% @private
-get_invitations(#obj_state{obj=#{?CHAT_CONVERSATION := #{invitations:=InvitationsList}}}) ->
-    InvitationsList.
+get_invitations(#obj_state{session=Session}) ->
+    #session{invitations=Invitations} = Session,
+    Invitations.
 
 
 %% @private
-set_invitations(Invitations, #obj_state{obj=#{?CHAT_CONVERSATION := ChatConv}=Obj}=State) ->
-    ChatConv2 = ChatConv#{
-        invitations => Invitations
-    },
-    Obj2 = Obj#{
-        ?CHAT_CONVERSATION => ChatConv2
-    },
-    State#obj_state{obj=Obj2, is_dirty=true}.
+set_invitations(Invitations, #obj_state{session=Session}=State) ->
+    Session2 = Session#session{invitations=Invitations},
+    State#obj_state{session=Session2, is_dirty=true}.
 
 
 %% @private
