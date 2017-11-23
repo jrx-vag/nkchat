@@ -487,7 +487,8 @@ object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, #obj_state{session=#se
                     State
             end,
             SentInvitations2 = maps:remove(Pid, SentInvitations),
-            State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{session=Session#session{sent_invitations=SentInvitations2}}),
+            #obj_state{session=Session2}=State2,
+            State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{session=Session2#session{sent_invitations=SentInvitations2}}),
             {noreply, State3};
         false ->
             lager:warning("[~p] Received DOWN for an unknown process ~p", [?MODULE, Pid]),
@@ -777,7 +778,7 @@ async_op({add_invite, TokenId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State)
                 expires_time => ExpiresTime
             },
             %lager:warning("Sent invite_added event: ~p~n", [InviteAdded]),
-            {noreply, do_event({invite_added, InviteAdded}, State4)};
+            {noreply, do_event({invite_added, InviteAdded}, nkdomain_obj_util:do_save_timer(State4))};
         {error, Error} ->
             {error, Error}
     end;
@@ -1252,12 +1253,31 @@ make_obj_name(Hash) ->
 %% @private
 do_get_member_info(Member, State) ->
     #obj_state{obj=Obj, session=Session} = State,
-    #session{total_messages=Total, messages=Msgs} = Session,
+    #session{total_messages=Total, messages=Msgs, invitations=SessionInvs} = Session,
     LastMessage = case Msgs of
         [{_, _, Msg}|_] -> Msg;
         [] -> #{}
     end,
     #member{unread_count=Counter} = Member,
+    Invitations = lists:map(
+        fun(Inv) ->
+            #invitation{
+                token_id = TokenId,
+                user_id = UserId,
+                invited_by = InvitedBy,
+                created_time = CreatedTime,
+                expires_time = ExpiresTime
+            }=Inv,
+            #{
+                token_id => TokenId,
+                user_id => UserId,
+                invited_by => InvitedBy,
+                created_time => CreatedTime,
+                expires_time => ExpiresTime
+            }
+        end,
+        SessionInvs
+    ),
     #{
         path:=Path,
         parent_id:=ParentId,
@@ -1266,7 +1286,6 @@ do_get_member_info(Member, State) ->
         ?CHAT_CONVERSATION:=#{
             type:=Type,
             members:=Members,
-            invitations:=Invitations,
             is_closed:=IsClosed,
             info:=Info,
             status:=Status
