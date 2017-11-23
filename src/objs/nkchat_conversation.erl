@@ -29,7 +29,7 @@
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
--export([add_invite/2, add_invite_op/4, perform_op/1]).
+-export([added_invitation/4, add_invite_op/4, perform_op/1]).
 -export([message_event/2]).
 -export([sync_op/2, async_op/2]).
 
@@ -426,11 +426,11 @@ perform_op(_Data) ->
 
 
 %% @doc Adds a new invitation token
-- spec add_invite(nkdomain:id(), nkdomain:id()) ->
+-spec added_invitation(nkdomain:id(), nkdomain:id(), nkdomain:id(), nkdomain:obj_id()) ->
     ok | {error, term()}.
 
-add_invite(Conv, TokenId) ->
-    async_op(Conv, {add_invite, TokenId}).
+added_invitation(Conv, MemberId, UserId, TokenId) ->
+    async_op(Conv, {added_invitation, MemberId, UserId, TokenId}).
 
 
 %% @private

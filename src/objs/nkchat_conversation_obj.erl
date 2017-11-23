@@ -71,6 +71,7 @@
 
 -record(invitation, {
     token_id :: nkdomain:obj_id(),
+    pid :: pid(),
     invited_by :: nkdomain:obj_id(),
     user_id :: nkdomain:obj_id(),
     created_time = 0 :: nkdomain:timestamp(),
@@ -85,7 +86,7 @@
     status :: nkchat_conversation:status(),
     is_closed :: boolean(),
     total_messages :: integer(),
-    sent_invitations = #{} :: #{pid() => nkdomain:obj_id()},
+    % sent_invitations = #{} :: #{pid() => nkdomain:obj_id()},
     messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
     obj_name_follows_members :: boolean(),
     push_srv_id :: binary()
@@ -279,24 +280,22 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 status = maps:get(status, Conv, <<>>),
                 is_closed = maps:get(is_closed, Conv, false),
                 members = Members,
-                invitations = [],
-                sent_invitations = #{},
+                invitations = load_initial_invitations(InvitationList, []),
                 total_messages = Total,
                 messages = Msgs2,
                 push_srv_id = maps:get(push_srv_id, Conv, <<>>),
                 obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
             State2 = State#obj_state{session=Session},
-            State3 = load_initial_invitations(InvitationList, State2),
             case maps:take(initial_member_ids, Conv) of
                 error ->
-                    {ok, State3};
+                    {ok, State2};
                 {MemberIds, Conv2} when Members == [] ->
                     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
-                    State4 = State3#obj_state{obj=Obj2, is_dirty=true},
+                    State3 = State2#obj_state{obj=Obj2, is_dirty=true},
                     % Store generated users
                     nkdomain_obj:async_op(self(), save),
-                    nkdomain_obj_util:do_save_timer(load_initial_members(MemberIds, State4))
+                    nkdomain_obj_util:do_save_timer(load_initial_members(MemberIds, State3))
             end;
         {error, Error} ->
             {error, Error}
@@ -472,26 +471,40 @@ object_event(_Event, State) ->
 
 
 %% @private
-object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, #obj_state{session=#session{sent_invitations=SentInvitations}=Session}=State) ->
-    case maps:is_key(Pid, SentInvitations) of
-        true ->
-            TokenId = maps:get(Pid, SentInvitations),
-            State2 = case find_invitation(TokenId, State) of
-                {true, #invitation{user_id = UserId}} ->
-                    % This invitation was consumed by the user
-                    {ok, NewState} = do_remove_invitation(TokenId, State),
-                    %lager:warning("Sent invite_removed event: ~p~n", [UserId]),
-                    do_event({invite_removed, UserId}, NewState);
-                false ->
-                    % This invitation was replaced with another
-                    State
-            end,
-            SentInvitations2 = maps:remove(Pid, SentInvitations),
-            #obj_state{session=Session2}=State2,
-            State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{session=Session2#session{sent_invitations=SentInvitations2}}),
-            {noreply, State3};
+%%object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, #obj_state{session=#session{sent_invitations=SentInvitations}}=State) ->
+%%    case maps:is_key(Pid, SentInvitations) of
+%%        true ->
+%%            TokenId = maps:get(Pid, SentInvitations),
+%%            State2 = case find_invitation(TokenId, State) of
+%%                {true, #invitation{user_id = UserId}} ->
+%%                    % This invitation was consumed by the user
+%%                    {ok, NewState} = do_remove_invitation(TokenId, State),
+%%                    %lager:warning("Sent invite_removed event: ~p~n", [UserId]),
+%%                    do_event({invite_removed, UserId}, NewState);
+%%                false ->
+%%                    % This invitation was replaced with another
+%%                    State
+%%            end,
+%%            SentInvitations2 = maps:remove(Pid, SentInvitations),
+%%            #obj_state{session=Session2}=State2,
+%%            State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{session=Session2#session{sent_invitations=SentInvitations2}}),
+%%            {noreply, State3};
+%%        false ->
+%%            lager:warning("[~p] Received DOWN for an unknown process ~p", [?MODULE, Pid]),
+%%            continue
+%%    end;
+
+object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, #obj_state{session=Session}=State) ->
+    #session{invitations=Invitations} = Session,
+    case lists:keytake(Pid, #invitation.pid, Invitations) of
+        {value, #invitation{user_id=UserId}, Invitations2} ->
+            Session2 = Session#session{invitations=Invitations2},
+            State2 = State#obj_state{session=Session2, is_dirty=true},
+            State3 = do_event({invite_removed, UserId}, State2),
+            State4 = nkdomain_obj_util:do_save_timer(State3),
+            {noreply, State4};
         false ->
-            lager:warning("[~p] Received DOWN for an unknown process ~p", [?MODULE, Pid]),
+            % lager:warning("[~p] Received DOWN for an unknown process ~p", [?MODULE, Pid]),
             continue
     end;
 
@@ -738,20 +751,58 @@ async_op({set_active, MemberId, SessId, Bool}, State) ->
     end;
 
 %% @private
-async_op({add_invite, TokenId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+%%async_op({add_invite, TokenId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+%%    case nkdomain_token_obj:get_token_data(TokenId) of
+%%        {ok, #{domain_id:=_DomainId, data:=TokenData, created_time:=CreatedTime, expires_time:=ExpiresTime}} ->
+%%            #{
+%%                ?CHAT_CONVERSATION := #{
+%%                    <<"add_member_op">> := #{
+%%                        <<"conversation_id">> := ConvId,
+%%                        <<"member_id">> := UserId,
+%%                        <<"user_id">> := InvitedBy
+%%                    }
+%%                }
+%%            }=TokenData,
+%%            Invite = #invitation{
+%%                token_id = TokenId,
+%%                invited_by = InvitedBy,
+%%                user_id = UserId,
+%%                created_time = CreatedTime,
+%%                expires_time = ExpiresTime
+%%            },
+%%            State2 = case find_invitation_by_user_id(UserId, State) of
+%%                {true, #invitation{token_id=PreviousTokenId}} ->
+%%                    case nkdomain_token_obj:consume_token(PreviousTokenId, rejected) of
+%%                        {ok, _Data} ->
+%%                            %lager:warning("Sent invite_removed event: User ~p~n", [UserId]),
+%%                            do_event({invite_removed, UserId}, State);
+%%                        {error, _Error} ->
+%%                            State
+%%                    end;
+%%                false ->
+%%                    State
+%%            end,
+%%            State3 = set_invitation_by_user_id(UserId, Invite, State2),
+%%            {ok, State4} = monitor_token_process(TokenId, State3),
+%%            InviteAdded = #{
+%%                invited_by => InvitedBy,
+%%                user_id => UserId,
+%%                created_time => CreatedTime,
+%%                expires_time => ExpiresTime
+%%            },
+%%            %lager:warning("Sent invite_added event: ~p~n", [InviteAdded]),
+%%            {noreply, do_event({invite_added, InviteAdded}, nkdomain_obj_util:do_save_timer(State4))};
+%%        {error, Error} ->
+%%            {error, Error}
+%%    end;
+
+async_op({added_invitation, InvitedBy, UserId, TokenId}, State) ->
     case nkdomain_token_obj:get_token_data(TokenId) of
-        {ok, #{domain_id:=_DomainId, data:=TokenData, created_time:=CreatedTime, expires_time:=ExpiresTime}} ->
-            #{
-                ?CHAT_CONVERSATION := #{
-                    <<"add_member_op">> := #{
-                        <<"conversation_id">> := ConvId,
-                        <<"member_id">> := UserId,
-                        <<"user_id">> := InvitedBy
-                    }
-                }
-            }=TokenData,
+        {ok, #{pid:=Pid, created_time:=CreatedTime, expires_time:=ExpiresTime}} ->
+            monitor(process, Pid),
             Invite = #invitation{
                 token_id = TokenId,
+                pid = Pid,
                 invited_by = InvitedBy,
                 user_id = UserId,
                 created_time = CreatedTime,
@@ -769,8 +820,7 @@ async_op({add_invite, TokenId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State)
                 false ->
                     State
             end,
-            State3 = set_invitation_by_user_id(UserId, Invite, State),
-            {ok, State4} = monitor_token_process(TokenId, State3),
+            State3 = set_invitation_by_user_id(UserId, Invite, State2),
             InviteAdded = #{
                 invited_by => InvitedBy,
                 user_id => UserId,
@@ -778,7 +828,8 @@ async_op({add_invite, TokenId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State)
                 expires_time => ExpiresTime
             },
             %lager:warning("Sent invite_added event: ~p~n", [InviteAdded]),
-            {noreply, do_event({invite_added, InviteAdded}, nkdomain_obj_util:do_save_timer(State4))};
+            State4 = do_event({invite_added, InviteAdded}, State3),
+            {noreply, nkdomain_obj_util:do_save_timer(State4)};
         {error, Error} ->
             {error, Error}
     end;
@@ -803,53 +854,86 @@ load_initial_members(MemberIds, State) ->
     do_add_members(MemberIds, State).
 
 
-%% @private
-load_initial_invitations(Invitations, State) ->
-    load_initial_invitations(Invitations, [], State).
+%%%% @private
+%%load_initial_invitations(Invitations, State) ->
+%%    load_initial_invitations(Invitations, [], State).
+%%
+%%load_initial_invitations([], ReversedInvs, State) ->
+%%    Invs = lists:reverse(ReversedInvs),
+%%    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj, session=Session}=State,
+%%    ChatConv2 = ChatConv#{invitations=>Invs},
+%%    RevInvs = lists:map(
+%%        fun(Data) ->
+%%            #{
+%%                token_id := TokenId,
+%%                invited_by := InvitedBy,
+%%                user_id := UserId,
+%%                created_time := CreatedTime,
+%%                expires_time := ExpiresTime
+%%            } = Data,
+%%            #invitation{
+%%                token_id = TokenId,
+%%                invited_by = InvitedBy,
+%%                user_id = UserId,
+%%                created_time = CreatedTime,
+%%                expires_time = ExpiresTime
+%%            }
+%%        end,
+%%        Invs),
+%%    State#obj_state{obj=Obj#{?CHAT_CONVERSATION=>ChatConv2}, session=Session#session{invitations=RevInvs}};
+%%
+%%load_initial_invitations([#{token_id:=TokenId}=Invitation|Invitations], CheckedInvs, State) ->
+%%    case monitor_token_process(TokenId, State) of
+%%        {ok, State2} ->
+%%            load_initial_invitations(Invitations, [Invitation|CheckedInvs], State2);
+%%        {error, _Error} ->
+%%            load_initial_invitations(Invitations, CheckedInvs, State#obj_state{is_dirty=true})
+%%    end.
 
-load_initial_invitations([], ReversedInvs, State) ->
-    Invs = lists:reverse(ReversedInvs),
-    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj, session=Session}=State,
-    ChatConv2 = ChatConv#{invitations=>Invs},
-    RevInvs = lists:map(
-        fun(Data) ->
-            #{
-                token_id := TokenId,
-                invited_by := InvitedBy,
-                user_id := UserId,
-                created_time := CreatedTime,
-                expires_time := ExpiresTime
-            } = Data,
-            #invitation{
+
+
+%% @private
+load_initial_invitations([], Acc) ->
+    Acc;
+
+load_initial_invitations([Invitation1|Rest], Acc) ->
+    #{
+        token_id := TokenId,
+        invited_by := InvitedBy,
+        user_id := UserId,
+        created_time := CreatedTime,
+        expires_time := ExpiresTime
+    } = Invitation1,
+    case nkdomain:load(TokenId) of
+        {ok, ?DOMAIN_TOKEN, _ObjId, _Path, Pid} ->
+            monitor(process, Pid),
+            Invitation2 = #invitation{
                 token_id = TokenId,
+                pid = Pid,
                 invited_by = InvitedBy,
                 user_id = UserId,
                 created_time = CreatedTime,
                 expires_time = ExpiresTime
-            }
-        end,
-        Invs),
-    State#obj_state{obj=Obj#{?CHAT_CONVERSATION=>ChatConv2}, session=Session#session{invitations=RevInvs}};
-
-load_initial_invitations([#{token_id:=TokenId}=Invitation|Invitations], CheckedInvs, State) ->
-    case monitor_token_process(TokenId, State) of
-        {ok, State2} ->
-            load_initial_invitations(Invitations, [Invitation|CheckedInvs], State2);
-        {error, _Error} ->
-            load_initial_invitations(Invitations, CheckedInvs, State#obj_state{is_dirty=true})
+            },
+            load_initial_invitations(Rest, [Invitation2|Acc]);
+        {error, _} ->
+            load_initial_invitations(Rest, Acc)
     end.
 
 
-%% @private
-monitor_token_process(TokenId, #obj_state{session=#session{sent_invitations=SentInvitations}=Session}=State) ->
-    case nkdomain:load(TokenId) of
-        {ok, ?DOMAIN_TOKEN, ObjId, _Path, Pid} ->
-            monitor(process, Pid),
-            SentInvitations2 = SentInvitations#{Pid => ObjId},
-            {ok, State#obj_state{session=Session#session{sent_invitations=SentInvitations2}}};
-        {error, Error} ->
-            {error, Error}
-    end.
+
+%%%% @private
+%%monitor_token_process(TokenId, #obj_state{session=#session{sent_invitations=SentInvitations}=Session}=State) ->
+%%    case nkdomain:load(TokenId) of
+%%        {ok, ?DOMAIN_TOKEN, ObjId, _Path, Pid} ->
+%%            monitor(process, Pid),
+%%            SentInvitations2 = SentInvitations#{Pid => ObjId},
+%%            {ok, State#obj_state{session=Session#session{sent_invitations=SentInvitations2}}};
+%%        {error, Error} ->
+%%            {error, Error}
+%%    end.
+
+
 
 
 %% @private
@@ -904,15 +988,15 @@ do_remove_member(MemberId, State) ->
     end.
 
 
-%% @private
-do_remove_invitation(InvitationId, State) ->
-    case find_invitation(InvitationId, State) of
-        {true, _Invitation} ->
-            State2 = rm_invitation(InvitationId, State),
-            {ok, State2};
-        false ->
-            {error, object_not_found}
-    end.
+%%%% @private
+%%do_remove_invitation(InvitationId, State) ->
+%%    case find_invitation(InvitationId, State) of
+%%        {true, _Invitation} ->
+%%            State2 = rm_invitation(InvitationId, State),
+%%            {ok, State2};
+%%        false ->
+%%            {error, object_not_found}
+%%    end.
 
 
 %% @private
@@ -1008,15 +1092,15 @@ rm_member(MemberId, State) ->
     set_members(Members2, State).
 
 
-%% @private
-find_invitation(InvitationId, State) ->
-    Invitations = get_invitations(State),
-    case lists:keyfind(InvitationId, #invitation.token_id, Invitations) of
-        #invitation{}=Invitation ->
-            {true, Invitation};
-        false ->
-            false
-    end.    
+%%%% @private
+%%find_invitation(InvitationId, State) ->
+%%    Invitations = get_invitations(State),
+%%    case lists:keyfind(InvitationId, #invitation.token_id, Invitations) of
+%%        #invitation{}=Invitation ->
+%%            {true, Invitation};
+%%        false ->
+%%            false
+%%    end.
 
 
 %% @private
@@ -1042,11 +1126,11 @@ set_invitations(Invitations, #obj_state{session=Session}=State) ->
     State#obj_state{session=Session2, is_dirty=true}.
 
 
-%% @private
-set_invitation(InvitationId, Invitation, State) ->
-    Invitations1 = get_invitations(State),
-    Invitations2 = lists:keystore(InvitationId, #invitation.token_id, Invitations1, Invitation),
-    set_invitations(Invitations2, State).
+%%%% @private
+%%set_invitation(InvitationId, Invitation, State) ->
+%%    Invitations1 = get_invitations(State),
+%%    Invitations2 = lists:keystore(InvitationId, #invitation.token_id, Invitations1, Invitation),
+%%    set_invitations(Invitations2, State).
 
 
 %% @private
@@ -1056,11 +1140,11 @@ set_invitation_by_user_id(UserId, Invitation, State) ->
     set_invitations(Invitations2, State).
     
 
-%% @private
-rm_invitation(InvitationId, State) ->
-    Invitations1 = get_invitations(State),
-    Invitations2 = lists:keydelete(InvitationId, #invitation.token_id, Invitations1),
-    set_invitations(Invitations2, State).
+%%%% @private
+%%rm_invitation(InvitationId, State) ->
+%%    Invitations1 = get_invitations(State),
+%%    Invitations2 = lists:keydelete(InvitationId, #invitation.token_id, Invitations1),
+%%    set_invitations(Invitations2, State).
 
 
 
