@@ -484,15 +484,21 @@ object_event(_Event, State) ->
 
 %% @private
 object_handle_info({'DOWN', _Ref, process, Pid, _Reason}, #obj_state{session=#session{sent_invitations=SentInvitations}=Session}=State) ->
-    TokenId = maps:get(Pid, SentInvitations),
-    {ok, State2} = do_remove_invitation(TokenId, State),
-    SentInvitations2 = maps:remove(Pid, SentInvitations),
-    State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{session=Session#session{sent_invitations=SentInvitations2}}),
-    %% TODO send invitation removed event
-    {noreply, State3};
+    case maps:is_key(Pid, SentInvitations) of
+        true ->
+            TokenId = maps:get(Pid, SentInvitations),
+            {ok, State2} = do_remove_invitation(TokenId, State),
+            SentInvitations2 = maps:remove(Pid, SentInvitations),
+            State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{session=Session#session{sent_invitations=SentInvitations2}}),
+            %% TODO send invitation removed event
+            lager:warning("TODO: Send invite_removed event: ~p~n", [TokenId]),
+            {noreply, State3};
+        false ->
+            lager:warning("[~p] Received DOWN for an unknown process ~p", [?MODULE, Pid]),
+            continue
+    end;
 
 object_handle_info(_Info, _State) ->
-    lager:warning("[~p] Unhandled DOWN process ~p~n~p~n", [?MODULE, _Info, _State]),
     continue.
 
 
@@ -752,6 +758,7 @@ async_op({add_invite, TokenId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State)
             State2 = set_invitation(TokenId, Invite, State),
             {ok, State3} = monitor_token_process(TokenId, State2),
             %% TODO send invitation added event
+            lager:warning("TODO: Send invite_added event: ~p~n", [TokenId]),
             {noreply, State3};
         {error, Error} ->
             {error, Error}
