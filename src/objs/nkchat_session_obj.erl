@@ -58,6 +58,8 @@
     {conversation_added, ConvId::nkdomain:obj_id()} |
     {conversation_removed, ConvId::nkdomain:obj_id()} |
     {conversation_updated, nkdomain:obj()} |
+    {invite_added, ConvId::nkdomain:obj_id(), map()} |
+    {invite_removed, ConvId::nkdomain:obj_id(), UserId::nkdomain:obj_id()} |
     {member_added, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
     {member_removed, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
     {message_created, nkdomain:obj()} |
@@ -578,6 +580,12 @@ do_rm_conv(ConvId, State) ->
 
 
 %% @private
+do_conversation_event({invite_added, InviteData}, ConvId, State) ->
+    {noreply, do_event({invite_added, ConvId, InviteData}, State)};
+
+do_conversation_event({invite_removed, UserId}, ConvId, State) ->
+    {noreply, do_event({invite_removed, ConvId, UserId}, State)};
+
 do_conversation_event({member_added, MemberId}, ConvId, State) ->
     {noreply, do_event({member_added, ConvId, MemberId}, State)};
 

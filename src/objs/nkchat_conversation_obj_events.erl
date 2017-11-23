@@ -32,6 +32,12 @@
 
 
 %% @private
+event({invite_added, InviteData}, State) ->
+    {event, {invite_added, InviteData}, State};
+
+event({invite_removed, UserId}, State) ->
+    {event, {invite_removed, #{user_id=>UserId}}, State};
+
 event({message_created, #{obj_id:=MsgId}}, State) ->
     {event, {message_created, #{message_id=>MsgId}}, State};
 

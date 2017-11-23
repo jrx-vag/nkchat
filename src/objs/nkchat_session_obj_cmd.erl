@@ -35,6 +35,8 @@
     <<"conversation_added">>,
     <<"conversation_removed">>,
     <<"conversation_updated">>,
+    <<"invite_added">>,
+    <<"invite_removed">>,
     <<"member_added">>,
     <<"member_removed">>,
     <<"message_created">>,
@@ -174,8 +176,8 @@ cmd(<<"send_invitation">>, #nkreq{data=#{member_id:=MemberId, conversation_id:=C
         {ok, Id} ->
             TTL = maps:get(ttl, Data, 0),
             case nkchat_session_obj:send_invitation(Id, MemberId, ConvId, TTL) of
-                {ok, TokenId} ->
-                    {ok, #{<<"token">> => TokenId}};
+                {ok, _TokenId} ->
+                    ok;
                 {error, Error} ->
                     {error, Error}
             end;

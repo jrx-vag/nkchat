@@ -43,6 +43,12 @@ event({conversation_updated, ConvId, Conv}, State) ->
     Conv2 = Conv#{conversation_id => ConvId},
     {event, {conversation_updated, Conv2}, State};
 
+event({invite_added, ConvId, InviteData}, State) ->
+    {event, {invite_added, InviteData#{conversation_id=>ConvId}}, State};
+
+event({invite_removed, ConvId, UserId}, State) ->
+    {event, {invite_removed, #{conversation_id=>ConvId, user_id=>UserId}}, State};
+
 event({member_added, ConvId, MemberId}, State) ->
     {event, {member_added, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
