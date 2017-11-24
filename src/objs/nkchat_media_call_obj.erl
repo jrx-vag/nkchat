@@ -302,7 +302,7 @@ find_calls() ->
     nkdomain:search(#{filters=>#{type=>?MEDIA_CALL}}).
 
 remove_calls() ->
-    nkdomain:delete_all_childs_type("/", ?MEDIA_CALL).
+    nkdomain:delete_path_type("/", ?MEDIA_CALL).
 
 
 %% =================================================================
