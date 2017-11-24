@@ -1346,14 +1346,12 @@ do_get_member_info(Member, State) ->
     Invitations = lists:map(
         fun(Inv) ->
             #invitation{
-                token_id = TokenId,
                 user_id = UserId,
                 invited_by = InvitedBy,
                 created_time = CreatedTime,
                 expires_time = ExpiresTime
             }=Inv,
             #{
-                token_id => TokenId,
                 user_id => UserId,
                 invited_by => InvitedBy,
                 created_time => CreatedTime,
