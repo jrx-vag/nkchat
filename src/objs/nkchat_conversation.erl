@@ -285,8 +285,8 @@ find_conversations_with_members(Domain, MemberIds) ->
 
 get_messages(Id, Opts) ->
     Order = asc,
-    case nkdomain_db:search(?CHAT_CONVERSATION, {conversations_with_members, Id, Opts}) of
-        {ok, N, List, _Meta} ->
+    case nkdomain_db:search(?CHAT_CONVERSATION, {conversation_messages, Id, Opts}) of
+        {ok, N, List} ->
             List2 = case Order of
                 asc ->
                     lists:reverse(List);
