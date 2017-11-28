@@ -30,7 +30,7 @@
 -behavior(nkdomain_obj).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1,
+-export([object_info/0, object_es_mapping/0, object_db_get_filter/2, object_parse/2, object_create/1,
          object_api_syntax/2, object_api_cmd/2, object_send_event/2,
          object_init/1, object_save/1, object_sync_op/3, object_async_op/2,
          object_event/2, object_link_down/2, object_handle_info/2]).
@@ -208,6 +208,80 @@ object_mutation(MutationName, Params, Ctx) ->
     nkchat_conversation_obj_schema:object_mutation(MutationName, Params, Ctx).
 
 
+%% @doc
+object_db_get_filter(nkelastic, {member_conversations, Domain, Member}) ->
+    case nkdomain_store_es_util:get_obj_id(Domain) of
+        {ok, DomainId} ->
+            case nkdomain_store_es_util:get_obj_id(Member) of
+                {ok, MemberId} ->
+                    Filters = [
+                        {type, eq, ?CHAT_CONVERSATION},
+                        {domain_id, eq, DomainId},
+                        {[?CHAT_CONVERSATION, ".members.member_id"], eq, MemberId}
+                    ],
+                    {ok, {Filters, #{size=>9999, fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])]}}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end;
+
+object_db_get_filter(nkelastic, {conversations_with_members, Domain, MemberIds}) ->
+    case nkdomain_store_es_util:get_obj_id(Domain) of
+        {ok, DomainId} ->
+            Hash = nkchat_conversation_obj:make_members_hash(MemberIds),
+            Filters = [
+                {type, eq, ?CHAT_CONVERSATION},
+                {domain_id, eq, DomainId},
+                {[?CHAT_CONVERSATION, ".members_hash"], eq, Hash}
+            ],
+            {ok, {Filters, #{size=>9999, fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])]}}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
+object_db_get_filter(nkelastic, {conversation_messages, Conv, Opts}) ->
+    case nkdomain_store_es_util:get_obj_id(Conv) of
+        {ok, ConvId} ->
+            {Order, Filters1} = case Opts of
+                #{start_date:=Date1, end_date:=Date2, inclusive:=true} ->
+                    {desc, [{created_time, gte, Date1}, {created_time, lte, Date2}]};
+                #{start_date:=Date1, end_date:=Date2} ->
+                    {desc, [{created_time, gt, Date1}, {created_time, lt, Date2}]};
+                #{start_date:=Date, inclusive:=true} ->
+                    {asc, [{created_time, gte, Date}]};
+                #{start_date:=Date} ->
+                    {asc, [{created_time, gt, Date}]};
+                #{end_date:=Date, inclusive:=true} ->
+                    {desc, [{created_time, lte, Date}]};
+                #{end_date:=Date} ->
+                    {desc, [{created_time, lt, Date}]};
+                _ ->
+                    {desc, []}
+            end,
+            Filters2 = [
+                {type, eq, ?CHAT_MESSAGE},
+                {parent_id, eq, ConvId}
+                | Filters1
+            ],
+            Opts2 = maps:with([from, size], Opts),
+            Opts3 = Opts2#{
+                sort => [#{created_time => #{order => Order}}],
+                fields => [created_time, created_by, ?CHAT_MESSAGE]
+            },
+            {ok, {Filters2, Opts3}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
+object_db_get_filter(nkelastic, QueryType) ->
+    {error, {unknown_query, QueryType}};
+
+object_db_get_filter(Backend, _) ->
+    {error, {unknown_backend, Backend}}.
+
+
 
 %% @doc
 object_create(#{?CHAT_CONVERSATION:=Conv} = Obj) ->
@@ -272,7 +346,9 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
     case read_messages(ConvId, State) of
         {ok, Total, Msgs} ->
             Msgs2 = lists:map(
-                fun(#{<<"obj_id">>:=MsgId, <<"created_time">>:=Time}=Msg) -> {Time, MsgId, Msg} end,
+                fun(#{<<"obj_id">>:=MsgId, <<"created_time">>:=Time}=Msg) ->
+                    {Time, MsgId, Msg}
+                end,
                 Msgs),
             Session = #session{
                 name = maps:get(name, Obj, ObjName),
@@ -652,7 +728,7 @@ sync_op({make_invite_token, UserId, Member, TTL}, From, State) ->
         0 -> ?INVITE_TTL;
         _ -> TTL
     end,
-    case nkdomain_lib:find(Member) of
+    case nkdomain_db:find(Member) of
         #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
             Data = #{
                 <<"op">> => <<"invite_member">>,
@@ -684,11 +760,11 @@ sync_op({make_invite_token, UserId, Member, TTL}, From, State) ->
 sync_op({add_invite_op, User, Member, Base}, _From, State) ->
     %% TODO check permission
     #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
-    case nkdomain_lib:find(Member) of
+    case nkdomain_db:find(Member) of
         #obj_id_ext{obj_id=MemberId} ->
             case find_member(MemberId, State) of
                 false ->
-                    case nkdomain_lib:find(User) of
+                    case nkdomain_db:find(User) of
                         #obj_id_ext{obj_id=UserId} ->
                             ConvData1 = maps:get(?CHAT_CONVERSATION, Base, #{}),
                             ConvData2 = ConvData1#{
@@ -1264,22 +1340,12 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
     do_new_msg_event(Rest, Time, Msg, Acc2, Opts, State).
 
 
-
 %% @private
 read_messages(ConvId, _State) ->
-    Search = #{
-        filters => #{
-            type => ?CHAT_MESSAGE,
-            parent_id => ConvId
-        },
-        fields => [created_time, created_by, updated_time, ?CHAT_MESSAGE],
-        sort => <<"desc:created_time">>,
-        size => ?MSG_CACHE_SIZE
-    },
-    case nkdomain:search(Search) of
-        {ok, 0, [], _Meta} ->
+    case nkdomain_db:search(?CHAT_CONVERSATION, {conversation_messages, ConvId, #{size=>?MSG_CACHE_SIZE}}) of
+        {ok, 0, []} ->
             {ok, 0, []};
-        {ok, Total, Objs, _Meta} ->
+        {ok, Total, Objs} ->
             {ok, Total, Objs};
         {error, Error} ->
             {error, Error}
@@ -1289,16 +1355,8 @@ read_messages(ConvId, _State) ->
 %% @private
 find_unread(Time, #obj_state{id=Id}=State) ->
     #obj_id_ext{obj_id=ConvId} = Id,
-    Search = #{
-        filters => #{
-            type => ?CHAT_MESSAGE,
-            parent_id => ConvId,
-            created_time => <<">", (integer_to_binary(Time))/binary>>
-        },
-        size => 0
-    },
-    case nkdomain:search(Search) of
-        {ok, Num, [], _Meta} ->
+    case nkdomain_db:search(?CHAT_CONVERSATION, {conversation_messages, ConvId, #{size=>0, start_date=>Time}}) of
+        {ok, Num, []} ->
             Num;
         {error, Error} ->
             ?LLOG(error, "error reading unread count: ~p", [Error], State),
@@ -1402,7 +1460,7 @@ check_members([], Acc) ->
     {ok, Acc};
 
 check_members([Member|Rest], Acc) ->
-    case nkdomain_lib:find(Member) of
+    case nkdomain_db:find(Member) of
         #obj_id_ext{type=?DOMAIN_USER, obj_id=MemberId} ->
             check_members(Rest, [MemberId|Acc]);
         _ ->

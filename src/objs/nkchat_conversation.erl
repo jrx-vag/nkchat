@@ -118,7 +118,7 @@ add_info(Id, Info) when is_map(Info) ->
     {ok, nkdomain:obj_id()} | {error, term()}.
 
 add_member(Id, Member, Opts) ->
-    case nkdomain_lib:find(Member) of
+    case nkdomain_db:find(Member) of
         #obj_id_ext{type= ?DOMAIN_USER, obj_id=MemberId} ->
             case sync_op(Id, {add_member, MemberId}) of
                 {ok, ObjId} ->
@@ -160,7 +160,7 @@ add_member(Id, Member, Opts) ->
     ok | {error, term()}.
 
 remove_member(Id, Member, Opts) ->
-    MemberId = case nkdomain_lib:find(Member) of
+    MemberId = case nkdomain_db:find(Member) of
         #obj_id_ext{obj_id=ObjId} ->
             ObjId;
         _ ->
@@ -252,120 +252,48 @@ get_info(Pid) ->
 
 %% @doc
 find_member_conversations(Domain, MemberId) ->
-    case nkdomain_lib:find(Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
-            Filters = #{
-                type => ?CHAT_CONVERSATION,
-                domain_id => DomainId,
-                << ?CHAT_CONVERSATION/binary, ".members.member_id">> => MemberId
-            },
-            Search2 = #{
-                fields => [<<?CHAT_CONVERSATION/binary, ".type">>],
-                filters => Filters,
-                size => 9999
-            },
-            case nkdomain:search(Search2) of
-                {ok, _N, List, _Meta} ->
-                    List2 = lists:map(
-                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
-                        List),
-                    {ok, List2};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        _ ->
-            {error, domain_unknown}
+    case nkdomain_db:search(?CHAT_CONVERSATION, {member_conversations, Domain, MemberId}) of
+        {ok, _N, List} ->
+            List2 = lists:map(
+                fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
+                List),
+            {ok, List2};
+        {error, Error} ->
+            {error, Error}
     end.
 
 
 %% @doc
 find_conversations_with_members(Domain, MemberIds) ->
-    case nkdomain_lib:find(Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
-            Hash = nkchat_conversation_obj:make_members_hash(MemberIds),
-            Filters = #{
-                type => ?CHAT_CONVERSATION,
-                domain_id => DomainId,
-                << ?CHAT_CONVERSATION/binary, ".members_hash">> => Hash
-            },
-            Search2 = #{
-                fields => [<<?CHAT_CONVERSATION/binary, ".type">>],
-                filters => Filters,
-                size => 9999
-            },
-            case nkdomain:search(Search2) of
-                {ok, N, List, _Meta} ->
-                    List2 = lists:map(
-                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
-                        List),
-                    {ok, N, List2};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        _ ->
-            {error, domain_unknown}
+    case nkdomain_db:search(?CHAT_CONVERSATION, {conversations_with_members, Domain, MemberIds}) of
+        {ok, N, List, _Meta} ->
+            List2 = lists:map(
+                fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
+                List),
+            {ok, N, List2};
+        {error, Error} ->
+            {error, Error}
     end.
 
 
 %% @doc
-get_messages(Id, Spec) ->
-    case nkdomain_lib:load(Id) of
-        #obj_id_ext{obj_id=ConvId} ->
-            Search1 = case Spec of
-                #{start_date:=_, end_date:=_} ->
-                    #{};
-                #{start_date:=_} ->
-                    maps:with([size], Spec);
-                #{end_date:=_} ->
-                    maps:with([size], Spec);
-                _ ->
-                    maps:with([from, size], Spec)
+%%from => integer,
+%%size => integer,
+%%start_date => integer,
+%%end_date => integer,
+%%inclusive => boolean,
+
+get_messages(Id, Opts) ->
+    Order = asc,
+    case nkdomain_db:search(?CHAT_CONVERSATION, {conversations_with_members, Id, Opts}) of
+        {ok, N, List, _Meta} ->
+            List2 = case Order of
+                asc ->
+                    lists:reverse(List);
+                desc ->
+                    List
             end,
-            Filters1 = #{
-                type => ?CHAT_MESSAGE,
-                parent_id => ConvId
-            },
-            {Order, CreatedFilterList} = case Spec of
-                #{start_date:=Date1, end_date:=Date2, inclusive:=Inc} when Inc == true ->
-                    {desc, ["<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">"]};
-                #{start_date:=Date1, end_date:=Date2} ->
-                    {desc, ["<<", nklib_util:to_binary(Date1), "-", nklib_util:to_binary(Date2), ">>"]};
-                #{start_date:=Date, inclusive:=Inc} when Inc == true ->
-                    {asc, [">=", nklib_util:to_binary(Date)]};
-                #{start_date:=Date} ->
-                    {asc, [">", nklib_util:to_binary(Date)]};
-                #{end_date:=Date, inclusive:=Inc} when Inc == true ->
-                    {desc, ["<=", nklib_util:to_binary(Date)]};
-                #{end_date:=Date} ->
-                    {desc, ["<", nklib_util:to_binary(Date)]};
-                _ ->
-                    {desc, []}
-            end,
-            Filters2 = case CreatedFilterList of
-                [] ->
-                    Filters1;
-                _ ->
-                    Filters1#{created_time => list_to_binary(CreatedFilterList)}
-            end,
-            Search2 = Search1#{
-                sort => [#{created_time => #{order => Order}}],
-                fields => [created_time, ?CHAT_MESSAGE, created_by],
-                filters => Filters2
-            },
-            case nkdomain:search(Search2) of
-                {ok, N, List, _Meta} ->
-                    List2 = case Order of
-                        asc ->
-                            lists:reverse(List);
-                        desc ->
-                            List
-                    end,
-                    {ok, #{total=>N, data=>List2}};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        {error, object_not_found} ->
-            {error, conversation_not_found};
+            {ok, #{total=>N, data=>List2}};
         {error, Error} ->
             {error, Error}
     end.

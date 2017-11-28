@@ -112,7 +112,7 @@ launch_notifications(Id) ->
 
 %% @doc
 add_conversation(Id, ConvId) ->
-    case nkdomain_lib:load(ConvId) of
+    case nkdomain_db:load(ConvId) of
         #obj_id_ext{type = ?CHAT_CONVERSATION, obj_id=ConvId2} ->
             nkdomain_obj:sync_op(Id, {?MODULE, add_conv, ConvId2});
         {error, object_not_found} ->
@@ -124,7 +124,7 @@ add_conversation(Id, ConvId) ->
 
 %% @doc
 remove_conversation(Id, ConvId) ->
-    case nkdomain_lib:find(ConvId) of
+    case nkdomain_db:find(ConvId) of
         #obj_id_ext{obj_id=ConvId2} ->
             nkdomain_obj:sync_op(Id, {?MODULE, rm_conv, ConvId2});
         {error, Error} ->
@@ -145,7 +145,7 @@ get_conversations(Id) ->
     {ok, map()} | {error, term()}.
 
 get_conversation_info(Id, Conv) ->
-    case nkdomain_lib:find(Conv) of
+    case nkdomain_db:find(Conv) of
         #obj_id_ext{obj_id=ConvId} ->
             nkdomain_obj:sync_op(Id, {?MODULE, get_conversation_info, ConvId});
         {error, Error} ->
@@ -158,7 +158,7 @@ get_conversation_info(Id, Conv) ->
     {ok, map()} | {error, term()}.
 
 set_active_conversation(Id, Conv) ->
-    case nkdomain_lib:find(Conv) of
+    case nkdomain_db:find(Conv) of
         #obj_id_ext{obj_id=ConvId} ->
             nkdomain_obj:sync_op(Id, {?MODULE, set_active_conv, ConvId});
         {error, Error} ->

@@ -231,7 +231,7 @@ object_event(Event, #obj_state{id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=State) ->
 %% ===================================================================
 
 syntax_check_file(file_id, File, _Ctx) ->
-    case nkdomain_lib:find(File) of
+    case nkdomain_db:find(File) of
         #obj_id_ext{type=?DOMAIN_FILE, obj_id=FileId} ->
             {ok, FileId};
         _ ->

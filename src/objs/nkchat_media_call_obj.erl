@@ -38,7 +38,6 @@
 -export([create/2, hangup/2, hangup_async/2]).
 -export([add_session/3, remove_session/2, get_info/1]).
 -export([invite/5, stop_media/3, answer_media/5]).
--export([find_member_calls/2, find_calls_with_members/2]).
 -export([send_candidate/3, set_status/3]).
 -export([heartbeat/1]).
 -export([find_calls/0, remove_calls/0]).
@@ -225,61 +224,61 @@ heartbeat(CallId) ->
     nkdomain_obj:async_op(CallId, {?MODULE, heartbeat}).
 
 
-%% @doc
-find_member_calls(Domain, MemberId) ->
-    case nkdomain_lib:find(Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
-            Filters = #{
-                type => ?MEDIA_CALL,
-                domain_id => DomainId,
-                << ?MEDIA_CALL/binary, ".members.member_id">> => MemberId
-            },
-            Search2 = #{
-                fields => [<<?MEDIA_CALL/binary, ".type">>],
-                filters => Filters,
-                size => 9999
-            },
-            case nkdomain:search(Search2) of
-                {ok, _N, List, _Meta} ->
-                    List2 = lists:map(
-                        fun(#{<<"obj_id">>:=CallId, ?MEDIA_CALL:=#{<<"type">>:=Type}}) -> {CallId, Type} end,
-                        List),
-                    {ok, List2};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        _ ->
-            {error, domain_unknown}
-    end.
-
-
-%% @doc
-find_calls_with_members(Domain, MemberIds) ->
-    case nkdomain_lib:find(Domain) of
-        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
-            Hash = get_members_hash(MemberIds),
-            Filters = #{
-                type => ?MEDIA_CALL,
-                domain_id => DomainId,
-                << ?MEDIA_CALL/binary, ".members_hash">> => Hash
-            },
-            Search2 = #{
-                fields => [<<?MEDIA_CALL/binary, ".type">>],
-                filters => Filters,
-                size => 9999
-            },
-            case nkdomain:search(Search2) of
-                {ok, _N, List, _Meta} ->
-                    List2 = lists:map(
-                        fun(#{<<"obj_id">>:=CallId, ?MEDIA_CALL:=#{<<"type">>:=Type}}) -> {CallId, Type} end,
-                        List),
-                    {ok, List2};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        _ ->
-            {error, domain_unknown}
-    end.
+%%%% @doc
+%%find_member_calls(Domain, MemberId) ->
+%%    case nkdomain_db:find(Domain) of
+%%        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
+%%            Filters = #{
+%%                type => ?MEDIA_CALL,
+%%                domain_id => DomainId,
+%%                << ?MEDIA_CALL/binary, ".members.member_id">> => MemberId
+%%            },
+%%            Search2 = #{
+%%                fields => [<<?MEDIA_CALL/binary, ".type">>],
+%%                filters => Filters,
+%%                size => 9999
+%%            },
+%%            case nkdomain:search(Search2) of
+%%                {ok, _N, List, _Meta} ->
+%%                    List2 = lists:map(
+%%                        fun(#{<<"obj_id">>:=CallId, ?MEDIA_CALL:=#{<<"type">>:=Type}}) -> {CallId, Type} end,
+%%                        List),
+%%                    {ok, List2};
+%%                {error, Error} ->
+%%                    {error, Error}
+%%            end;
+%%        _ ->
+%%            {error, domain_unknown}
+%%    end.
+%%
+%%
+%%%% @doc
+%%find_calls_with_members(Domain, MemberIds) ->
+%%    case nkdomain_db:find(Domain) of
+%%        #obj_id_ext{type=?DOMAIN_DOMAIN, obj_id=DomainId} ->
+%%            Hash = get_members_hash(MemberIds),
+%%            Filters = #{
+%%                type => ?MEDIA_CALL,
+%%                domain_id => DomainId,
+%%                << ?MEDIA_CALL/binary, ".members_hash">> => Hash
+%%            },
+%%            Search2 = #{
+%%                fields => [<<?MEDIA_CALL/binary, ".type">>],
+%%                filters => Filters,
+%%                size => 9999
+%%            },
+%%            case nkdomain:search(Search2) of
+%%                {ok, _N, List, _Meta} ->
+%%                    List2 = lists:map(
+%%                        fun(#{<<"obj_id">>:=CallId, ?MEDIA_CALL:=#{<<"type">>:=Type}}) -> {CallId, Type} end,
+%%                        List),
+%%                    {ok, List2};
+%%                {error, Error} ->
+%%                    {error, Error}
+%%            end;
+%%        _ ->
+%%            {error, domain_unknown}
+%%    end.
 
 
 %% @doc
@@ -299,10 +298,10 @@ set_status(CallId, SessId, Status) ->
 
 
 find_calls() ->
-    nkdomain:search(#{filters=>#{type=>?MEDIA_CALL}}).
+    nkdomain:get_paths_type(root, ?MEDIA_CALL).
 
 remove_calls() ->
-    nkdomain:delete_path_type("/", ?MEDIA_CALL).
+    nkdomain:remove_path_type("/", ?MEDIA_CALL).
 
 
 %% =================================================================

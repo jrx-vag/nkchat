@@ -139,7 +139,7 @@ start(DomainId, UserId, Opts) ->
     {ok, MediaId::nkdomain:obj_id()} | {error, term()}.
 
 invite(Id, Callee, InviteOpts) ->
-    case nkdomain_lib:load(Callee) of
+    case nkdomain_db:load(Callee) of
         #obj_id_ext{type = ?DOMAIN_USER, obj_id=CalleeId} ->
             nkdomain_obj:sync_op(Id, {?MODULE, invite, CalleeId, InviteOpts});
         {error, object_not_found} ->
@@ -402,7 +402,7 @@ object_async_op({?MODULE, launch_notifications}, State) ->
 object_async_op({?MODULE, notify_fun, {token_created, MediaId, Msg}}, State) ->
     case read_invite_token(Msg) of
         {ok, CallId, CallerId, _CalleeId, InviteOpts} ->
-            case nkdomain_lib:load(CallId) of
+            case nkdomain_db:load(CallId) of
                 #obj_id_ext{pid=CallPid} ->
                     Media = #media{
                         id = MediaId,

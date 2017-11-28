@@ -21,11 +21,18 @@
 
 -module(nkchat).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
+-export_type([search_type/0]).
+
 
 %% ===================================================================
 %% Types
 %% ===================================================================
 
+-type search_type() ::
+    {member_conversations, Domain::nkdomain:id(), Member::nkdomain:id()} |
+    {conversations_with_members, Domain::nkdomain:id(), MemberIds::[nkdomain:obj_id()]} |
+    {conversations_messages, Conv::nkdomain:id(),
+        #{from => integer, size => integer, start_date => integer, end_date => integer, inclusive => boolean}}.
 
 
 
