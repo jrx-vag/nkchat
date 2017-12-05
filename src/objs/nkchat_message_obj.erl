@@ -210,12 +210,12 @@ object_event(Event, #obj_state{id=#obj_id_ext{obj_id=ObjId}, obj=Obj}=State) ->
     #{parent_id:=ConvId} = Obj,
     case Event of
         created ->
-            Msg = maps:with([obj_id, created_by, created_time, ?CHAT_MESSAGE], Obj),
+            Msg = maps:with([obj_id, type, path, created_by, created_time, ?CHAT_MESSAGE], Obj),
             ok = nkchat_conversation:message_event(ConvId, {created, Msg});
         deleted ->
             ok = nkchat_conversation:message_event(ConvId, {deleted, ObjId});
         {updated, _} ->
-            Msg = maps:with([obj_id, created_by, created_time, updated_time, ?CHAT_MESSAGE], Obj),
+            Msg = maps:with([obj_id, type, path, created_by, created_time, updated_time, ?CHAT_MESSAGE], Obj),
             ok = nkchat_conversation:message_event(ConvId, {updated, Msg});
         _ ->
             ok
