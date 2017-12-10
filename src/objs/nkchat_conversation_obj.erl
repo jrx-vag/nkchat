@@ -37,6 +37,7 @@
 -export([object_execute/5, object_schema/1, object_query/3, object_mutation/3]).
 -export([object_admin_info/0]).
 -export([make_members_hash/1]).
+-export_type([event/0]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -45,6 +46,28 @@
 
 -define(MSG_CACHE_SIZE, 25).
 -define(INVITE_TTL, 3*24*60*60).
+
+
+
+%% ===================================================================
+%% Types
+%% ===================================================================
+
+
+
+-type event() ::
+    {added_info, nkchat_conversation:info()} |
+    {message_created, nkdomain:obj()} |
+    {message_updated, nkdomain:obj()} |
+    {message_deleted, nkdomain:obj_id()} |
+    {member_added, nkdomain:obj_id()} |
+    {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
+    {member_removed, nkdomain:obj_id()} |
+    {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
+    {session_added, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
+    {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
+    {status_updated, nkchat_conversation:status()} |
+    {is_closed_updated, boolean()}.
 
 
 

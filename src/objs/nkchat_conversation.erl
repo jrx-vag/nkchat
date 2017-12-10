@@ -33,7 +33,6 @@
 -export([message_event/2]).
 -export([sync_op/2, async_op/2]).
 
--export_type([event/0]).
 
 -include("nkchat.hrl").
 -include_lib("nkdomain/include/nkdomain.hrl").
@@ -61,23 +60,6 @@
     }.
 
 %-type member_role() :: binary().
-
--type info() :: map().
-
--type event() ::
-    {added_info, info()} |
-    {message_created, nkdomain:obj()} |
-    {message_updated, nkdomain:obj()} |
-    {message_deleted, nkdomain:obj_id()} |
-    {member_added, nkdomain:obj_id()} |
-    {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
-    {member_removed, nkdomain:obj_id()} |
-    {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
-    {session_added, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
-    {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
-    {status_updated, status()} |
-    {is_closed_updated, boolean()}.
-
 
 -type status() :: binary().
 
