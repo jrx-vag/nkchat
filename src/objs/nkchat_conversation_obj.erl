@@ -1323,9 +1323,15 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
     IsFromThatUser = MemberId =:= CreatedBy,
     Acc2 = case Sessions of
         [] ->
-            Count2 = Count + 1,
+            Count2 = case Count of
+                -1 -> 
+                    #obj_state{session=#session{total_messages=Total}}=State,
+                    Total;
+                _ ->
+                    Count + 1
+            end,
             Member2 = Member#member{
-                unread_count = Count2
+                unread_count = Count + 1
             },
             #{type:=ConvType} = ChatConv,
             #{?CHAT_MESSAGE:=#{text:=Txt, type:=MsgType}=MsgData} = Msg,
