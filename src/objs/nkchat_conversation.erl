@@ -234,8 +234,8 @@ get_info(Pid) ->
 
 %% @doc
 find_member_conversations(Domain, MemberId) ->
-    case nkdomain_db:search(?CHAT_CONVERSATION, {member_conversations, Domain, MemberId}) of
-        {ok, _N, List} ->
+    case nkdomain_db:search(?CHAT_CONVERSATION, {query_member_conversations, Domain, MemberId}) of
+        {ok, _N, List, _Meta} ->
             List2 = lists:map(
                 fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
                 List),
@@ -247,7 +247,7 @@ find_member_conversations(Domain, MemberId) ->
 
 %% @doc
 find_conversations_with_members(Domain, MemberIds) ->
-    case nkdomain_db:search(?CHAT_CONVERSATION, {conversations_with_members, Domain, MemberIds}) of
+    case nkdomain_db:search(?CHAT_CONVERSATION, {query_conversations_with_members, Domain, MemberIds}) of
         {ok, N, List, _Meta} ->
             List2 = lists:map(
                 fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
@@ -266,8 +266,8 @@ find_conversations_with_members(Domain, MemberIds) ->
 %%inclusive => boolean,
 
 get_messages(Id, Opts) ->
-    case nkdomain_db:search(?CHAT_CONVERSATION, {conversation_messages, Id, Opts}) of
-        {ok, N, List} ->
+    case nkdomain_db:search(?CHAT_CONVERSATION, {query_conversation_messages, Id, Opts}) of
+        {ok, N, List, _Meta} ->
             {ok, #{total=>N, data=>List}};
         {error, Error} ->
             {error, Error}
