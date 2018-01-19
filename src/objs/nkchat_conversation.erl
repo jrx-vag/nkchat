@@ -266,9 +266,23 @@ find_conversations_with_members(Domain, MemberIds) ->
 %%inclusive => boolean,
 
 get_messages(Id, Opts) ->
+    Order = case Opts of
+        #{start_date:=Date} ->
+            asc;
+        #{end_date:=Date} ->
+            desc;
+        _ ->
+            desc
+    end,
     case nkdomain_db:search(?CHAT_CONVERSATION, {query_conversation_messages, Id, Opts}) of
         {ok, N, List, _Meta} ->
-            {ok, #{total=>N, data=>List}};
+            List2 = case Order of
+                asc ->
+                    lists:reverse(List);
+                desc ->
+                    List
+            end,
+            {ok, #{total=>N, data=>List2}};
         {error, Error} ->
             {error, Error}
     end.
