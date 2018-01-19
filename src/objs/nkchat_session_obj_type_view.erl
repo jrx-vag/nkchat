@@ -32,7 +32,7 @@
 view(Path, Session) ->
     TableId = nkdomain_admin_util:make_type_view_id(?CHAT_SESSION),
     SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_SESSION),
-    DeletedFilterId = nkdomain_admin_util:make_type_view_delfilter_id(?CHAT_SESSION),
+    DeletedFilterId = nkdomain_admin_util:make_type_view_showdeleted_id(?CHAT_SESSION),
     Spec = #{
         table_id => TableId,
         subdomains_id => SubDomainsFilterId,

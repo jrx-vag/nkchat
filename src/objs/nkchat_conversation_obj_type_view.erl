@@ -23,7 +23,8 @@
 -module(nkchat_conversation_obj_type_view).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([view/2, subview/3, table_data/3, element_updated/3]).
+-export([view/2, fields/0, sort_field/1, filter_field/3, entry/2, element_updated/3]).
+-export([subview/3]).
 
 -include("nkchat.hrl").
 -include_lib("nkadmin/include/nkadmin.hrl").
@@ -40,22 +41,15 @@ subview(Opts, Path, Session) ->
 
 
 %% @doc
-table(Opts, Path, Session) ->
-    Id = case Opts of
-        #{table_id:=TableId} ->
-            TableId;
-        _ ->
-            nkdomain_admin_util:make_type_view_id(?CHAT_CONVERSATION)
-    end,
-    SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_CONVERSATION),
-    DeletedFilterId = nkdomain_admin_util:make_type_view_delfilter_id(?CHAT_CONVERSATION),
-    Spec = #{
-        table_id => Id,
+table(Opts, Path, _Session) ->
+%%    Id = case Opts of
+%%        #{table_id:=TableId} ->
+%%            TableId;
+%%        _ ->
+%%            nkdomain_admin_util:make_type_view_id(?CHAT_CONVERSATION)
+%%    end,
+    Table1 = #{
         is_subtable => maps:get(is_subtable, Opts),
-        subdomains_id => SubDomainsFilterId,
-        deleted_id => DeletedFilterId,
-        filters => [SubDomainsFilterId, DeletedFilterId],
-        base_domain => Path,
         columns => lists:flatten([
             #{
                 id => checkbox,
@@ -64,19 +58,11 @@ table(Opts, Path, Session) ->
             #{
                 id => domain,
                 type => text,
-                fillspace => <<"0.5">>,
+                %fillspace => <<"1.5">>,
                 name => domain_column_domain,
                 is_html => true,
                 sort => true,
                 options => get_agg_name(<<"domain_id">>, Path)
-            },
-            #{
-                id => service,
-                type => text,
-                fillspace => <<"0.5">>,
-                name => domain_column_service,
-                sort => true,
-                options => get_agg_srv_id(Path)
             },
             #{
                 id => obj_name,
@@ -94,7 +80,7 @@ table(Opts, Path, Session) ->
                 editor => text
             },
             #{
-                id => type,
+                id => conversation_type,
                 type => text,
                 fillspace => <<"0.5">>,
                 name => domain_column_type,
@@ -119,134 +105,181 @@ table(Opts, Path, Session) ->
         left_split => 1,
         on_click => []
     },
-    Spec2 = case Opts of
+    case Opts of
         #{header:=Header} ->
-            Spec#{header => Header};
+            Table1#{header => Header};
         _ ->
-            Spec
-    end,
-    Table = #{
-        id => Id,
-        class => webix_ui,
-        value => nkadmin_webix_datatable:datatable(Spec2, Session)
-    },
-    {Table, Session}.
+            Table1
+    end.
 
+
+fields() ->
+    [
+        <<"domain_id">>,
+        <<"srv_id">>,
+        <<"obj_name">>,
+        <<"name">>,
+        <<"path">>,
+        <<"created_by">>,
+        <<"created_time">>,
+        <<"conversation.type">>,
+        <<"conversation.members.member_id">>
+    ].
 
 
 %% @doc
-table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, _Opts, Session) ->
-%%    Filter2 = case Opts of
-%%        #{orig_type:=?DOMAIN_USER, obj_id:=UserId} ->
-%%            Filter#{<<"created_by">> => UserId};
-%%        _ ->
-%%            Filter
-%%    end,
-    Filter2 = Filter,
-    #admin_session{domain_id=DomainId} = Session,
-    SortSpec = case Sort of
-        {<<"service">>, Order} ->
-            <<Order/binary, ":srv_id">>;
-        {<<"name">>, Order} ->
-            <<Order/binary, ":name_sort">>;
-        {<<"conversation">>, Order} ->
-            <<Order/binary, ":path">>;
-        {<<"type">>, Order} ->
-            <<Order/binary, ":conversation.type">>;
-        {Field, Order} when Field==<<"created_by">>; Field==<<"created_time">>; Field==<<"obj_name">> ->
-            <<Order/binary, $:, Field/binary>>;
-        _ ->
-            <<"desc:path">>
-    end,
-    Offset = maps:get(<<"timezone_offset">>, Filter2, 0),
-    case table_filter(maps:to_list(Filter2), #{timezone_offset=>Offset}, #{type=>?CHAT_CONVERSATION}) of
-        {ok, Filters} ->
-            % lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filter)]),
-            FindSpec = #{
-                filters => Filters,
-                fields => [
-                        <<"domain_id">>,
-                        <<"srv_id">>,
-                        <<"obj_name">>,
-                        <<"name">>,
-                        <<"path">>,
-                        <<"created_by">>,
-                        <<"created_time">>,
-                        <<"conversation.type">>,
-                        <<"conversation.members.member_id">>
-                ],
-                sort => SortSpec,
-                from => Start,
-                size => Size
-            },
-            SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_CONVERSATION),
-            Fun = case maps:get(SubDomainsFilterId, Filter2, 1) of
-                0 -> search;
-                1 -> search_all
-            end,
-            case nkdomain_domain:Fun(DomainId, FindSpec) of
-                {ok, Total, List, _Meta} ->
-                    Data = table_iter(List, Start+1, [], Session),
-                    {ok, Total, Data};
-                {error, Error} ->
-                    {error, Error}
-            end;
-        {error, Error} ->
-            {error, Error}
-    end.
+sort_field(<<"conversation_type">>) -> <<"conversation.type">>;
+sort_field(_) -> <<>>.
 
 
-%% @private
-table_filter([], _Info, Acc) ->
-    {ok, Acc};
-
-table_filter([Term|Rest], Info, Acc) ->
-    case nkdomain_admin_util:table_filter(Term, Info, Acc) of
-        {ok, Acc2} ->
-            table_filter(Rest, Info, Acc2);
-        {error, Error} ->
-            {error, Error};
-        unknown ->
-            case Term of
-                {<<"type">>, Data} ->
-                    Acc2 = Acc#{<<"conversation.type">> => Data},
-                    table_filter(Rest, Info, Acc2);
-                {<<"members">>, Data} ->
-                    Acc2 = Acc#{<<"conversation.members.member_id">> => Data},
-                    table_filter(Rest, Info, Acc2);
-                _ ->
-                    table_filter(Rest, Info, Acc)
-            end
-    end.
+%% @doc
+filter_field(<<"conversation_type">>, Data, Acc) ->
+    nkdomain_admin_util:add_search_filter(<<"conversation.type">>, Data, Acc);
+filter_field(<<"members">>, Data, Acc) ->
+    nkdomain_admin_util:add_filter(<<"conversation.members.member_id">>, Data, Acc);
+filter_field(_Field, _Data, Acc) ->
+    Acc.
 
 
-%% @private
-table_iter([], _Pos, Acc, _Session) ->
-    lists:reverse(Acc);
-
-table_iter([Entry|Rest], Pos, Acc, Session) ->
-    Base = nkdomain_admin_util:table_entry(?CHAT_CONVERSATION, Entry, Pos),
+%% @doc
+entry(Entry, Base) ->
     #{
-        ?CHAT_CONVERSATION := #{
-            <<"type">> := Type
-        }
+        <<"obj_id">> := ObjId,
+        <<"obj_name">> := ObjName,
+        <<"conversation">> := #{
+              <<"type">> := Type
+        } = ChatConv
     } = Entry,
-    Name = maps:get(<<"name">>, Entry, <<>>),
-    ChatConv = maps:get(?CHAT_CONVERSATION, Entry, #{}),
+    % Name = maps:get(<<"name">>, Entry, <<>>),
     Members = maps:get(<<"members">>, ChatConv, []),
-    #{<<"obj_id">>:=ObjId, <<"obj_name">> := ObjName} = Entry,
     ObjName2 = case ObjName of
         <<"mh-", _/binary>> -> <<"(dynamic)">>;
         _ -> ObjName
     end,
     MemberIds1 = [nkdomain_admin_util:obj_id_url(M)|| #{<<"member_id">>:=M} <- Members],
-    Data = Base#{
-        name => Name,
+    Base#{
         obj_name := nkdomain_admin_util:obj_id_url(ObjId, ObjName2),
-        type => Type,
+        conversation_type => Type,
         members => nklib_util:bjoin(MemberIds1, <<", ">>)
-    },
-    table_iter(Rest, Pos+1, [Data|Acc], Session).
+    }.
+
+
+
+
+
+%% @doc
+%%table_data(#{start:=Start, size:=Size, sort:=Sort, filter:=Filter}, _Opts, Session) ->
+%%%%    Filter2 = case Opts of
+%%%%        #{orig_type:=?DOMAIN_USER, obj_id:=UserId} ->
+%%%%            Filter#{<<"created_by">> => UserId};
+%%%%        _ ->
+%%%%            Filter
+%%%%    end,
+%%    Filter2 = Filter,
+%%    #admin_session{domain_id=DomainId} = Session,
+%%    SortSpec = case Sort of
+%%        {<<"service">>, Order} ->
+%%            <<Order/binary, ":srv_id">>;
+%%        {<<"name">>, Order} ->
+%%            <<Order/binary, ":name_sort">>;
+%%        {<<"conversation">>, Order} ->
+%%            <<Order/binary, ":path">>;
+%%        {<<"type">>, Order} ->
+%%            <<Order/binary, ":conversation.type">>;
+%%        {Field, Order} when Field==<<"created_by">>; Field==<<"created_time">>; Field==<<"obj_name">> ->
+%%            <<Order/binary, $:, Field/binary>>;
+%%        _ ->
+%%            <<"desc:path">>
+%%    end,
+%%    Offset = maps:get(<<"timezone_offset">>, Filter2, 0),
+%%    case table_filter(maps:to_list(Filter2), #{timezone_offset=>Offset}, #{type=>?CHAT_CONVERSATION}) of
+%%        {ok, Filters} ->
+%%            % lager:warning("NKLOG Filters ~s", [nklib_json:encode_pretty(Filter)]),
+%%            FindSpec = #{
+%%                filters => Filters,
+%%                fields => [
+%%                        <<"domain_id">>,
+%%                        <<"srv_id">>,
+%%                        <<"obj_name">>,
+%%                        <<"name">>,
+%%                        <<"path">>,
+%%                        <<"created_by">>,
+%%                        <<"created_time">>,
+%%                        <<"conversation.type">>,
+%%                        <<"conversation.members.member_id">>
+%%                ],
+%%                sort => SortSpec,
+%%                from => Start,
+%%                size => Size
+%%            },
+%%            SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?CHAT_CONVERSATION),
+%%            Fun = case maps:get(SubDomainsFilterId, Filter2, 1) of
+%%                0 -> search;
+%%                1 -> search_all
+%%            end,
+%%            case nkdomain_domain:Fun(DomainId, FindSpec) of
+%%                {ok, Total, List, _Meta} ->
+%%                    Data = table_iter(List, Start+1, [], Session),
+%%                    {ok, Total, Data};
+%%                {error, Error} ->
+%%                    {error, Error}
+%%            end;
+%%        {error, Error} ->
+%%            {error, Error}
+%%    end.
+%%
+%%
+%%%% @private
+%%table_filter([], _Info, Acc) ->
+%%    {ok, Acc};
+%%
+%%table_filter([Term|Rest], Info, Acc) ->
+%%    case nkdomain_admin_util:table_filter(Term, Info, Acc) of
+%%        {ok, Acc2} ->
+%%            table_filter(Rest, Info, Acc2);
+%%        {error, Error} ->
+%%            {error, Error};
+%%        unknown ->
+%%            case Term of
+%%                {<<"type">>, Data} ->
+%%                    Acc2 = Acc#{<<"conversation.type">> => Data},
+%%                    table_filter(Rest, Info, Acc2);
+%%                {<<"members">>, Data} ->
+%%                    Acc2 = Acc#{<<"conversation.members.member_id">> => Data},
+%%                    table_filter(Rest, Info, Acc2);
+%%                _ ->
+%%                    table_filter(Rest, Info, Acc)
+%%            end
+%%    end.
+%%
+%%
+%%%% @private
+%%table_iter([], _Pos, Acc, _Session) ->
+%%    lists:reverse(Acc);
+%%
+%%table_iter([Entry|Rest], Pos, Acc, Session) ->
+%%    Base = nkdomain_admin_util:table_entry(?CHAT_CONVERSATION, Entry, Pos),
+%%    #{
+%%        ?CHAT_CONVERSATION := #{
+%%            <<"type">> := Type
+%%        }
+%%    } = Entry,
+%%    Name = maps:get(<<"name">>, Entry, <<>>),
+%%    ChatConv = maps:get(?CHAT_CONVERSATION, Entry, #{}),
+%%    Members = maps:get(<<"members">>, ChatConv, []),
+%%    #{<<"obj_id">>:=ObjId, <<"obj_name">> := ObjName} = Entry,
+%%    ObjName2 = case ObjName of
+%%        <<"mh-", _/binary>> -> <<"(dynamic)">>;
+%%        _ -> ObjName
+%%    end,
+%%    MemberIds1 = [nkdomain_admin_util:obj_id_url(M)|| #{<<"member_id">>:=M} <- Members],
+%%    Data = Base#{
+%%        name => Name,
+%%        obj_name := nkdomain_admin_util:obj_id_url(ObjId, ObjName2),
+%%        type => Type,
+%%        members => nklib_util:bjoin(MemberIds1, <<", ">>)
+%%    },
+%%    table_iter(Rest, Pos+1, [Data|Acc], Session).
 
 
 %% @private
@@ -263,9 +296,6 @@ get_agg_name(Field, Path) ->
     nkdomain_admin_util:get_agg_name(Field, ?CHAT_CONVERSATION, Path).
 
 
-%% @private
-get_agg_srv_id(Path) ->
-    nkdomain_admin_util:get_agg_srv_id(?CHAT_CONVERSATION, Path).
 
 
 %% @private

@@ -32,7 +32,7 @@
 view(Path, Session) ->
     TableId = nkdomain_admin_util:make_type_view_id(?MEDIA_SESSION),
     SubDomainsFilterId = nkdomain_admin_util:make_type_view_subfilter_id(?MEDIA_SESSION),
-    DeletedFilterId = nkdomain_admin_util:make_type_view_delfilter_id(?MEDIA_SESSION),
+    DeletedFilterId = nkdomain_admin_util:make_type_view_showdeleted_id(?MEDIA_SESSION),
     Spec = #{
         table_id => TableId,
         subdomains_id => SubDomainsFilterId,
