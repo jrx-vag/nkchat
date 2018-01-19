@@ -30,7 +30,7 @@
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
          object_sync_op/3, object_async_op/2, object_handle_info/2]).
--export([object_admin_info/0, object_schema_types/0]).
+-export([object_admin_info/0, object_schema_types/0, object_do_active/1]).
 -export([notify_fun/2, presence_fun/2]).
 
 -export_type([meta/0, event/0]).
@@ -516,6 +516,12 @@ object_handle_info({?MODULE, inactivity}, State) ->
 
 object_handle_info(_Msg, _State) ->
     continue.
+
+
+%% @private
+object_do_active(_Id) ->
+    delete_if_not_loaded.
+
 
 
 %% ===================================================================
