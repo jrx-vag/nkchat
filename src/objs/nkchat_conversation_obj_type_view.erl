@@ -113,6 +113,7 @@ table(Opts, Path, _Session) ->
     end.
 
 
+%% @doc 
 fields() ->
     [
         <<"domain_id">>,
