@@ -41,7 +41,7 @@ subview(Opts, Path, Session) ->
 
 
 %% @doc
-table(Opts, Path, _Session) ->
+table(Opts, Path, Session) ->
 %%    Id = case Opts of
 %%        #{table_id:=TableId} ->
 %%            TableId;
@@ -62,7 +62,7 @@ table(Opts, Path, _Session) ->
                 name => domain_column_domain,
                 is_html => true,
                 sort => true,
-                options => get_agg_name(<<"domain_id">>, Path)
+                options => get_agg_name(<<"domain_id">>, Path, Session)
             },
             #{
                 id => obj_name,
@@ -85,7 +85,7 @@ table(Opts, Path, _Session) ->
                 fillspace => <<"0.5">>,
                 name => domain_column_type,
                 sort => true,
-                options => get_agg_term(<<"conversation.type">>, Path)
+                options => get_agg_term(<<"conversation.type">>, Path, Session)
             },
             #{
                 id => created_time,
@@ -98,7 +98,7 @@ table(Opts, Path, _Session) ->
                 id => members,
                 type => text,
                 name => domain_column_members,
-                options => get_agg_name(<<"conversation.members.member_id">>, Path),
+                options => get_agg_name(<<"conversation.members.member_id">>, Path, Session),
                 is_html => true
             }
         ]),
@@ -293,12 +293,12 @@ element_updated(_ObjId, Value, _Session) ->
 
 
 %% @private
-get_agg_name(Field, Path) ->
-    nkdomain_admin_util:get_agg_name(Field, ?CHAT_CONVERSATION, Path).
+get_agg_name(Field, Path, Session) ->
+    nkdomain_admin_util:get_agg_name(Field, ?CHAT_CONVERSATION, Path, Session).
 
 
 
 
 %% @private
-get_agg_term(Field, Path) ->
-    nkdomain_admin_util:get_agg_term(Field, ?CHAT_CONVERSATION, Path).
+get_agg_term(Field, Path, Session) ->
+    nkdomain_admin_util:get_agg_term(Field, ?CHAT_CONVERSATION, Path, Session).
