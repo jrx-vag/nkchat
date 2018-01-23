@@ -41,7 +41,7 @@ subview(Opts, Path, Session) ->
 
 
 %% @doc
-table(Opts, Path, _Session) ->
+table(Opts, Path, Session) ->
 %%    Id = case Opts of
 %%        #{table_id:=TableId} ->
 %%%            <<?ID/binary, "__", TableId/binary>>;
@@ -62,14 +62,14 @@ table(Opts, Path, _Session) ->
                 name => domain_column_domain,
                 is_html => true,
                 sort => true,
-                options => get_agg_name(<<"domain_id">>, Path)
+                options => get_agg_name(<<"domain_id">>, Path, Session)
             },
             #{
                 id => conversation,
                 type => text,
                 name => domain_column_conversation,
                 sort => false,
-                options => get_agg_name(<<"parent_id">>, Path),
+                options => get_agg_name(<<"parent_id">>, Path, Session),
                 is_html => true
             },
             #{
@@ -87,7 +87,7 @@ table(Opts, Path, _Session) ->
                         type => text,
                         name => domain_column_created_by,
                         sort => false,
-                        options => get_agg_name(<<"created_by">>, Path),
+                        options => get_agg_name(<<"created_by">>, Path, Session),
                         is_html => true % Will allow us to return HTML inside the column data
                     }
             end,
@@ -343,8 +343,8 @@ element_updated(_ObjId, Value, _Session) ->
 
 
 %% @private
-get_agg_name(Field, Path) ->
-    nkdomain_admin_util:get_agg_name(Field, ?CHAT_MESSAGE, Path).
+get_agg_name(Field, Path, Session) ->
+    nkdomain_admin_util:get_agg_name(Field, ?CHAT_MESSAGE, Path, Session).
 
 
 
