@@ -36,9 +36,9 @@ i18n() -> #{
         "domain_tree_sessions__media.call" => "Calls",
 
         "domain_column_conversation" => "CONVERSATION",
-        "domain_column_text" => "MESSAGE",
         "domain_column_file_id" => "FILE",
         "domain_column_members" => "MEMBERS",
+        "domain_column_text" => "MESSAGE",
         "domain_column_type" => "TYPE"
 
 
@@ -53,9 +53,9 @@ i18n() -> #{
         "domain_tree_sessions__media.call" => "Llamadas",
 
         "domain_column_conversation" => <<"CONVERSACIÓN"/utf8>>,
-        "domain_column_text" => "MENSAJE",
         "domain_column_file_id" => "FICHERO",
         "domain_column_members" => "MIEMBROS",
+        "domain_column_text" => "MENSAJE",
         "domain_column_type" => "TIPO"
     }
 }.
