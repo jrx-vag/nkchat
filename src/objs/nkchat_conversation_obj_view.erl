@@ -51,7 +51,8 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
     MemberIds = [maps:get(member_id, Member) || Member <- Members],
     MembersValue = binary:list_to_bin(lists:join(<<",">>, MemberIds)),
     [_|MemberOpts] = nkdomain_admin_util:get_agg_name(<<"obj_id">>, ?DOMAIN_USER, <<"/">>, Session),
-    TypeOpts = nkdomain_admin_util:get_agg_term(<<?CHAT_CONVERSATION/binary, ".type">>, ?CHAT_CONVERSATION, <<"/">>, Session),
+    DefaultTypes = [<<"channel">>, <<"one2one">>, <<"private">>],
+    TypeOpts = nkdomain_admin_util:get_agg_term_with_defaults(<<?CHAT_CONVERSATION/binary, ".type">>, ?CHAT_CONVERSATION, <<"/">>, DefaultTypes, Session),
     FormId = nkdomain_admin_util:make_obj_view_id(?CHAT_CONVERSATION, ObjId),
     Spec = #{
         form_id => FormId,
