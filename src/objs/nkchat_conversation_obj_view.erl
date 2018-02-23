@@ -33,7 +33,7 @@
 
 
 -define(LLOG(Type, Txt, Args),
-    lager:Type("NkChat Conversation " ++ Txt, Args)).
+    lager:Type("NkChat Conversation obj_view" ++ Txt, Args)).
 
 
 
@@ -50,7 +50,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
     Members = maps:get(members, Conv, []),
     MemberIds = [maps:get(member_id, Member) || Member <- Members],
     MembersValue = binary:list_to_bin(lists:join(<<",">>, MemberIds)),
-    [_|MemberOpts] = nkdomain_admin_util:get_agg_name(<<"obj_id">>, ?DOMAIN_USER, <<"/">>, Session),
+    MemberOpts = get_members_opts(MemberIds),
     DefaultTypes = [<<"channel">>, <<"one2one">>, <<"private">>],
     TypeOpts = nkdomain_admin_util:get_agg_term_with_defaults(<<?CHAT_CONVERSATION/binary, ".type">>, ?CHAT_CONVERSATION, <<"/">>, DefaultTypes, Session),
     FormId = nkdomain_admin_util:make_obj_view_id(?CHAT_CONVERSATION, ObjId),
@@ -122,6 +122,9 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
                         type => multicombo,
                         label => <<"Members">>,
                         value => MembersValue,
+                        suggest_type => ?DOMAIN_USER,
+                        suggest_field => <<"user_name">>,
+                        suggest_template => <<"#user_name# #user_surname#">>,
                         required => AllowMembersEdit, %true
                         editable => AllowMembersEdit, %true
                         options => MemberOpts
@@ -171,7 +174,7 @@ update(ObjId, Data, _Session) ->
             ?LLOG(notice, "Adding: ~p", [AddMembers]),
             {AddMembers, RemMembers};
         {error, _Error} ->
-            ?LLOG(warning, "[nkchat_conversation_obj_view:update] Error ~p while getting conversation object", [_Error]),
+            ?LLOG(warning, "[update] Error ~p while getting conversation object", [_Error]),
             {[],[]}
     end,
     Type2 = get_conv_type(Type, MemberIds2),
@@ -304,3 +307,20 @@ is_direct_conv(<<"private">>) ->
 
 is_direct_conv(_Type) ->
     false.
+
+
+get_members_opts(Ids) ->
+    get_members_opts(Ids, []).
+
+%% @private
+get_members_opts([], Acc) ->
+    lists:reverse(Acc);
+
+get_members_opts([Id|Ids], Acc) ->
+    case nkdomain:get_name(Id) of
+        {ok, #{obj_id:=ObjId, name:=Name}} ->
+            get_members_opts(Ids, [#{id => ObjId, user_name => Name, user_surname => <<>>} | Acc]);
+        {error, _Error} ->
+            ?LLOG(warning, "Unknown member ID found: ~p", [Id]),
+            get_members_opts(Ids, [#{id => Id, user_name => Id, user_surname => <<>>} | Acc])
+    end.
