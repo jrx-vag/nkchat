@@ -65,6 +65,14 @@ table(Opts, Path, Session) ->
                 options => get_agg_name(<<"domain_id">>, Path, Session)
             },
             #{
+                id => obj_name,
+                type => text,
+                fillspace => <<"0.5">>,
+                name => domain_column_id,
+                sort => true,
+                is_html => true % Will allow us to return HTML inside the column data
+            },
+            #{
                 id => conversation,
                 type => text,
                 name => domain_column_conversation,
@@ -140,6 +148,7 @@ fields() ->
     [
         <<"created_by">>,
         <<"srv_id">>,
+        <<"obj_name">>,
         <<"path">>,
         <<"created_time">>,
         <<"parent_id">>,
@@ -172,12 +181,14 @@ filter_field(_Field, _Data, Acc) ->
 %% @doc
 entry(Entry, Base) ->
     #{
+        <<"obj_id">> := ObjId,
+        <<"obj_name">> := ObjName,
         <<"parent_id">> := ParentId,
         ?CHAT_MESSAGE := Message
     } = Entry,
     MessageText = maps:get(<<"text">>, Message, <<>>),
     MessageFileId = maps:get(<<"file_id">>, Message, <<>>),
-    Conv = case nkdomain:get_name(ParentId) of
+    Conv = case nkchat_conversation:get_pretty_name(ParentId) of
         {ok, #{name:=Name}} ->
             nkdomain_admin_util:obj_id_url(ParentId, Name);
         _ ->
@@ -198,6 +209,7 @@ entry(Entry, Base) ->
             end
     end,
     Base#{
+        obj_name := nkdomain_admin_util:obj_id_url(ObjId, ObjName),
         conversation => Conv,
         text => MessageText,
         file_id => File

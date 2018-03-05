@@ -760,6 +760,31 @@ sync_op({get_last_messages}, _From, #obj_state{session=Session}=State) ->
     Messages2 = [M || {_Time, _Id, M} <- Messages],
     {reply, {ok, #{total=>Total, data=>Messages2}}, State};
 
+sync_op({get_pretty_name}, _From, State) ->
+    #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State,
+    #{type:=Type, members:=Members} = ChatConv,
+    Name = case nkchat_conversation:is_direct_conversation(Type) of
+        true ->
+            MemberIds = [MemberId || #{member_id := MemberId} <- Members],
+            MemberNames = lists:map(
+                fun(MId) ->
+                    case nkdomain:get_name(MId) of
+                        {ok, #{name := Name}} ->
+                            Name;
+                        _ ->
+                            <<>>
+                    end
+                end,
+                MemberIds),
+            nklib_util:bjoin(MemberNames, <<", ">>);
+        false ->
+            maps:get(name, Obj, <<>>)
+    end,
+    Data = #{
+        obj_id => maps:get(obj_id, Obj, <<>>),
+        name => Name
+    },
+    {reply, {ok, Data}, State};
 
 sync_op({make_invite_token, UserId, Member, TTL}, From, State) ->
     #obj_state{id=#obj_id_ext{obj_id=ConvId}, domain_id=DomainId} = State,
