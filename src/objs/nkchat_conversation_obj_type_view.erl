@@ -76,8 +76,7 @@ table(Opts, Path, Session) ->
                 id => name,
                 type => text,
                 name => domain_column_name,
-                sort => true,
-                editor => text
+                sort => true
             },
             #{
                 id => conversation_type,
@@ -151,7 +150,12 @@ entry(Entry, Base) ->
               <<"type">> := Type
         } = ChatConv
     } = Entry,
-    % Name = maps:get(<<"name">>, Entry, <<>>),
+    Name = case nkchat_conversation:get_pretty_name(ObjId) of
+        {ok, #{name:=N}} ->
+            N;
+        _ ->
+            maps:get(<<"name">>, Entry, <<>>)
+    end,
     Members = maps:get(<<"members">>, ChatConv, []),
     ObjName2 = case ObjName of
         <<"mh-", _/binary>> -> <<"(dynamic)">>;
@@ -159,7 +163,8 @@ entry(Entry, Base) ->
     end,
     MemberIds1 = [nkdomain_admin_util:obj_id_url(M)|| #{<<"member_id">>:=M} <- Members],
     Base#{
-        obj_name := nkdomain_admin_util:obj_id_url(ObjId, ObjName2),
+        obj_name => nkdomain_admin_util:obj_id_url(ObjId, ObjName2),
+        name => Name,
         conversation_type => Type,
         members => nklib_util:bjoin(MemberIds1, <<", ">>)
     }.

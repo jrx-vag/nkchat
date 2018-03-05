@@ -29,6 +29,7 @@
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
+-export([get_pretty_name/1, is_direct_conversation/1]).
 -export([added_invitation/4, add_invite_op/4, perform_op/1]).
 -export([message_event/2]).
 -export([sync_op/2, async_op/2]).
@@ -291,6 +292,22 @@ get_messages(Id, Opts) ->
 %% @doc
 get_last_messages(Id) ->
     sync_op(Id, {get_last_messages}).
+
+
+%% @doc
+get_pretty_name(Id) ->
+    sync_op(Id, {get_pretty_name}).
+
+
+%% @doc
+is_direct_conversation(<<"one2one">>) ->
+    true;
+
+is_direct_conversation(<<"private">>) ->
+    true;
+
+is_direct_conversation(_Type) ->
+    false.
 
 
 %% @private Called from nkchat_message_obj
