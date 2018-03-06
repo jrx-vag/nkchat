@@ -255,8 +255,7 @@ update(ObjId, Data, _Session) ->
 
 
 
-%% [error] NKLOG CREATE #{<<"created_time">> => 1519923423836,<<"domain">> => <<"root">>,<<"file_id">> => <<"file-22Q1OqhD3T2JiWwISblFX2j6N18">>,<<"new_parent_id">> => <<"conversation-YU2A8yQyHGaqGc4I12JcRcRWKr4">>,<<"obj_name">> => <<>>,<<"quote_message_id">> => <<"message-RupLDmJQOsRbvE1aLYqv7xHlhu9">>,<<"text">> => <<"Quoted from admin">>,<<"type">> => <<"text">>,<<"updated_time">> => 1519923423836}
-create(Data, _Session) ->
+create(Data, #admin_session{user_id=UserId}=_Session) ->
     lager:error("NKLOG CREATE ~p", [Data]),
     #{
         <<"obj_name">> := ObjName,
@@ -278,8 +277,8 @@ create(Data, _Session) ->
             case nkdomain:get_obj(QuoteId) of
                 {ok, #{obj_id := QId, ?CHAT_MESSAGE := QuotedMsg, created_by := QuotedUser}=QuotedObj} ->
                     Q = maps:with([file_id, text], QuotedMsg),
-                    Q#{user_id => QuotedUser, message_id => QId, type => <<"text">>},
-                    Msg#{body => #{quote => Q}};
+                    Q2 = Q#{user_id => QuotedUser, message_id => QId, type => <<"text">>},
+                    Msg#{body => #{quote => Q2}};
                 _ ->
                     Msg
             end
@@ -291,9 +290,10 @@ create(Data, _Session) ->
                 domain_id => DomainId,
                 parent_id => ParentId,
                 obj_name => ObjName,
+                created_by => UserId,
                 ?CHAT_MESSAGE => Msg2
             },
-            lager:error("NKLOG CREATE ~p", [Create]),
+            lager:error("NKLOG CREATE MSG: ~p", [Create]),
             case nkdomain_obj_make:create(Create) of
                 {ok, #obj_id_ext{obj_id=ObjId}, []} ->
                     {ok, ObjId};
@@ -303,28 +303,6 @@ create(Data, _Session) ->
         {error, Error} ->
             {error, Error}
     end.
-
-%    #{
-%        <<"domain">> := DomainId,
-%        <<"obj_name">> := ObjName,
-%        <<"new_input">> := NewInput
-%    } = Data,
-%    Message = maps:with([<<"processor_id">>, <<"format">>, <<"height">>, <<"width">>, <<"callback_url">>], Data),
-%    Create = #{
-%        type => ?CHAT_MESSAGE,
-%        domain_id => DomainId,
-%        obj_name => ObjName,
-%        ?CHAT_MESSAGE => Message#{
-%            <<"input">> => NewInput
-%        }
-%    },
-%    lager:error("NKLOG CREATE ~p", [Create]),
-%    case nkdomain_obj_make:create(Create) of
-%        {ok, #obj_id_ext{obj_id=ObjId}, []} ->
-%            {ok, ObjId};
-%        {error, Error} ->
-%            {error, Error}
-%    end.
 
 
 %% @private
@@ -478,4 +456,3 @@ get_obj_id_url_or_empty(ObjId, Name) ->
 %        var value = this.getValue();
 %        $$('", FormId/binary, "').showBatch(value);
 %    }">>.
-
