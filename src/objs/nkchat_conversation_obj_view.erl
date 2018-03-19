@@ -125,7 +125,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
                         suggest_type => ?DOMAIN_USER,
                         suggest_field => <<"user_name">>,
                         suggest_template => <<"#user_name# #user_surname#">>,
-                        required => AllowMembersEdit, %true
+                        required => false,
                         editable => AllowMembersEdit, %true
                         options => MemberOpts
                     }
