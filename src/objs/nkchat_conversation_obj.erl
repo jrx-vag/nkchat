@@ -241,12 +241,12 @@ object_mutation(MutationName, Params, Ctx) ->
 
 %% @doc
 object_db_get_query(nkelastic, {query_member_conversations, Domain, Member}, DbOpts) ->
-    case nkdomain_store_es_util:get_obj_id(Domain) of
-        {ok, DomainId} ->
+    case nkdomain_store_es_util:get_path(Domain) of
+        {ok, DomainPath} ->
             case nkdomain_store_es_util:get_obj_id(Member) of
                 {ok, MemberId} ->
                     Filters = [
-                        {domain_id, eq, DomainId},
+                        {path, subdir, DomainPath},
                         {[?CHAT_CONVERSATION, ".members.member_id"], eq, MemberId}
                     ],
                     Opts = #{
