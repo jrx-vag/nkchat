@@ -43,6 +43,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
     DomainId = maps:get(domain_id, Obj, Domain),
     ObjName = maps:get(obj_name, Obj, <<>>),
     Name = maps:get(name, Obj, <<>>),
+    Description = maps:get(description, Obj, <<>>),
     Enabled = maps:get(enabled, Obj, true),
     Conv = maps:get(?CHAT_CONVERSATION, Obj, #{}),
     Type = maps:get(type, Conv, <<"channel">>),
@@ -106,6 +107,14 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
                         label => <<"Name">>,
                         required => true,
                         value => Name,
+                        editable => true
+                    },
+                    #{
+                        id => <<"description">>,
+                        type => text,
+                        label => <<"Description">>,
+                        required => false,
+                        value => Description,
                         editable => true
                     },
                     #{
@@ -178,14 +187,14 @@ update(ObjId, Data, _Session) ->
             {[],[]}
     end,
     Type2 = get_conv_type(Type, MemberIds2),
-    Update = maps:with([<<"name">>], Data),
+    Update = maps:with([<<"name">>, <<"description">>], Data),
     Update2 = Update#{?CHAT_CONVERSATION => #{<<"type">> => Type2}},
     case nkdomain:update(ObjId, Update2) of
         {ok, _} ->
             case nkdomain:update_name(ObjId, ObjName2) of
                 {ok, _} ->
                     lists:map(
-                        fun(M) -> 
+                        fun(M) ->
                             nkchat_conversation:add_member(ObjId, M, #{silent => true})
                         end,
                         ToAdd),
@@ -211,6 +220,7 @@ create(Data, #admin_session{srv_id=SrvId, user_id=UserId}=_Session) ->
         <<"domain">> := DomainId,
         <<"obj_name">> := ObjName,
         <<"name">> := Name,
+        <<"description">> := Description,
         <<"type">> := Type,
         <<"members">> := Members
     } = Data,
@@ -232,6 +242,7 @@ create(Data, #admin_session{srv_id=SrvId, user_id=UserId}=_Session) ->
         type => Type2,
         created_by => UserId,
         name => Name,
+        description => Description,
         initial_member_ids => MemberIds2,
         obj_name_follows_members => ObjNameFollowsMembers
     },
