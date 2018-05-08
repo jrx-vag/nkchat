@@ -357,7 +357,8 @@ object_admin_info() ->
     #{
         class => session,
         weight => 2000,
-        tree_id => <<"domain_tree_sessions_media.calls">>
+        type_view_mod => nkchat_media_call_obj_type_view
+        %obj_view_mod => nkchat_media_call_obj_view
     }.
 
 %% @doc
