@@ -169,11 +169,10 @@ entry(Entry, Base) ->
     #{
         <<"obj_id">> := ObjId,
         <<"obj_name">> := ObjName,
-        <<"media.call">> := #{
-              <<"conversation_id">> := ConvId,
-              <<"type">> := Type
-        } = MediaCall
+        <<"media.call">> := MediaCall
     } = Entry,
+    ConvId = maps:get(<<"conversation_id">>, MediaCall, <<>>),
+    Type = maps:get(<<"type">>, MediaCall, <<>>),
     ConvName = case nkchat_conversation:get_pretty_name(ConvId) of
         {ok, #{name:=N}} ->
             nkdomain_admin_util:obj_id_url(ConvId, N);
