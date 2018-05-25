@@ -87,5 +87,12 @@ syntax(<<"mute">>, Syntax) ->
         '__mandatory' => [id, member_id, mute]
     };
 
+syntax(<<"is_muted">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        member_id => binary,
+        '__mandatory' => [id, member_id]
+    };
+
 syntax(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_CONVERSATION, Syntax).
