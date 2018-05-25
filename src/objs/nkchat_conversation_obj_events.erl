@@ -56,6 +56,9 @@ event({added_to_conversation, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId
 event({member_removed, MemberId}, State) ->
     {event, {member_removed, #{member_id=>MemberId}}, State};
 
+event({member_muted, MemberId, Muted}, State) ->
+    {event, {member_muted, #{member_id=>MemberId, is_muted=>Muted}}, State};
+
 event({removed_from_conversation, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
     {event, {removed_from_conversation, MemberId, #{conversation_id=>ConvId}}, State};
 

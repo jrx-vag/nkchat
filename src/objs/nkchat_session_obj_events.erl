@@ -55,6 +55,9 @@ event({member_added, ConvId, MemberId}, State) ->
 event({member_removed, ConvId, MemberId}, State) ->
     {event, {member_removed, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
+event({member_muted, ConvId, MemberId, Muted}, State) ->
+    {event, {member_muted, #{conversation_id=>ConvId, member_id=>MemberId, is_muted=>Muted}}, State};
+
 event({message_created, ConvId, Msg}, State) ->
     {event, {message_created, #{conversation_id=>ConvId, message=>Msg}}, State};
 
