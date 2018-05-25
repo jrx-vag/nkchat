@@ -1526,6 +1526,7 @@ do_get_member_info(Member, State) ->
             status:=Status
         }
     } = Obj,
+    Members2 = parse_muted_members(Members, State),
     #{
         parent_id => ParentId,
         name => maps:get(name, Obj, <<>>),
@@ -1537,7 +1538,7 @@ do_get_member_info(Member, State) ->
         status => Status,
         invitations => Invitations,
         is_closed => IsClosed,
-        members => Members,
+        members => Members2,
         path => Path,
         total_messages => Total,
         unread_counter => Counter,
@@ -1597,6 +1598,22 @@ mute_member(MemberId, Muted, State) ->
             end;
         false ->
             {error, member_not_found, State}
+    end.
+
+
+%% @private
+parse_muted_members(Members, State) ->
+    parse_muted_members(Members, [], State).
+
+parse_muted_members([], Acc, _State) ->
+    lists:reverse(Acc);
+
+parse_muted_members([#{member_id := MemberId}=M|Members], Acc, State) ->
+    case is_muted(MemberId, State) of
+        {ok, Muted} ->
+            parse_muted_members(Members, [M#{is_muted=>Muted}|Acc], State);
+        {error, _Error} ->
+            parse_muted_members(Members, [M#{is_muted=>false}|Acc], State)
     end.
 
 
