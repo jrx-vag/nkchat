@@ -117,6 +117,22 @@ cmd(<<"get_last_messages">>, #nkreq{data=#{id:=ConvId}}) ->
             {error, Error}
     end;
 
+cmd(<<"mute">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId, mute:=Mute}}) ->
+    case nkchat_conversation:mute(ConvId, MemberId, Mute) of
+        ok ->
+            {ok, #{}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
+cmd(<<"is_muted">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}}) ->
+    case nkchat_conversation:is_muted(ConvId, MemberId) of
+        {ok, Muted} ->
+            {ok, #{is_muted => Muted}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(Cmd, Req) ->
     nkdomain_obj_cmd:cmd(Cmd, ?CHAT_CONVERSATION, Req).
 

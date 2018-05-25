@@ -39,6 +39,7 @@
     <<"invite_removed">>,
     <<"member_added">>,
     <<"member_removed">>,
+    <<"member_muted">>,
     <<"message_created">>,
     <<"message_udpdated">>,
     <<"message_deleted">>,

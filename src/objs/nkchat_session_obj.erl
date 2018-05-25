@@ -62,6 +62,7 @@
     {invite_removed, ConvId::nkdomain:obj_id(), UserId::nkdomain:obj_id()} |
     {member_added, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
     {member_removed, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
+    {member_muted, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id(), IsMuted::boolean()} |
     {message_created, nkdomain:obj()} |
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
@@ -604,6 +605,9 @@ do_conversation_event({member_removed, MemberId}, ConvId, #obj_state{session=Ses
             State
     end,
     {noreply, do_event({member_removed, ConvId, MemberId}, State2)};
+
+do_conversation_event({member_muted, MemberId, IsMuted}, ConvId, State) ->
+    {noreply, do_event({member_muted, ConvId, MemberId, IsMuted}, State)};
 
 do_conversation_event({message_created, Msg}, ConvId, State) ->
     {noreply, do_event({message_created, ConvId, Msg}, State)};

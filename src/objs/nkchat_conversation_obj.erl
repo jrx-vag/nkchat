@@ -63,6 +63,7 @@
     {member_added, nkdomain:obj_id()} |
     {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
     {member_removed, nkdomain:obj_id()} |
+    {member_muted, nkdomain:obj_id(), boolean()} |
     {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
     {session_added, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
     {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
@@ -517,6 +518,9 @@ object_event({member_added, MemberId}, State) ->
 object_event({member_removed, MemberId}, State) ->
     {ok, do_event_all_sessions({member_removed, MemberId}, State)};
 
+object_event({member_muted, MemberId, Muted}, State) ->
+    {ok, do_event_all_sessions({member_muted, MemberId, Muted}, State)};
+
 object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
     ?DEBUG("created message ~p", [Msg], State),
     #session{total_messages=Total, messages=Msgs} = Session,
@@ -637,6 +641,7 @@ sync_op({get_info}, _From, State) ->
     #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj, session=Session} = State,
     #session{status=Status, is_closed=IsClosed} = Session,
     #{type:=Type, members:=Members} = ChatConv,
+    Tags = maps:get(tags, Obj, []),
     Data = #{
         name => maps:get(name, Obj, <<>>),
         description => maps:get(description, Obj, <<>>),
@@ -644,7 +649,8 @@ sync_op({get_info}, _From, State) ->
         is_closed => IsClosed,
         status => Status,
         members => Members,
-        info => maps:get(info, ChatConv, [])
+        info => maps:get(info, ChatConv, []),
+        tags => Tags
     },
     {reply, {ok, Data}, State};
 
@@ -785,6 +791,23 @@ sync_op({get_pretty_name}, _From, State) ->
         name => Name
     },
     {reply, {ok, Data}, State};
+
+sync_op({mute, MemberId, Muted}, _From, State) ->
+    case mute_member(MemberId, Muted, State) of
+        {ok, NewTags, NewState} ->
+            NewState2 = do_event({member_muted, MemberId, Muted}, NewState),
+            {reply, ok, NewState2};
+        {error, Error, NewState} ->
+            {reply, {error, Error}, NewState}
+    end;
+
+sync_op({is_muted, MemberId}, _From, State) ->
+    case is_muted(MemberId, State) of
+        {ok, IsMuted} ->
+            {reply, {ok, IsMuted}, State};
+        {error, Error, NewState} ->
+            {reply, {error, Error}, NewState}
+    end;
 
 sync_op({make_invite_token, UserId, Member, TTL}, From, State) ->
     #obj_state{id=#obj_id_ext{obj_id=ConvId}, domain_id=DomainId} = State,
@@ -1227,9 +1250,10 @@ set_member(MemberId, Member, State) ->
 
 %% @private
 rm_member(MemberId, State) ->
-    Members1 = get_members(State),
+    {_, _, State2} = mute_member(MemberId, false, State),
+    Members1 = get_members(State2),
     Members2 = lists:keydelete(MemberId, #member.member_id, Members1),
-    set_members(Members2, State).
+    set_members(Members2, State2).
 
 
 %%%% @private
@@ -1357,6 +1381,12 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
             #{?CHAT_MESSAGE:=#{text:=Txt, type:=MsgType}=MsgData} = Msg,
             MsgBody = maps:get(body, MsgData, #{}),
             #obj_state{session=#session{members=_Members, name=Name}, id=#obj_id_ext{obj_id=ConvId}} = State,
+            IsMuted = case is_muted(MemberId, State) of
+                {ok, Muted} ->
+                    Muted;
+                {error, _Error} ->
+                    false
+            end,
             Push = #{
                 type => ?CHAT_CONVERSATION,
                 class => new_msg,
@@ -1369,7 +1399,8 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 message_body => MsgBody,
                 message_text => Txt,
                 message_type => MsgType,
-                unread_counter => Count2
+                unread_counter => Count2,
+                is_muted => IsMuted
             },
             send_push(MemberId, Push, State),
             [Member2|Acc];
@@ -1551,3 +1582,64 @@ get_member_data(UserId, Field) ->
                     <<>>
             end
     end.
+
+
+%% @private
+mute_member(MemberId, Muted, State) ->
+    case find_member(MemberId, State) of
+        {true, _} ->
+            MutedTag = nkchat_conversation:get_muted_tag(MemberId),
+            case Muted of
+                true ->
+                    add_tag(MutedTag, State);
+                false ->
+                    remove_tag(MutedTag, State)
+            end;
+        false ->
+            {error, member_not_found, State}
+    end.
+
+
+%% @private
+is_muted(MemberId, State) ->
+    case find_member(MemberId, State) of
+        {true, _} ->
+            MutedTag = nkchat_conversation:get_muted_tag(MemberId),
+            has_tag(MutedTag, State);
+        false ->
+            {error, member_not_found}
+    end.
+
+
+%% @private
+add_tag(Tag, #obj_state{obj=Obj}=State) ->
+    Tags = maps:get(tags, Obj, []),
+    case lists:member(Tag, Tags) of
+        true ->
+            {ok, Tags, State};
+        false ->
+            Tags2 = [Tag|Tags],
+            State2 = State#obj_state{obj=Obj#{tags=>Tags2}, is_dirty=true},
+            State3 = nkdomain_obj_util:do_save_timer(State2),
+            {ok, Tags2, State3}
+    end.
+
+
+%% @private
+remove_tag(Tag, #obj_state{obj=Obj}=State) ->
+    Tags = maps:get(tags, Obj, []),
+    case lists:member(Tag, Tags) of
+        true ->
+            Tags2 = lists:delete(Tag, Tags),
+            State2 = State#obj_state{obj=Obj#{tags=>Tags2}, is_dirty=true},
+            State3 = nkdomain_obj_util:do_save_timer(State2),
+            {ok, Tags2, State3};
+        false ->
+            {ok, Tags, State}
+    end.
+
+
+%% @private
+has_tag(Tag, #obj_state{obj=Obj}) ->
+    Tags = maps:get(tags, Obj, []),
+    {ok, lists:member(Tag, Tags)}.

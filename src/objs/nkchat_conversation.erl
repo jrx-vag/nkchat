@@ -30,6 +30,7 @@
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
 -export([get_pretty_name/1, is_direct_conversation/1]).
+-export([mute/3, is_muted/2, get_muted_tag/1]).
 -export([added_invitation/4, add_invite_op/4, perform_op/1]).
 -export([message_event/2]).
 -export([sync_op/2, async_op/2]).
@@ -297,6 +298,21 @@ get_last_messages(Id) ->
 %% @doc
 get_pretty_name(Id) ->
     sync_op(Id, {get_pretty_name}).
+
+
+%% @doc
+mute(Id, MemberId, Mute) ->
+    sync_op(Id, {mute, nklib_util:to_binary(MemberId), Mute}).
+
+
+%% @doc
+is_muted(Id, MemberId) ->
+    sync_op(Id, {is_muted, nklib_util:to_binary(MemberId)}).
+
+
+%% @doc
+get_muted_tag(MemberId) ->
+    <<(nklib_util:to_binary(MemberId))/binary, ":", "muted">>.
 
 
 %% @doc
