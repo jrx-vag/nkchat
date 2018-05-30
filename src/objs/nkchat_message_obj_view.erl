@@ -205,7 +205,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
 
 
 update(ObjId, Data, _Session) ->
-    lager:error("NKLOG UPDATE ~p", [Data]),
+    %lager:notice("NKLOG UPDATE ~p", [Data]),
     #{
         <<"obj_name">> := ObjName,
         <<"text">> := Text
@@ -235,7 +235,7 @@ update(ObjId, Data, _Session) ->
                 _ ->
                     Msg3#{body => Body2}
             end,
-            lager:error("UPDATED MSG: ~p", [Msg4]),
+            %lager:notice("UPDATED MSG: ~p", [Msg4]),
             case nkdomain:update(ObjId, #{?CHAT_MESSAGE => Msg4}) of
                 {ok, _} ->
                     case nkdomain:update_name(ObjId, ObjName) of
@@ -256,7 +256,7 @@ update(ObjId, Data, _Session) ->
 
 
 create(Data, #admin_session{user_id=UserId}=_Session) ->
-    lager:error("NKLOG CREATE ~p", [Data]),
+    %lager:notice("NKLOG CREATE ~p", [Data]),
     #{
         <<"obj_name">> := ObjName,
         <<"new_parent_id">> := NewParentId,
@@ -293,7 +293,7 @@ create(Data, #admin_session{user_id=UserId}=_Session) ->
                 created_by => UserId,
                 ?CHAT_MESSAGE => Msg2
             },
-            lager:error("NKLOG CREATE MSG: ~p", [Create]),
+            %lager:notice("NKLOG CREATE MSG: ~p", [Create]),
             case nkdomain_obj_make:create(Create) of
                 {ok, #obj_id_ext{obj_id=ObjId}, []} ->
                     {ok, ObjId};
