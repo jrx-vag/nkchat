@@ -151,7 +151,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
                         value => <<>>,
                         suggest_type => ?CHAT_CONVERSATION,
                         suggest_field => <<"name">>,
-                        suggest_template => <<"#name#">>,
+                        suggest_template => <<"#name# (#domain#)">>,
                         required => IsNew,
                         hidden => not IsNew,
                         editable => true
