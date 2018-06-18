@@ -238,6 +238,8 @@ object_mutation(MutationName, Params, Ctx) ->
 
 -type query() ::
     {query_member_conversations, nkdomain:id(), nkdomain:id()} |
+    {query_recent_conversations, nkdomain:id(), nkdomain:id(), #{from=>integer(),
+                                    size=>integer(), types=>[binary()]}} |
     {query_conversations_with_members, nkdomain:id(), [nkdomain:obj_id()]} |
     {query_conversation_messages, nkdomain:id(), nkdomain_db:search_objs_opts() |
                                     #{start_date=>nkdomain:timestamp(), end_date=>nkdomain:timestamp(), inclusive=>boolean()}}.
