@@ -55,6 +55,15 @@ syntax(<<"find_member_conversations">>, Syntax) ->
         member_id => binary
     };
 
+syntax(<<"get_recent_conversations">>, Syntax) ->
+    Syntax#{
+        domain_id => binary,
+        member_id => binary,
+        types => {list, binary},
+        from => integer,
+        size => integer
+    };
+
 syntax(<<"find_conversations_with_members">>, Syntax) ->
     Syntax#{
         domain_id => binary,

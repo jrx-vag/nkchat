@@ -112,6 +112,7 @@
     total_messages :: integer(),
     % sent_invitations = #{} :: #{pid() => nkdomain:obj_id()},
     messages :: [{Time::integer(), MsgId::nkdomain:obj_id(), Msg::map()}],
+    last_message_time = 0 :: nkdomain:timestamp(),
     obj_name_follows_members :: boolean(),
     push_srv_id :: binary()
 }).
@@ -171,6 +172,7 @@ object_parse(_Mode, _Obj) ->
         members_hash => binary,
         obj_name_follows_members => boolean,
         push_srv_id => binary,
+        last_message_time => integer,
         initial_member_ids => {list, binary},
         '__defaults' => #{type => <<"private">>, info => [], members => [], invitations=>[]}
     }.
@@ -209,7 +211,8 @@ object_es_mapping() ->
         info => #{enabled => false},
         members_hash => #{type => keyword},
         obj_name_follows_members => #{type => boolean},
-        push_srv_id => #{type => keyword}
+        push_srv_id => #{type => keyword},
+        last_message_time => #{type => date}
     }.
 
 
@@ -235,6 +238,8 @@ object_mutation(MutationName, Params, Ctx) ->
 
 -type query() ::
     {query_member_conversations, nkdomain:id(), nkdomain:id()} |
+    {query_recent_conversations, nkdomain:id(), nkdomain:id(), #{from=>integer(),
+                                    size=>integer(), types=>[binary()]}} |
     {query_conversations_with_members, nkdomain:id(), [nkdomain:obj_id()]} |
     {query_conversation_messages, nkdomain:id(), nkdomain_db:search_objs_opts() |
                                     #{start_date=>nkdomain:timestamp(), end_date=>nkdomain:timestamp(), inclusive=>boolean()}}.
@@ -256,6 +261,37 @@ object_db_get_query(nkelastic, {query_member_conversations, Domain, Member}, DbO
                         fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])]
                     },
                     {ok, {nkelastic, Filters, maps:merge(DbOpts, Opts)}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end;
+
+object_db_get_query(nkelastic, {query_recent_conversations, Domain, Member, Opts}, DbOpts) ->
+    case nkdomain_store_es_util:get_path(Domain) of
+        {ok, DomainPath} ->
+            case nkdomain_store_es_util:get_obj_id(Member) of
+                {ok, MemberId} ->
+                    Filters = case Opts of
+                        #{types := []} ->
+                            [];
+                        #{types := Types} when is_list(Types) ->
+                            [{[?CHAT_CONVERSATION, ".type"], values, Types}];
+                        _ ->
+                            []
+                    end,
+                    Filters2 = [
+                        {path, subdir, DomainPath},
+                        {[?CHAT_CONVERSATION, ".members.member_id"], eq, MemberId}
+                    |Filters],
+                    Opts2 = maps:with([from, size], Opts),
+                    Opts3 = Opts2#{
+                        type => ?CHAT_CONVERSATION,
+                        fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])],
+                        sort => [#{list_to_binary([?CHAT_CONVERSATION, ".last_message_time"]) => #{order => desc}}]
+                    },
+                    {ok, {nkelastic, Filters2, maps:merge(DbOpts, Opts3)}};
                 {error, Error} ->
                     {error, Error}
             end;
@@ -390,6 +426,12 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                     {Time, MsgId, Msg}
                 end,
                 Msgs),
+            LastMessageTime = case Msgs2 of
+                [{MsgTime, _MsgId, _Msg}|_] ->
+                    MsgTime;
+                _ ->
+                    maps:get(last_message_time, Conv, 0)
+            end,
             Session = #session{
                 name = maps:get(name, Obj, ObjName),
                 type = Type,
@@ -400,6 +442,7 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 total_messages = Total,
                 messages = Msgs2,
                 push_srv_id = maps:get(push_srv_id, Conv, <<>>),
+                last_message_time = LastMessageTime,
                 obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
             State2 = State#obj_state{session=Session},
@@ -424,6 +467,7 @@ object_save(#obj_state{obj=Obj, session=Session}=State) ->
         members = Members,
         invitations = Invitations,
         is_closed = IsClosed,
+        last_message_time = LastMessageTime,
         status = Status
     } = Session,
     MemberList= lists:map(
@@ -467,6 +511,7 @@ object_save(#obj_state{obj=Obj, session=Session}=State) ->
         members => MemberList,
         invitations => InvitationList,
         is_closed => IsClosed,
+        last_message_time => LastMessageTime,
         status => Status
     },
     Obj2 = ?ADD_TO_OBJ(?CHAT_CONVERSATION, Conv2, Obj),
@@ -532,7 +577,8 @@ object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
     end,
     Session2 = Session#session{
         total_messages = Total+1,
-        messages = Msgs3
+        messages = Msgs3,
+        last_message_time = Time
     },
     State2 = do_new_msg_event(Time, Msg, State#obj_state{session=Session2}),
     % is_dirty is already true
