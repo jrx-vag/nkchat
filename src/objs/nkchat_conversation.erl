@@ -29,6 +29,7 @@
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
+-export([get_recent_conversations/3]).
 -export([get_pretty_name/1, is_direct_conversation/1]).
 -export([mute/3, is_muted/2, get_muted_tag/1]).
 -export([added_invitation/4, add_invite_op/4, perform_op/1]).
@@ -242,6 +243,19 @@ find_member_conversations(Domain, MemberId) ->
                 fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
                 List),
             {ok, List2};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @doc
+get_recent_conversations(Domain, MemberId, Opts) ->
+    case nkdomain_db:search(?CHAT_CONVERSATION, {query_recent_conversations, Domain, MemberId, Opts}) of
+        {ok, N, List, _Meta} ->
+            List2 = lists:map(
+                fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
+                List),
+            {ok, N, List2};
         {error, Error} ->
             {error, Error}
     end.

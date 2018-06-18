@@ -86,6 +86,25 @@ cmd(<<"find_member_conversations">>, #nkreq{data=Data}=Req) ->
             {error, Error}
     end;
 
+cmd(<<"get_recent_conversations">>, #nkreq{data=Data}=Req) ->
+    case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
+        {ok, DomainId} ->
+            case nkdomain_api_util:get_id(?DOMAIN_USER, member_id, Data, Req) of
+                {ok, MemberId} ->
+                    case nkchat_conversation:get_recent_conversations(DomainId, MemberId, Data) of
+                        {ok, Total, List} ->
+                            List2 = [#{<<"conversation_id">>=>ConvId, <<"type">>=>Type} || {ConvId, Type}<-List],
+                            {ok, #{total=>Total, data=>List2}};
+                        {error, Error} ->
+                            {error, Error}
+                    end;
+                _ ->
+                    {error, user_unknown}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(<<"find_conversations_with_members">>, #nkreq{data=Data}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
         {ok, DomainId} ->
