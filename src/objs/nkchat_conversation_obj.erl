@@ -426,11 +426,12 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                     {Time, MsgId, Msg}
                 end,
                 Msgs),
+            CreatedTime = maps:get(created_time, Obj, 0),
             LastMessageTime = case Msgs2 of
                 [{MsgTime, _MsgId, _Msg}|_] ->
                     MsgTime;
-                _ ->
-                    maps:get(last_message_time, Conv, 0)
+                [] ->
+                    CreatedTime
             end,
             Session = #session{
                 name = maps:get(name, Obj, ObjName),
@@ -598,18 +599,33 @@ object_event({message_updated, Msg}, #obj_state{session=Session}=State) ->
     State2 = do_event_all_sessions({message_updated, Msg}, State#obj_state{session=Session2}),
     {ok, State2};
 
-object_event({message_deleted, MsgId}, #obj_state{session=Session}=State) ->
-    #session{total_messages=Total, messages=Msgs} = Session,
+object_event({message_deleted, MsgId}, #obj_state{obj=Obj, session=Session}=State) ->
+    #session{total_messages=Total, messages=Msgs, last_message_time=LastMsgTime} = Session,
+    CreatedTime = maps:get(created_time, Obj, 0),
     Session2 = case lists:keymember(MsgId, 2, Msgs) of
         true ->
             Msgs2 = lists:keydelete(MsgId, 2, Msgs),
-            Session#session{messages=Msgs2};
+            LastMsgTime2 = case Msgs2 of
+                [{T, _, _}|_] ->
+                    T;
+                [] ->
+                    CreatedTime
+            end,
+            Session#session{messages=Msgs2, last_message_time=LastMsgTime2};
         false ->
             Session
     end,
     Session3 = Session2#session{total_messages=Total-1},
     State2 = do_event_all_sessions({message_deleted, MsgId}, State#obj_state{session=Session3}),
-    {ok, State2};
+    #session{last_message_time=NewLastMsgTime} = Session3,
+    IsDirty = NewLastMsgTime =/= LastMsgTime,
+    State3 = case IsDirty of
+        true ->
+            nkdomain_obj_util:do_save_timer(State2#obj_state{is_dirty=true});
+        false ->
+            State2
+    end,
+    {ok, State3};
 
 object_event({session_removed, MemberId, SessId}, State) ->
     {ok, do_event_all_sessions({session_removed, MemberId, SessId}, State)};
