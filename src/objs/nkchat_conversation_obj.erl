@@ -823,6 +823,24 @@ sync_op({get_member_info, MemberId}, _From, State) ->
             {reply, {error, member_not_found}, State}
     end;
 
+sync_op({get_member_cached_data, MemberId}, _From, #obj_state{session=Session}=State) ->
+    case find_member(MemberId, State) of
+        {true, #member{last_seen_msg_time=Last, unread_count=UnreadCount}=Member} ->
+            {Member3, State3} = case UnreadCount of
+                -1 ->
+                    Count = find_unread(Last, State),
+                    Member2 = Member#member{unread_count=Count},
+                    #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
+                    State2 = set_member(MemberId, Member2, State),
+                    {Member2, State2};
+                _ ->
+                    {Member, State}
+            end,
+            {reply, {ok, Member3}, State3};
+        false ->
+            {reply, {error, member_not_found}, State}
+    end;
+
 sync_op({get_last_messages}, _From, #obj_state{session=Session}=State) ->
     #session{total_messages=Total, messages=Messages} = Session,
     Messages2 = [M || {_Time, _Id, M} <- Messages],
@@ -1424,9 +1442,10 @@ do_new_msg_event(Time, Msg, #obj_state{obj=#{?CHAT_CONVERSATION:=_ChatConv}} = S
 do_new_msg_event([], _Time, _Msg, Acc, _Opts, State) ->
     set_members(Acc, State);
 
-do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
+do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{domain_id=DomainId, obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
     #member{
         member_id = MemberId,
+        last_seen_msg_time = Last,
         unread_count = Count,
         sessions = Sessions
     } = Member,
@@ -1435,7 +1454,12 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
     IsFromThatUser = MemberId =:= CreatedBy,
     Acc2 = case Sessions of
         [] ->
-            Count2 = Count + 1,
+            Count2 = case Count of
+                -1 ->
+                    find_unread(Last, State);
+                _ ->
+                    Count + 1
+            end,
             Member2 = Member#member{
                 unread_count = Count2
             },
@@ -1449,6 +1473,29 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 {error, _Error} ->
                     false
             end,
+            MemberConvs = case nkchat_conversation:find_member_conversations(DomainId, MemberId) of
+                {ok, List} ->
+                    [CId || {CId, _Type} <- List];
+                {error, Error} ->
+                    [ConvId]
+            end,
+            Count3 = lists:foldl(
+                fun(MemberConv, Acc) ->
+                    case MemberConv of
+                        ConvId ->
+                            Acc + Count2;
+                        _ ->
+                            UnreadCount = case nkchat_conversation:get_member_cached_data(MemberConv, MemberId) of
+                                {ok, #member{unread_count=UC}} ->
+                                    UC;
+                                {error, _Error2} ->
+                                    0
+                            end,
+                            Acc + UnreadCount
+                    end
+                end,
+                0,
+                MemberConvs),
             Push = #{
                 type => ?CHAT_CONVERSATION,
                 class => new_msg,
@@ -1461,8 +1508,8 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 message_body => MsgBody,
                 message_text => Txt,
                 message_type => MsgType,
-                unread_counter => Count2,
-                is_muted => IsMuted
+                is_muted => IsMuted,
+                unread_counter => Count3
             },
             send_push(MemberId, Push, State),
             [Member2|Acc];
