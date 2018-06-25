@@ -410,14 +410,12 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 last_active_time := LastActiveTime,
                 last_seen_message_time := LastSeenTime
             } = Data,
-            Count = find_unread(LastSeenTime, State),
             #member{
                 member_id = MemberId,
                 added_time = AddedTime,
                 roles = maps:get(member_roles, Data, []),
                 last_active_time= LastActiveTime,
-                last_seen_msg_time = LastSeenTime,
-                unread_count=Count
+                last_seen_msg_time = LastSeenTime
             }
         end,
         MemberList),
@@ -827,15 +825,18 @@ sync_op({get_member_info, MemberId}, _From, State) ->
 
 sync_op({get_member_cached_data, MemberId}, _From, #obj_state{session=Session}=State) ->
     case find_member(MemberId, State) of
-        {true, #member{unread_count=UnreadCount}=Member} ->
-            Member2 = case UnreadCount of
+        {true, #member{last_seen_msg_time=Last, unread_count=UnreadCount}=Member} ->
+            {Member3, State3} = case UnreadCount of
                 -1 ->
-                    #session{total_messages=Total} = Session,
-                    Member#member{unread_count=Total};
+                    Count = find_unread(Last, State),
+                    Member2 = Member#member{unread_count=Count},
+                    #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
+                    State2 = set_member(MemberId, Member2, State),
+                    {Member2, State2};
                 _ ->
-                    Member
+                    {Member, State}
             end,
-            {reply, {ok, Member2}, State};
+            {reply, {ok, Member3}, State3};
         false ->
             {reply, {error, member_not_found}, State}
     end;
@@ -1444,6 +1445,7 @@ do_new_msg_event([], _Time, _Msg, Acc, _Opts, State) ->
 do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{domain_id=DomainId, obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
     #member{
         member_id = MemberId,
+        last_seen_msg_time = Last,
         unread_count = Count,
         sessions = Sessions
     } = Member,
@@ -1453,14 +1455,13 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
     Acc2 = case Sessions of
         [] ->
             Count2 = case Count of
-                -1 -> 
-                    #obj_state{session=#session{total_messages=Total}}=State,
-                    Total;
+                -1 ->
+                    find_unread(Last, State);
                 _ ->
                     Count + 1
             end,
             Member2 = Member#member{
-                unread_count = Count + 1
+                unread_count = Count2
             },
             #{type:=ConvType} = ChatConv,
             #{?CHAT_MESSAGE:=#{text:=Txt, type:=MsgType}=MsgData} = Msg,
