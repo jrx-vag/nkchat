@@ -410,12 +410,14 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 last_active_time := LastActiveTime,
                 last_seen_message_time := LastSeenTime
             } = Data,
+            Count = find_unread(LastSeenTime, State),
             #member{
                 member_id = MemberId,
                 added_time = AddedTime,
                 roles = maps:get(member_roles, Data, []),
                 last_active_time= LastActiveTime,
-                last_seen_msg_time = LastSeenTime
+                last_seen_msg_time = LastSeenTime,
+                unread_count=Count
             }
         end,
         MemberList),
