@@ -1456,7 +1456,7 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
         [] ->
             Count2 = case Count of
                 -1 ->
-                    find_unread(Last, State);
+                    find_unread(Last, State) + 1;
                 _ ->
                     Count + 1
             end,
