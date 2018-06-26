@@ -1442,7 +1442,7 @@ do_new_msg_event(Time, Msg, #obj_state{obj=#{?CHAT_CONVERSATION:=_ChatConv}} = S
 do_new_msg_event([], _Time, _Msg, Acc, _Opts, State) ->
     set_members(Acc, State);
 
-do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{domain_id=DomainId, obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
+do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
     #member{
         member_id = MemberId,
         last_seen_msg_time = Last,
@@ -1473,7 +1473,7 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 {error, _Error} ->
                     false
             end,
-            MemberConvs = case nkchat_conversation:find_member_conversations(DomainId, MemberId) of
+            MemberConvs = case nkchat_conversation:find_member_conversations(root, MemberId) of
                 {ok, List} ->
                     [CId || {CId, _Type} <- List];
                 {error, Error} ->
