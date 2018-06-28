@@ -52,7 +52,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
     MemberIds = [maps:get(member_id, Member) || Member <- Members],
     MembersValue = binary:list_to_bin(lists:join(<<",">>, MemberIds)),
     MemberOpts = get_members_opts(MemberIds),
-    DefaultTypes = [<<"channel">>, <<"one2one">>, <<"private">>],
+    DefaultTypes = [<<"channel">>, <<"self">>, <<"one2one">>, <<"private">>],
     TypeOpts = nkdomain_admin_util:get_agg_term_with_defaults(<<?CHAT_CONVERSATION/binary, ".type">>, ?CHAT_CONVERSATION, <<"/">>, DefaultTypes, Session),
     FormId = nkdomain_admin_util:make_obj_view_id(?CHAT_CONVERSATION, ObjId),
     Spec = #{
@@ -278,25 +278,45 @@ create(Data, #admin_session{srv_id=SrvId, user_id=UserId}=_Session) ->
 %% @private
 get_conv_type(DesiredType, Members) ->
     case DesiredType of
-        <<"one2one">> ->
+        <<"self">> ->
             case erlang:length(Members) of
-                2 ->
-                    <<"one2one">>;
-                N when N < 2 ->
+                0  ->
                     ?LLOG(warning, "Type changed from ~p to <<\"channel\">>", [DesiredType]),
                     <<"channel">>;
+                1 ->
+                    <<"self">>;
+                2 ->
+                    ?LLOG(warning, "Type changed from ~p to <<\"one2one\">>", [DesiredType]),
+                    <<"one2one">>;
+                _ ->
+                    ?LLOG(warning, "Type changed from ~p to <<\"private\">>", [DesiredType]),
+                    <<"private">>
+            end;
+        <<"one2one">> ->
+            case erlang:length(Members) of
+                0  ->
+                    ?LLOG(warning, "Type changed from ~p to <<\"channel\">>", [DesiredType]),
+                    <<"channel">>;
+                1 ->
+                    ?LLOG(warning, "Type changed from ~p to <<\"self\">>", [DesiredType]),
+                    <<"self">>;
+                2 ->
+                    <<"one2one">>;
                 _ ->
                     ?LLOG(warning, "Type changed from ~p to <<\"private\">>", [DesiredType]),
                     <<"private">>
             end;
         <<"private">> ->
             case erlang:length(Members) of
+                0  ->
+                    ?LLOG(warning, "Type changed from ~p to <<\"channel\">>", [DesiredType]),
+                    <<"channel">>;
+                1 ->
+                    ?LLOG(warning, "Type changed from ~p to <<\"self\">>", [DesiredType]),
+                    <<"self">>;
                 2 ->
                     ?LLOG(warning, "Type changed from ~p to <<\"one2one\">>", [DesiredType]),
                     <<"one2one">>;
-                N when N < 2 ->
-                    ?LLOG(warning, "Type changed from ~p to <<\"channel\">>", [DesiredType]),
-                    <<"channel">>;
                 _ ->
                     <<"private">>
             end;
@@ -310,6 +330,9 @@ get_conv_type(DesiredType, Members) ->
 
 
 %% @private
+is_direct_conv(<<"self">>) ->
+    true;
+
 is_direct_conv(<<"one2one">>) ->
     true;
 

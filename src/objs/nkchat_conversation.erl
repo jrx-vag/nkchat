@@ -338,6 +338,9 @@ get_muted_tag(MemberId) ->
 
 
 %% @doc
+is_direct_conversation(<<"self">>) ->
+    true;
+
 is_direct_conversation(<<"one2one">>) ->
     true;
 
