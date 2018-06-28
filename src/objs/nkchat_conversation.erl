@@ -25,7 +25,7 @@
 
 -export([create/2]).
 -export([add_info/2, add_member/3, remove_member/3]).
--export([add_session/4, set_session_active/4, remove_session/3, get_member_info/2]).
+-export([add_session/4, set_session_active/4, remove_session/3, get_member_info/2, get_member_cached_data/2]).
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
@@ -228,6 +228,14 @@ remove_session(ConvId, MemberId, SessId) ->
 
 get_member_info(ConvId, MemberId) ->
     sync_op(ConvId, {get_member_info, MemberId}).
+
+
+%% @private
+-spec get_member_cached_data(nkdomain:obj_id(), nkdomain:obj_id()) ->
+    {ok, map()} | {error, term()}.
+    
+get_member_cached_data(ConvId, MemberId) ->
+    sync_op(ConvId, {get_member_cached_data, MemberId}).
 
 
 %% @private
