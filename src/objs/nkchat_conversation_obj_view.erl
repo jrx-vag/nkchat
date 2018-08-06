@@ -241,7 +241,7 @@ create(Data, #admin_session{srv_id=SrvId, user_id=UserId}=_Session) ->
         push_srv_id => SrvId, % TODO: Pass correct SrvId at login
         type => Type2,
         created_by => UserId,
-        name => Name,
+        name => nklib_parse:normalize(Name, #{space=>$_, allowed=>[$-,$_], not_to_lowercase => true}),
         description => Description,
         initial_member_ids => MemberIds2,
         obj_name_follows_members => ObjNameFollowsMembers
