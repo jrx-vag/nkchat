@@ -189,7 +189,13 @@ update(ObjId, Data, _Session) ->
     Type2 = get_conv_type(Type, MemberIds2),
     Update = maps:with([<<"name">>, <<"description">>], Data),
     Update2 = Update#{?CHAT_CONVERSATION => #{<<"type">> => Type2}},
-    case nkdomain:update(ObjId, Update2) of
+    Update3 = case Update2 of
+        #{<<"name">> := Name} ->
+            Update2#{<<"name">> => nklib_parse:normalize(Name, #{space=>$_, allowed=>[$-,$_], not_to_lowercase => true})};
+        _ ->
+            Update2
+    end,
+    case nkdomain:update(ObjId, Update3) of
         {ok, _} ->
             case nkdomain:update_name(ObjId, ObjName2) of
                 {ok, _} ->
