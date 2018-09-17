@@ -1465,7 +1465,7 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                     false
             end
     end,
-    case SendPush of
+    PushCount = case SendPush of
         true ->
             PCount = case Count of
                 -1 ->
@@ -1521,18 +1521,14 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 is_muted => IsMuted,
                 unread_counter => PCount
             },
-            send_push(MemberId, Push, State);
+            send_push(MemberId, Push, State),
+            PCount;
         false ->
-            ok
+            Count
     end,
     Acc2 = case Sessions of
         [] ->
-            Count2 = case Count of
-                -1 ->
-                    find_unread(Last, State) + 1;
-                _ ->
-                    Count + 1
-            end,
+            Count2 = PushCount,
             Member2 = Member#member{
                 unread_count = Count2
             },
