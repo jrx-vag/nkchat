@@ -1452,17 +1452,27 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
     IsActive = lists:keymember(true, #chat_session.is_active, Sessions),
     #{created_by:=CreatedBy} = Msg,
     IsFromThatUser = MemberId =:= CreatedBy,
-    Acc2 = case Sessions of
+    SendPush = case Sessions of
         [] ->
-            Count2 = case Count of
+            true;
+        _ when IsFromThatUser ->
+            false;
+        _ ->
+            case nkdomain_user:get_presence(MemberId, ?CHAT_SESSION) of
+                {ok, #{status := P}} when P =:= <<"inactive">>; P =:= <<"offline">> ->
+                    true;
+                _ ->
+                    false
+            end
+    end,
+    PushCount = case SendPush of
+        true ->
+            PCount = case Count of
                 -1 ->
                     find_unread(Last, State) + 1;
                 _ ->
                     Count + 1
             end,
-            Member2 = Member#member{
-                unread_count = Count2
-            },
             #{type:=ConvType} = ChatConv,
             #{?CHAT_MESSAGE:=#{text:=Txt, type:=MsgType}=MsgData} = Msg,
             MsgBody = maps:get(body, MsgData, #{}),
@@ -1479,11 +1489,11 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 {error, Error} ->
                     [ConvId]
             end,
-            Count3 = lists:foldl(
+            PCount2 = lists:foldl(
                 fun(MemberConv, Acc) ->
                     case MemberConv of
                         ConvId ->
-                            Acc + Count2;
+                            Acc + PCount;
                         _ ->
                             UnreadCount = case nkchat_conversation:get_member_cached_data(MemberConv, MemberId) of
                                 {ok, #member{unread_count=UC}} ->
@@ -1509,9 +1519,19 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 message_text => Txt,
                 message_type => MsgType,
                 is_muted => IsMuted,
-                unread_counter => Count3
+                unread_counter => PCount
             },
             send_push(MemberId, Push, State),
+            PCount;
+        false ->
+            Count
+    end,
+    Acc2 = case Sessions of
+        [] ->
+            Count2 = PushCount,
+            Member2 = Member#member{
+                unread_count = Count2
+            },
             [Member2|Acc];
         _ when IsActive ->
             Member2 = Member#member{
