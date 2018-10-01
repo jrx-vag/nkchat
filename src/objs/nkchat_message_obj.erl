@@ -93,7 +93,7 @@ create(Conv, Opts) ->
                     {error, Error}
             end;
         {_, _, _, true} ->
-            {error, converation_is_closed};
+            {error, conversation_is_closed};
         {error, Error} ->
             {error, Error}
     end.

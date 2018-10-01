@@ -380,6 +380,7 @@ object_es_mapping() ->
         message_id => #{type => keyword},
         started_time => #{type => date},
         stopped_time => #{type => date},
+        duration => #{type => integer},
         members_hash => #{type => keyword},
         members => #{
             type => object,
@@ -401,6 +402,7 @@ object_parse(_Mode, _Obj) ->
         conversation_id => binary,
         started_time => binary,
         stopped_time => binary,
+        duration => {integer, 0, none},
         message_id => binary,
         members_hash => binary,
         members =>
@@ -465,7 +467,19 @@ object_init(#obj_state{obj=Obj}=State) ->
             CallObj2 = CallObj#{started_time=>nkdomain_util:timestamp()},
             ?ADD_TO_OBJ(?MEDIA_CALL, CallObj2, Obj)
     end,
-    State2 = State#obj_state{session=Session2, obj=Obj2},
+    {Obj3, IsDirty} = case Obj2 of
+        #{?MEDIA_CALL := #{duration:=_}} ->
+            {Obj2, false};
+        #{?MEDIA_CALL := CallObj3} ->
+            Time = case CallObj3 of
+                #{started_time:=Start, stopped_time:=Stop} when Stop >= Start ->
+                    Stop - Start;
+                _ ->
+                    0
+            end,
+            {?ADD_TO_OBJ(?MEDIA_CALL, CallObj3#{duration=>Time}, Obj2), true}
+    end,
+    State2 = State#obj_state{session=Session2, obj=Obj3, is_dirty=IsDirty},
     State3 = update_call_status(new, State2),
     {ok, State3}.
 
@@ -540,7 +554,12 @@ object_sync_op({?MODULE, answer_media, MediaId, CalleeSessId, CalleeSessPid, Cal
     case get_media_session(MediaId, State) of
         #media_session{status=ringing, caller_session_id=CallerSessId, timer=Timer}=Media ->
             nklib_util:cancel_timer(Timer),
-            State2 = add_member_session(CalleeSessId, CalleeSessPid, CalleeId, State),
+            #obj_state{obj=Obj}=State,
+            #{?MEDIA_CALL := CallObj} = Obj,
+            CallObj2 = CallObj#{started_time=>nkdomain_util:timestamp()},
+            Obj2 = ?ADD_TO_OBJ(?MEDIA_CALL, CallObj2, Obj),
+            State1 = State#obj_state{obj=Obj2},
+            State2 = add_member_session(CalleeSessId, CalleeSessPid, CalleeId, State1),
             Media2 = Media#media_session{
                 status = answered,
                 timer = undefined,
@@ -863,9 +882,11 @@ do_hangup(Reason, State) ->
         _ ->
             #obj_state{session=#session{medias=Medias}} = State,
             State2 = rm_media_sessions(Medias, call_hangup, State),
-            Time = get_duration(State2),
-            State3 = do_all_member_sessions_event({call_hangup, Reason, Time}, State2),
-            update_call_status(hangup, State3)
+            %Time = get_duration(State2),
+            State3 = update_duration(State2),
+            #obj_state{obj=#{?MEDIA_CALL:=#{duration:=Time}}}=State3,
+            State4 = do_all_member_sessions_event({call_hangup, Reason, Time}, State3),
+            update_call_status(hangup, State4)
     end.
 
 
@@ -1004,5 +1025,24 @@ update_chat_msg(State) ->
 
 
 %% @private
-get_duration(#obj_state{obj=#{?MEDIA_CALL:=#{started_time:=Start}}}) ->
+get_duration(#obj_state{obj=#{?MEDIA_CALL:=#{duration:=Time}}}) ->
+    Time;
+
+get_duration(_) ->
+    0.
+
+
+%% @private
+calculate_duration(#obj_state{obj=#{?MEDIA_CALL:=#{started_time:=Start}}}) ->
     (nkdomain_util:timestamp() - Start) div 1000.
+
+
+%% @private
+update_duration(#obj_state{obj=#{?MEDIA_CALL:=CallObj}=Obj}=State) ->
+    Time = case get_type_status(State) of
+        {_, in_call} ->
+            calculate_duration(State);
+        _ ->
+            0
+    end,
+    State#obj_state{obj=Obj#{?MEDIA_CALL=>CallObj#{duration=>Time}}, is_dirty=true}.
