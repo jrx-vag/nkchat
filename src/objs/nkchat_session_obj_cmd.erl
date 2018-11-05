@@ -38,8 +38,9 @@
     <<"invite_added">>,
     <<"invite_removed">>,
     <<"member_added">>,
-    <<"member_removed">>,
     <<"member_muted">>,
+    <<"member_removed">>,
+    <<"member_typing">>,
     <<"message_created">>,
     <<"message_udpdated">>,
     <<"message_deleted">>,
@@ -198,6 +199,14 @@ cmd(<<"reject_invitation">>, #nkreq{data=#{token:=TokenId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             nkchat_session_obj:reject_invitation(Id, TokenId);
+        {error, Error} ->
+            {error, Error}
+    end;
+
+cmd(<<"typing">>, #nkreq{data=Data}=Req) ->
+    case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
+        {ok, Id} ->
+            nkchat_session_obj:typing(Id);
         {error, Error} ->
             {error, Error}
     end;

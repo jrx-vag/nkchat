@@ -62,9 +62,10 @@
     {message_deleted, nkdomain:obj_id()} |
     {member_added, nkdomain:obj_id()} |
     {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
-    {member_removed, nkdomain:obj_id()} |
     {member_muted, nkdomain:obj_id(), boolean()} |
+    {member_removed, nkdomain:obj_id()} |
     {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
+    {member_typing, nkdomain:obj_id()} |
     {session_added, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
     {session_removed, Member::nkdomain:obj_id(), SessId::nkdomain:obj_id()} |
     {status_updated, nkchat_conversation:status()} |
@@ -566,6 +567,9 @@ object_event({member_removed, MemberId}, State) ->
 
 object_event({member_muted, MemberId, Muted}, State) ->
     {ok, do_event_all_sessions({member_muted, MemberId, Muted}, State)};
+
+object_event({member_typing, UserId}, State) ->
+    {ok, do_event_all_sessions({member_typing, UserId}, State)};
 
 object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
     ?DEBUG("created message ~p", [Msg], State),
@@ -1074,7 +1078,25 @@ async_op({added_invitation, InvitedBy, UserId, TokenId}, State) ->
             State4 = do_event({invite_added, InviteAdded}, State3),
             {noreply, nkdomain_obj_util:do_save_timer(State4)};
         {error, Error} ->
-            {error, Error}
+            ?LLOG(error, "added_invitation: getting token data for ~s: ~p", [TokenId, Error], State),
+            {noreply, State}
+    end;
+
+async_op({typing, MemberId}, State) ->
+    case find_member(MemberId, State) of
+        {true, #member{member_id=UserId, sessions=Sessions}} ->
+            case lists:keymember(true, #chat_session.is_active, Sessions) of
+                true ->
+                    %?LLOG(info, "Sending member_typing event from ~s to all users", [MemberId], State),
+                    State2 = do_event({member_typing, UserId}, State),
+                    {noreply, State2};
+                false ->
+                    ?LLOG(error, "typing: conversation not active for member ~s", [MemberId], State),
+                    {noreply, State}
+            end;
+        false ->
+            ?LLOG(error, "typing: member ~s not found", [MemberId], State),
+            {noreply, State}
     end;
 
 async_op(_Op, _State) ->

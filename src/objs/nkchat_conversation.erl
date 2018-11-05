@@ -32,6 +32,7 @@
 -export([get_recent_conversations/3]).
 -export([get_pretty_name/1, is_direct_conversation/1]).
 -export([mute/3, is_muted/2, get_muted_tag/1]).
+-export([typing/2]).
 -export([added_invitation/4, add_invite_op/4, perform_op/1]).
 -export([message_event/2]).
 -export([sync_op/2, async_op/2]).
@@ -335,6 +336,11 @@ is_muted(Id, MemberId) ->
 %% @doc
 get_muted_tag(MemberId) ->
     <<(nklib_util:to_binary(MemberId))/binary, ":", "muted">>.
+
+
+%% @doc
+typing(Id, MemberId) ->
+    async_op(Id, {typing, nklib_util:to_binary(MemberId)}).
 
 
 %% @doc

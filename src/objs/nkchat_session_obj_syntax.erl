@@ -105,6 +105,11 @@ syntax(<<"launch_notifications">>, Syntax) ->
         id => binary
     };
 
+syntax(<<"typing">>, Syntax) ->
+    Syntax#{
+        id => binary
+    };
+
 syntax(<<"wakeup">>, Syntax) ->
     Syntax#{
         id => binary

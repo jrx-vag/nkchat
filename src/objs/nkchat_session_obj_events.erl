@@ -49,14 +49,24 @@ event({invite_added, ConvId, InviteData}, State) ->
 event({invite_removed, ConvId, UserId}, State) ->
     {event, {invite_removed, #{conversation_id=>ConvId, user_id=>UserId}}, State};
 
+event({invited_to_conversation, TokenId, UserId, ConvId}, State) ->
+    Data = #{token_id=>TokenId, user_id=>UserId, conversation_id=>ConvId},
+    {event, {invited_to_conversation, Data}, State};
+
+event({is_closed_updated, ConvId, IsClosed}, State) ->
+    {event, {is_closed_updated, #{conversation_id=>ConvId, is_closed=>IsClosed}}, State};
+
 event({member_added, ConvId, MemberId}, State) ->
     {event, {member_added, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
+
+event({member_muted, ConvId, MemberId, Muted}, State) ->
+    {event, {member_muted, #{conversation_id=>ConvId, member_id=>MemberId, is_muted=>Muted}}, State};
 
 event({member_removed, ConvId, MemberId}, State) ->
     {event, {member_removed, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
-event({member_muted, ConvId, MemberId, Muted}, State) ->
-    {event, {member_muted, #{conversation_id=>ConvId, member_id=>MemberId, is_muted=>Muted}}, State};
+event({member_typing, ConvId, MemberId}, State) ->
+    {event, {member_typing, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
 event({message_created, ConvId, Msg}, State) ->
     {event, {message_created, #{conversation_id=>ConvId, message=>Msg}}, State};
@@ -67,21 +77,14 @@ event({message_updated, ConvId, Msg}, State) ->
 event({message_deleted, ConvId, MsgId}, State) ->
     {event, {message_deleted, #{conversation_id=>ConvId, message_id=>MsgId}}, State};
 
+event({remove_notification, TokenId, Reason}, State) ->
+    {event, {remove_notification, #{token_id=>TokenId, reason=>Reason}}, State};
+
 event({status_updated, ConvId, Status}, State) ->
     {event, {status_updated, #{conversation_id=>ConvId, status=>Status}}, State};
 
-event({is_closed_updated, ConvId, IsClosed}, State) ->
-    {event, {is_closed_updated, #{conversation_id=>ConvId, is_closed=>IsClosed}}, State};
-
 event({unread_counter_updated, ConvId, Counter}, State) ->
     {event, {unread_counter_updated, #{conversation_id=>ConvId, counter=>Counter}}, State};
-
-event({invited_to_conversation, TokenId, UserId, ConvId}, State) ->
-    Data = #{token_id=>TokenId, user_id=>UserId, conversation_id=>ConvId},
-    {event, {invited_to_conversation, Data}, State};
-
-event({remove_notification, TokenId, Reason}, State) ->
-    {event, {remove_notification, #{token_id=>TokenId, reason=>Reason}}, State};
 
 event(_Event, State) ->
     {ok, State}.
