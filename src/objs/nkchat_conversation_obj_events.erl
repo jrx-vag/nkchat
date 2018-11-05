@@ -32,11 +32,26 @@
 
 
 %% @private
+event({added_to_conversation, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+    {event, {added_to_conversation, MemberId, #{conversation_id=>ConvId}}, State};
+
 event({invite_added, InviteData}, State) ->
     {event, {invite_added, InviteData}, State};
 
 event({invite_removed, UserId}, State) ->
     {event, {invite_removed, #{user_id=>UserId}}, State};
+
+event({member_added, MemberId}, State) ->
+    {event, {member_added, #{member_id=>MemberId}}, State};
+
+event({member_muted, MemberId, Muted}, State) ->
+    {event, {member_muted, #{member_id=>MemberId, is_muted=>Muted}}, State};
+
+event({member_removed, MemberId}, State) ->
+    {event, {member_removed, #{member_id=>MemberId}}, State};
+
+event({member_typing, MemberId}, State) ->
+    {event, {member_typing, #{member_id=>MemberId}}, State};
 
 event({message_created, #{obj_id:=MsgId}}, State) ->
     {event, {message_created, #{message_id=>MsgId}}, State};
@@ -46,18 +61,6 @@ event({message_updated, #{obj_id:=MsgId}}, State) ->
 
 event({message_deleted, MsgId}, State) ->
     {event, {message_deleted, #{message_id=>MsgId}}, State};
-
-event({member_added, MemberId}, State) ->
-    {event, {member_added, #{member_id=>MemberId}}, State};
-
-event({added_to_conversation, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
-    {event, {added_to_conversation, MemberId, #{conversation_id=>ConvId}}, State};
-
-event({member_removed, MemberId}, State) ->
-    {event, {member_removed, #{member_id=>MemberId}}, State};
-
-event({member_muted, MemberId, Muted}, State) ->
-    {event, {member_muted, #{member_id=>MemberId, is_muted=>Muted}}, State};
 
 event({removed_from_conversation, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
     {event, {removed_from_conversation, MemberId, #{conversation_id=>ConvId}}, State};

@@ -26,6 +26,7 @@
 -export([start/3, get_conversations/1, get_conversation_info/2, launch_notifications/1]).
 -export([set_active_conversation/2, deactivate_conversation/1, add_conversation/2, remove_conversation/2]).
 -export([conversation_event/4, send_invitation/4, accept_invitation/2, reject_invitation/2, wakeup/1]).
+-export([typing/1]).
 -export([object_info/0, object_es_mapping/0, object_parse/2,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
@@ -60,18 +61,18 @@
     {conversation_updated, nkdomain:obj()} |
     {invite_added, ConvId::nkdomain:obj_id(), map()} |
     {invite_removed, ConvId::nkdomain:obj_id(), UserId::nkdomain:obj_id()} |
+    {invited_to_conversation, TokenId::binary(), UserId::binary(), ConvId::binary()} |
+    {is_closed_updated, boolean()} |
     {member_added, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
-    {member_removed, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
     {member_muted, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id(), IsMuted::boolean()} |
+    {member_removed, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
+    {member_typing, ConvId::nkdomain:obj_id(), MemberId::nkdomain:obj_id()} |
     {message_created, nkdomain:obj()} |
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
+    {remove_notification, TokenId::binary(), Reason::term()} |
     {status_updated, nkchat_conversation:status()} |
-    {is_closed_updated, boolean()} |
-    {unread_counter_updated, ConvId::nkdomain:obj_id(), integer()} |
-    {invited_to_conversation, TokenId::binary(), UserId::binary(), ConvId::binary()} |
-    {remove_notification, TokenId::binary(), Reason::term()}.
-
+    {unread_counter_updated, ConvId::nkdomain:obj_id(), integer()}.
 
 -type start_opts() :: #{
     session_link => {module(), pid()},
@@ -205,6 +206,14 @@ reject_invitation(_SessId, TokenId) ->
         {error, Error} ->
             {error, Error}
     end.
+
+
+%% @doc
+-spec typing(pid()) ->
+    ok.
+
+typing(Pid) ->
+    nkdomain_obj:async_op(Pid, {?MODULE, typing}).
 
 
 %% @doc
@@ -499,6 +508,28 @@ object_async_op({?MODULE, launch_notifications}, State) ->
     nkdomain_user:launch_session_notifications(UserId, SessId),
     {noreply, State};
 
+object_async_op({?MODULE, typing}, #obj_state{session=Session}=State) ->
+    #session{user_id=UserId, active_id=ActiveId} = Session,
+    case ActiveId of
+        undefined ->
+            ?LLOG(error, "typing when there isn't any active conversation", [], State),
+            {noreply, State};
+        ConvId ->
+            case get_conv_pid(ConvId, State) of
+                {ok, Pid} ->
+                    case nkchat_conversation:typing(Pid, UserId) of
+                        ok ->
+                            {noreply, set_user_active(State)};
+                        {error, Error} ->
+                            ?LLOG(error, "typing error: ~p", [Error], State),
+                            {noreply, State}
+                    end;
+                not_found ->
+                    ?LLOG(error, "typing: conversation_not_found", [], State),
+                    {noreply, State}
+            end
+    end;
+
 object_async_op({?MODULE, wakeup}, State) ->
     {noreply, set_user_active(State)};
 
@@ -587,14 +618,26 @@ do_rm_conv(ConvId, State) ->
 
 
 %% @private
+do_conversation_event({conversation_updated, Conv}, ConvId, State) ->
+    {noreply, do_event({conversation_updated, ConvId, Conv}, State)};
+        
+do_conversation_event({counter_updated, Counter}, ConvId, State) ->
+    {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
+
 do_conversation_event({invite_added, InviteData}, ConvId, State) ->
     {noreply, do_event({invite_added, ConvId, InviteData}, State)};
 
 do_conversation_event({invite_removed, UserId}, ConvId, State) ->
     {noreply, do_event({invite_removed, ConvId, UserId}, State)};
 
+do_conversation_event({is_closed_updated, IsClosed}, ConvId, State) ->
+    {noreply, do_event({is_closed_updated, ConvId, IsClosed}, State)};
+
 do_conversation_event({member_added, MemberId}, ConvId, State) ->
     {noreply, do_event({member_added, ConvId, MemberId}, State)};
+
+do_conversation_event({member_muted, MemberId, IsMuted}, ConvId, State) ->
+    {noreply, do_event({member_muted, ConvId, MemberId, IsMuted}, State)};
 
 do_conversation_event({member_removed, MemberId}, ConvId, #obj_state{session=Session}=State) ->
     State2 = case Session of
@@ -606,8 +649,8 @@ do_conversation_event({member_removed, MemberId}, ConvId, #obj_state{session=Ses
     end,
     {noreply, do_event({member_removed, ConvId, MemberId}, State2)};
 
-do_conversation_event({member_muted, MemberId, IsMuted}, ConvId, State) ->
-    {noreply, do_event({member_muted, ConvId, MemberId, IsMuted}, State)};
+do_conversation_event({member_typing, MemberId}, ConvId, State) ->
+    {noreply, do_event({member_typing, ConvId, MemberId}, State)};
 
 do_conversation_event({message_created, Msg}, ConvId, State) ->
     {noreply, do_event({message_created, ConvId, Msg}, State)};
@@ -618,21 +661,12 @@ do_conversation_event({message_updated, Msg}, ConvId, State) ->
 do_conversation_event({message_deleted, MsgId}, ConvId, State) ->
     {noreply, do_event({message_deleted, ConvId, MsgId}, State)};
 
-do_conversation_event({status_updated, Status}, ConvId, State) ->
-    {noreply, do_event({status_updated, ConvId, Status}, State)};
-
-do_conversation_event({is_closed_updated, IsClosed}, ConvId, State) ->
-    {noreply, do_event({is_closed_updated, ConvId, IsClosed}, State)};
-
-do_conversation_event({conversation_updated, Conv}, ConvId, State) ->
-    {noreply, do_event({conversation_updated, ConvId, Conv}, State)};
-        
-do_conversation_event({counter_updated, Counter}, ConvId, State) ->
-    {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
-
 do_conversation_event({session_removed, _UserId, _SessId}, _ConvId, State) ->
     % ?LLOG(info, "unexpected conversation event: session_removed (~s, ~s, ~s)", [UserId, SessId, ConvId], State),
     {noreply, State};
+
+do_conversation_event({status_updated, Status}, ConvId, State) ->
+    {noreply, do_event({status_updated, ConvId, Status}, State)};
 
 do_conversation_event(_Event, _ConvId, State) ->
     ?LLOG(warning, "unexpected conversation event: ~p", [_Event], State),
