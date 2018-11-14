@@ -37,6 +37,7 @@
     <<"conversation_updated">>,
     <<"invite_added">>,
     <<"invite_removed">>,
+    <<"last_seen_message">>,
     <<"member_added">>,
     <<"member_muted">>,
     <<"member_removed">>,

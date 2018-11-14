@@ -57,6 +57,7 @@
 
 -type event() ::
     {added_info, nkchat_conversation:info()} |
+    {last_seen_message, MemberIds::[nkdomain:obj()], Time::binary()} |
     {message_created, nkdomain:obj()} |
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
@@ -559,6 +560,9 @@ object_event({invite_removed, UserId}, State) ->
 object_event({is_closed_updated, IsClosed}, State) ->
     {ok, do_event_all_sessions({is_closed_updated, IsClosed}, State)};
 
+object_event({last_seen_message, MemberIds, Time}, State) ->
+    {ok, do_event_all_sessions({last_seen_message, MemberIds, Time}, State)};
+
 object_event({member_added, MemberId}, State) ->
     {ok, do_event_all_sessions({member_added, MemberId}, State)};
 
@@ -965,7 +969,7 @@ sync_op(_Op, _From, _State) ->
 %% @private
 async_op({set_active, MemberId, SessId, Bool}, State) ->
     case find_member(MemberId, State) of
-        {true, #member{sessions=ChatSessions}=Member} ->
+        {true, #member{sessions=ChatSessions, last_seen_msg_time=LastSeenMsg}=Member} ->
             case lists:keytake(SessId, #chat_session.session_id, ChatSessions) of
                 {value, #chat_session{}=ChatSession, ChatSessions2} ->
                     ChatSession2 = ChatSession#chat_session{is_active=Bool},
@@ -979,6 +983,12 @@ async_op({set_active, MemberId, SessId, Bool}, State) ->
                                 _ -> 0
                             end,
                             do_event_member_sessions(Member2, {counter_updated, 0}, State),
+                            case LastSeenMsg =:= Time of
+                                false ->
+                                    do_event({last_seen_message, [MemberId], Time}, State);
+                                true ->
+                                    ok
+                            end,
                             Member2#member{
                                 last_active_time = nkdomain_util:timestamp(),
                                 last_seen_msg_time = Time,
@@ -1457,7 +1467,8 @@ do_new_msg_event(Time, Msg, #obj_state{obj=#{?CHAT_CONVERSATION:=_ChatConv}} = S
     Opts = #{
         members_map => maps:from_list(MembersData)
     },
-    do_new_msg_event(Members, Time, Msg, [], Opts, State).
+    State2 = do_new_msg_event(Members, Time, Msg, [], Opts, State),
+    last_seen_msg_event(Time, State2).
 
 
 %% @private
@@ -1584,6 +1595,24 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
             [Member2|Acc]
     end,
     do_new_msg_event(Rest, Time, Msg, Acc2, Opts, State).
+
+
+%% @private
+last_seen_msg_event(Time, State) ->
+    Members = get_members(State),
+    ActiveMembers = key_filter(Time, #member.last_seen_msg_time, Members),
+    ActiveMembersIds = [M#member.member_id || M <- ActiveMembers],
+    case ActiveMembersIds of
+        [] ->
+            State;
+        _ ->
+            do_event({last_seen_message, ActiveMembersIds, Time}, State)
+    end.
+
+
+%% @private
+key_filter(Key, N, TupleList) ->
+    lists:filter(fun(T) -> element(N, T) =:= Key end, TupleList).
 
 
 %% @private
