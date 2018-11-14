@@ -41,6 +41,9 @@ event({invite_added, InviteData}, State) ->
 event({invite_removed, UserId}, State) ->
     {event, {invite_removed, #{user_id=>UserId}}, State};
 
+event({last_seen_message, MemberIds, Time}, State) ->
+    {event, {last_seen_message, #{member_ids => MemberIds, last_seen_message_time => Time}}, State};
+
 event({member_added, MemberId}, State) ->
     {event, {member_added, #{member_id=>MemberId}}, State};
 

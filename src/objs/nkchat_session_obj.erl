@@ -63,6 +63,7 @@
     {invite_removed, ConvId::nkdomain:obj_id(), UserId::nkdomain:obj_id()} |
     {invited_to_conversation, TokenId::binary(), UserId::binary(), ConvId::binary()} |
     {is_closed_updated, boolean()} |
+    {last_seen_message, ConvId::nkdomain:obj_id(), MemberIds::[nkdomain:obj_id()], Time::binary()} |
     {member_added, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
     {member_muted, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id(), IsMuted::boolean()} |
     {member_removed, ConvId::nkdomain:obj_id(), IsActive::boolean(), MemberId::nkdomain:obj_id()} |
@@ -632,6 +633,9 @@ do_conversation_event({invite_removed, UserId}, ConvId, State) ->
 
 do_conversation_event({is_closed_updated, IsClosed}, ConvId, State) ->
     {noreply, do_event({is_closed_updated, ConvId, IsClosed}, State)};
+
+do_conversation_event({last_seen_message, MemberIds, Time}, ConvId, State) ->
+    {noreply, do_event({last_seen_message, ConvId, MemberIds, Time}, State)};
 
 do_conversation_event({member_added, MemberId}, ConvId, State) ->
     {noreply, do_event({member_added, ConvId, MemberId}, State)};

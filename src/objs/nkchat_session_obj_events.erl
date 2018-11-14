@@ -56,6 +56,9 @@ event({invited_to_conversation, TokenId, UserId, ConvId}, State) ->
 event({is_closed_updated, ConvId, IsClosed}, State) ->
     {event, {is_closed_updated, #{conversation_id=>ConvId, is_closed=>IsClosed}}, State};
 
+event({last_seen_message, ConvId, MemberIds, Time}, State) ->
+    {event, {last_seen_message, #{conversation_id=>ConvId, member_ids=>MemberIds, last_seen_message_time=>Time}}, State};
+
 event({member_added, ConvId, MemberId}, State) ->
     {event, {member_added, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
