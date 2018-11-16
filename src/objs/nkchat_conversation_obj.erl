@@ -81,7 +81,7 @@
 -record(chat_session, {
     session_id :: nkdomain:obj_id(),
     meta :: map(),
-    pid ::pid(),
+    pid :: pid(),
     is_active :: boolean()
 }).
 
@@ -89,7 +89,7 @@
     member_id :: nkdomain:obj_id(),
     added_time :: nkdomain:timestamp(),
     roles :: [nkchat_conversation:member_role()],
-    last_active_time = 0:: nkdomain:timestamp(),
+    last_active_time = 0 :: nkdomain:timestamp(),
     last_seen_msg_time = 0 :: nkdomain:timestamp(),
     unread_count = -1 :: integer(),
     sessions = [] :: [#chat_session{}]
@@ -1670,7 +1670,7 @@ make_obj_name(Hash) ->
 %% @private
 do_get_member_info(Member, State) ->
     #obj_state{obj=Obj, session=Session} = State,
-    #session{total_messages=Total, messages=Msgs, invitations=SessionInvs} = Session,
+    #session{total_messages=Total, messages=Msgs, invitations=SessionInvs, members = CachedMembers} = Session,
     LastMessage = case Msgs of
         [{_, _, Msg}|_] -> Msg;
         [] -> #{}
@@ -1700,13 +1700,31 @@ do_get_member_info(Member, State) ->
         created_time:=CreatedTime,
         ?CHAT_CONVERSATION:=#{
             type:=Type,
-            members:=Members,
+            %members:=Members,
             is_closed:=IsClosed,
             info:=Info,
             status:=Status
         }
     } = Obj,
-    Members2 = parse_muted_members(Members, State),
+    CachedMembers2 = lists:map(
+        fun(M) ->
+            #member{
+                member_id = MemberId,
+                added_time = Time,
+                roles = Roles,
+                last_active_time = ActiveTime,
+                last_seen_msg_time = MsgTime
+            } = M,
+            #{
+                member_id => MemberId,
+                added_time => Time,
+                member_roles => Roles,
+                last_active_time => ActiveTime,
+                last_seen_message_time => MsgTime
+            }
+        end,
+        CachedMembers),
+    Members2 = parse_muted_members(CachedMembers2, State),
     #{
         parent_id => ParentId,
         name => maps:get(name, Obj, <<>>),
