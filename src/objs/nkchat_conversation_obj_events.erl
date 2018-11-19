@@ -44,8 +44,8 @@ event({invite_removed, UserId}, State) ->
 event({last_seen_message, MemberIds, Time}, State) ->
     {event, {last_seen_message, #{member_ids => MemberIds, last_seen_message_time => Time}}, State};
 
-event({member_added, MemberId}, State) ->
-    {event, {member_added, #{member_id=>MemberId}}, State};
+event({member_added, MemberId, MemberData}, State) ->
+    {event, {member_added, MemberData#{member_id=>MemberId}}, State};
 
 event({member_muted, MemberId, Muted}, State) ->
     {event, {member_muted, #{member_id=>MemberId, is_muted=>Muted}}, State};

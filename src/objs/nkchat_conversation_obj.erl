@@ -61,7 +61,7 @@
     {message_created, nkdomain:obj()} |
     {message_updated, nkdomain:obj()} |
     {message_deleted, nkdomain:obj_id()} |
-    {member_added, nkdomain:obj_id()} |
+    {member_added, nkdomain:obj_id(), MemberData::map()} |
     {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
     {member_muted, nkdomain:obj_id(), boolean()} |
     {member_removed, nkdomain:obj_id()} |
@@ -563,8 +563,8 @@ object_event({is_closed_updated, IsClosed}, State) ->
 object_event({last_seen_message, MemberIds, Time}, State) ->
     {ok, do_event_all_sessions({last_seen_message, MemberIds, Time}, State)};
 
-object_event({member_added, MemberId}, State) ->
-    {ok, do_event_all_sessions({member_added, MemberId}, State)};
+object_event({member_added, MemberId, MemberData}, State) ->
+    {ok, do_event_all_sessions({member_added, MemberId, MemberData}, State)};
 
 object_event({member_removed, MemberId}, State) ->
     {ok, do_event_all_sessions({member_removed, MemberId}, State)};
@@ -1228,14 +1228,30 @@ do_add_members([MemberId|Rest], State) ->
 do_add_member(MemberId, State) ->
     case find_member(MemberId, State) of
         false ->
+            #obj_state{session=#session{messages=Msgs}} = State,
+            Time = case Msgs of
+                [{Time0, _, _}|_] -> Time0;
+                _ -> 0
+            end,
+            Now = nkdomain_util:timestamp(),
             Member = #member{
                 member_id = MemberId,
-                added_time = nkdomain_util:timestamp()
+                added_time = Now,
+                last_seen_msg_time = Time,
+                last_active_time = Now
+            },
+            MemberData = #{
+                member_id => MemberId,
+                added_time => Now,
+                member_roles => [],
+                last_active_time => Now,
+                last_seen_message_time => Time,
+                is_muted => false
             },
             State2 = set_member(MemberId, Member, State),
             case set_obj_name_members(State2) of
                 {ok, State3} ->
-                    State4 = do_event({member_added, MemberId}, State3),
+                    State4 = do_event({member_added, MemberId, MemberData}, State3),
                     State5 = do_event({added_to_conversation, MemberId}, State4),
                     {ok, State5};
                 {error, Error} ->

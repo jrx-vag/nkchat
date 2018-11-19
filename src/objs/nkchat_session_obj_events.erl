@@ -59,8 +59,8 @@ event({is_closed_updated, ConvId, IsClosed}, State) ->
 event({last_seen_message, ConvId, MemberIds, Time}, State) ->
     {event, {last_seen_message, #{conversation_id=>ConvId, member_ids=>MemberIds, last_seen_message_time=>Time}}, State};
 
-event({member_added, ConvId, MemberId}, State) ->
-    {event, {member_added, #{conversation_id=>ConvId, member_id=>MemberId}}, State};
+event({member_added, ConvId, MemberId, MemberData}, State) ->
+    {event, {member_added, MemberData#{conversation_id=>ConvId, member_id=>MemberId}}, State};
 
 event({member_muted, ConvId, MemberId, Muted}, State) ->
     {event, {member_muted, #{conversation_id=>ConvId, member_id=>MemberId, is_muted=>Muted}}, State};
