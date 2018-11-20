@@ -33,7 +33,7 @@
 -export([get_pretty_name/1, is_direct_conversation/1]).
 -export([mute/3, is_muted/2, get_muted_tag/1]).
 -export([typing/2]).
--export([added_invitation/4, add_invite_op/4, perform_op/1]).
+-export([added_invitation/4, add_invite_op/5, perform_op/1]).
 -export([message_event/2]).
 -export([sync_op/2, async_op/2]).
 
@@ -106,9 +106,10 @@ add_info(Id, Info) when is_map(Info) ->
 add_member(Id, Member, Opts) ->
     case nkdomain_db:find(Member) of
         #obj_id_ext{type= ?DOMAIN_USER, obj_id=MemberId} ->
-            case sync_op(Id, {add_member, MemberId}) of
+            Opts2 = maps:with([read_previous], Opts),
+            case sync_op(Id, {add_member, MemberId, Opts2}) of
                 {ok, ObjId} ->
-                    Silent = maps:get(silent, Opts, false),
+                    Silent = maps:get(silent, Opts, ?DEFAULT_SILENT),
                     case Silent of
                         false ->
                             Msg = #{
@@ -154,7 +155,7 @@ remove_member(Id, Member, Opts) ->
     end,
     case sync_op(Id, {remove_member, MemberId}) of
         ok ->
-            Silent = maps:get(silent, Opts, false),
+            Silent = maps:get(silent, Opts, ?DEFAULT_SILENT),
             case Silent of
                 false ->
                     Msg = #{
@@ -380,12 +381,12 @@ message_event(ConvId, Event) ->
     end.
 
 
-%% @doc Adds info on a token to invite an user
--spec add_invite_op(nkdomain:id(), nkdomain:id(), nkdomain:id(), map()) ->
+%% @doc Adds info on a token to invite a user
+-spec add_invite_op(nkdomain:id(), nkdomain:id(), nkdomain:id(), map(), map()) ->
     {ok, ConvId::nkdomain:obj_id(), MemberId::nkdomain:obj_id(), UserId::nkdomain:obj_id(), map()} | {error, term()}.
 
-add_invite_op(Conv, UserId, Member, Base) ->
-    sync_op(Conv, {add_invite_op, UserId, Member, Base}).
+add_invite_op(Conv, UserId, Member, Base, Opts) ->
+    sync_op(Conv, {add_invite_op, UserId, Member, Base, Opts}).
 
 
 %% @doc
@@ -395,7 +396,10 @@ perform_op(#{?CHAT_CONVERSATION:=#{<<"add_member_op">>:=Op}}) ->
         <<"member_id">> := MemberId,
         <<"user_id">> := _UserId
     } = Op,
-    case add_member(ConvId, MemberId, #{silent => false}) of
+    Opts = maps:get(<<"opts">>, Op, #{}),
+    Silent = maps:get(<<"silent">>, Opts, ?DEFAULT_SILENT),
+    ReadPrevious = maps:get(<<"read_previous">>, Opts, ?DEFAULT_READ_PREVIOUS),
+    case add_member(ConvId, MemberId, #{silent => Silent, read_previous => ReadPrevious}) of
         {ok, _MemberId} ->
             ok;
         {error, Error} ->

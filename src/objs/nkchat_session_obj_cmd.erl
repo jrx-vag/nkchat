@@ -178,7 +178,8 @@ cmd(<<"send_invitation">>, #nkreq{data=#{member_id:=MemberId, conversation_id:=C
     case nkdomain_api_util:get_id(?CHAT_SESSION, Data, Req) of
         {ok, Id} ->
             TTL = maps:get(ttl, Data, 0),
-            case nkchat_session_obj:send_invitation(Id, MemberId, ConvId, TTL) of
+            Opts = maps:with([silent, read_previous], Data),
+            case nkchat_session_obj:send_invitation(Id, MemberId, ConvId, TTL, Opts) of
                 {ok, _TokenId} ->
                     ok;
                 {error, Error} ->

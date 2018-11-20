@@ -201,7 +201,7 @@ update(ObjId, Data, _Session) ->
                 {ok, _} ->
                     lists:map(
                         fun(M) ->
-                            nkchat_conversation:add_member(ObjId, M, #{silent => true})
+                            nkchat_conversation:add_member(ObjId, M, #{silent => true, read_previous => true})
                         end,
                         ToAdd),
                     lists:map(

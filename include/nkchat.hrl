@@ -36,6 +36,10 @@
 -define(CHAT_MSG_TYPE_ALERT, <<"chat.alert">>).
 
 
+-define(DEFAULT_SILENT, false).
+-define(DEFAULT_READ_PREVIOUS, false).
+
+
 %% ===================================================================
 %% Records
 %% ===================================================================

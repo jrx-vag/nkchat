@@ -780,9 +780,8 @@ sync_op({set_status, #{is_closed:=Closed}}, _From, #obj_state{session=Session}=S
 sync_op({set_status, _Status}, _From, State) ->
     {reply, {error, unknown_status}, State};
 
-
-sync_op({add_member, MemberId}, _From, State) ->
-    case do_add_member(MemberId, State) of
+sync_op({add_member, MemberId, Opts}, _From, State) ->
+    case do_add_member(MemberId, Opts, State) of
         {ok, State2} ->
             {reply_and_save, {ok, MemberId}, State2};
         {error, Error} ->
@@ -932,7 +931,7 @@ sync_op({make_invite_token, UserId, Member, TTL}, From, State) ->
             {reply, {error, member_invalid}, State}
     end;
 
-sync_op({add_invite_op, User, Member, Base}, _From, State) ->
+sync_op({add_invite_op, User, Member, Base, Opts}, _From, State) ->
     %% TODO check permission
     #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
     case nkdomain_db:find(Member) of
@@ -947,6 +946,10 @@ sync_op({add_invite_op, User, Member, Base}, _From, State) ->
                                     <<"conversation_id">> => ConvId,
                                     <<"member_id">> => MemberId,
                                     <<"user_id">> => UserId,
+                                    <<"opts">> => #{
+                                        <<"silent">> => maps:get(silent, Opts, ?DEFAULT_SILENT),
+                                        <<"read_previous">> => maps:get(read_previous, Opts, ?DEFAULT_READ_PREVIOUS)
+                                    },
                                     <<"date">> => nkdomain_util:timestamp()
                                 }
                             },
@@ -1226,6 +1229,10 @@ do_add_members([MemberId|Rest], State) ->
 
 %% @private
 do_add_member(MemberId, State) ->
+    do_add_member(MemberId, #{}, State).
+
+%% @private
+do_add_member(MemberId, Opts, State) ->
     case find_member(MemberId, State) of
         false ->
             #obj_state{session=#session{messages=Msgs}} = State,
@@ -1233,21 +1240,40 @@ do_add_member(MemberId, State) ->
                 [{Time0, _, _}|_] -> Time0;
                 _ -> 0
             end,
+            ReadPrevious = maps:get(read_previous, Opts, false),
             Now = nkdomain_util:timestamp(),
-            Member = #member{
-                member_id = MemberId,
-                added_time = Now,
-                last_seen_msg_time = Time,
-                last_active_time = Now
-            },
-            MemberData = #{
-                member_id => MemberId,
-                added_time => Now,
-                member_roles => [],
-                last_active_time => Now,
-                last_seen_message_time => Time,
-                is_muted => false
-            },
+            {Member, MemberData} = case ReadPrevious of
+                true ->
+                    Member1 = #member{
+                        member_id = MemberId,
+                        added_time = Now,
+                        last_seen_msg_time = Time,
+                        last_active_time = Now
+                    },
+                    MemberData1 = #{
+                        member_id => MemberId,
+                        added_time => Now,
+                        member_roles => [],
+                        last_active_time => Now,
+                        last_seen_message_time => Time,
+                        is_muted => false
+                    },
+                    {Member1, MemberData1};
+                _ ->
+                    Member1 = #member{
+                        member_id = MemberId,
+                        added_time = Now
+                    },
+                    MemberData1 = #{
+                        member_id => MemberId,
+                        added_time => Now,
+                        member_roles => [],
+                        last_active_time => 0,
+                        last_seen_message_time => 0,
+                        is_muted => false
+                    },
+                    {Member1, MemberData1}
+            end,
             State2 = set_member(MemberId, Member, State),
             case set_obj_name_members(State2) of
                 {ok, State3} ->

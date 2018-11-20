@@ -34,7 +34,7 @@
 %% ===================================================================
 
 cmd(<<"add_member">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}=Data}) ->
-    Opts = maps:with([silent], Data),
+    Opts = maps:with([silent, read_previous], Data),
     case nkchat_conversation:add_member(ConvId, MemberId, Opts) of
         {ok, MemberObjId} ->
             {ok, #{<<"member_id">>=>MemberObjId}};

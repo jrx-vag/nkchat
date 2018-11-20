@@ -25,7 +25,7 @@
 
 -export([start/3, get_conversations/1, get_conversation_info/2, launch_notifications/1]).
 -export([set_active_conversation/2, deactivate_conversation/1, add_conversation/2, remove_conversation/2]).
--export([conversation_event/4, send_invitation/4, accept_invitation/2, reject_invitation/2, wakeup/1]).
+-export([conversation_event/4, send_invitation/5, accept_invitation/2, reject_invitation/2, wakeup/1]).
 -export([typing/1]).
 -export([object_info/0, object_es_mapping/0, object_parse/2,
          object_api_syntax/2, object_api_cmd/2]).
@@ -176,11 +176,11 @@ deactivate_conversation(Id) ->
     nkdomain_obj:sync_op(Id, {?MODULE, deactivate_conv}).
 
 %% @doc Sends a invitation notification
--spec send_invitation(nkdomain:id(), nkdomain:id(), nkdomain:id(), integer()) ->
+-spec send_invitation(nkdomain:id(), nkdomain:id(), nkdomain:id(), integer(), map()) ->
     {ok, TokenId::nkdomain:obj_id()} | {error, term()}.
 
-send_invitation(SessId, MemberId, ConvId, TTL) ->
-    nkdomain_obj:sync_op(SessId, {?MODULE, send_invitation, MemberId, ConvId, TTL}).
+send_invitation(SessId, MemberId, ConvId, TTL, Opts) ->
+    nkdomain_obj:sync_op(SessId, {?MODULE, send_invitation, MemberId, ConvId, TTL, Opts}).
 
 
 %% @doc Accepts a invitation notification
@@ -431,9 +431,10 @@ object_sync_op({?MODULE, rm_conv, ConvId}, _From, State) ->
             {reply, {error, Error}, State}
     end;
 
-object_sync_op({?MODULE, send_invitation, Member, Conv, TTL}, _From, State) ->
+object_sync_op({?MODULE, send_invitation, Member, Conv, TTL, Opts}, _From, State) ->
     #obj_state{domain_id=DomainId, parent_id=UserId, id=#obj_id_ext{obj_id=SessId}} = State,
-    Reply = case nkchat_conversation:add_invite_op(Conv, UserId, Member, #{}) of
+    Opts2 = maps:with([silent, read_previous], Opts),
+    Reply = case nkchat_conversation:add_invite_op(Conv, UserId, Member, #{}, Opts2) of
         {ok, ConvId, MemberId, UserId, Op1} ->
             case nkdomain_user:add_token_notification(MemberId, ?CHAT_SESSION, #{}, Op1) of
                 {ok, MemberId, Op2} ->
