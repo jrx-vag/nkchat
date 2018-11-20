@@ -83,7 +83,13 @@ syntax(<<"send_invitation">>, Syntax) ->
         member_id => binary,
         conversation_id => binary,
         ttl => {integer, 0, none},
-        '__mandatory' => [member_id, conversation_id]
+        silent => boolean,
+        read_previous => boolean,
+        '__mandatory' => [member_id, conversation_id],
+        '__defaults' => #{
+            silent => ?DEFAULT_SILENT,
+            read_previous => ?DEFAULT_READ_PREVIOUS
+        }
     };
 
 syntax(<<"accept_invitation">>, Syntax) ->
