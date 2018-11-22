@@ -804,6 +804,34 @@ sync_op({remove_member, MemberId}, _From, State) ->
             {reply, {error, member_not_found}, State}
     end;
 
+sync_op({remove_all_members}, _From, State) ->
+    Members = get_members(State),
+    {Reply, State2} = lists:foldl(fun(#member{member_id=MemberId}, {NReply, NState}) ->
+        case NReply of
+            {error, Err} ->
+                {error, Err};
+            ok ->
+                NState2 = do_event({member_removed, MemberId}, NState),              % Using original state
+                case do_remove_member(MemberId, NState2) of
+                    {ok, NState3} ->
+                        NState4 = do_event({removed_from_conversation, MemberId}, NState3),
+                        {ok, NState4};
+                    {error, Err} ->
+                        % Can fail if obj_name_follows_members
+                        {{error, Err}, NState2}
+                end
+        end
+    end,
+    {ok, State},
+    Members
+    ),
+    case Reply of
+        ok ->
+            {reply_and_save, ok, State2};
+        {error, Error} ->
+            {reply, {error, Error}, State2}
+    end;
+
 sync_op({add_session, MemberId, SessId, Meta, Pid}, _From, State) ->
     case do_add_session(MemberId, SessId, Meta, Pid, State) of
         {ok, State2} ->
