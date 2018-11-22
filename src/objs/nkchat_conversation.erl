@@ -24,7 +24,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/2]).
--export([add_info/2, add_member/3, remove_member/3]).
+-export([add_info/2, add_member/3, remove_member/3, remove_all_members/1]).
 -export([add_session/4, set_session_active/4, remove_session/3, get_member_info/2, get_member_cached_data/2]).
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
@@ -178,6 +178,14 @@ remove_member(Id, Member, Opts) ->
         {error, Error} ->
             {error, Error}
     end.
+
+
+%% @doc
+-spec remove_all_members(nkdomain:id()) ->
+    ok | {error, term()}.
+
+remove_all_members(Id) ->
+    sync_op(Id, {remove_all_members}).
 
 
 %% @doc
