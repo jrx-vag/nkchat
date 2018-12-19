@@ -1362,7 +1362,9 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
             end,
             State3 = set_member(MemberId, Member3, State),
             State4 = nkdomain_obj:links_add(usage, {?MODULE, session, MemberId, SessId, Pid}, State3),
-            {ok, State4};
+            %{ok, State4};
+            %% Adding a member through set_member changes is_dirty to true and this is not needed
+            {ok, State4#obj_state{is_dirty=false}};
         false ->
             {error, member_not_found}
     end.
