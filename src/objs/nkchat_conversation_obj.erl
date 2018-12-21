@@ -866,7 +866,7 @@ sync_op({get_member_cached_data, MemberId}, _From, #obj_state{session=Session}=S
                     Count = find_unread(Last, State),
                     Member2 = Member#member{unread_count=Count},
                     #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
-                    State2 = set_member(MemberId, Member2, State),
+                    State2 = set_member(MemberId, Member2, false, State),
                     {Member2, State2};
                 _ ->
                     {Member, State}
@@ -1006,7 +1006,7 @@ async_op({set_active, MemberId, SessId, Bool}, State) ->
                     ChatSession2 = ChatSession#chat_session{is_active=Bool},
                     ChatSessions3 = [ChatSession2|ChatSessions2],
                     Member2 = Member#member{sessions=ChatSessions3},
-                    Member3 = case Bool of
+                    {Member3, IsDirty} = case Bool of
                         true ->
                             #obj_state{session=#session{messages=Msgs}} = State,
                             Time = case Msgs of
@@ -1014,21 +1014,23 @@ async_op({set_active, MemberId, SessId, Bool}, State) ->
                                 _ -> 0
                             end,
                             do_event_member_sessions(Member2, {counter_updated, 0}, State),
-                            case LastSeenMsg =:= Time of
+                            HaveUnread = case LastSeenMsg =:= Time of
                                 false ->
-                                    do_event({last_seen_message, [MemberId], Time}, State);
+                                    do_event({last_seen_message, [MemberId], Time}, State),
+                                    true;
                                 true ->
-                                    ok
+                                    false
                             end,
-                            Member2#member{
+                            {Member2#member{
                                 last_active_time = nkdomain_util:timestamp(),
                                 last_seen_msg_time = Time,
                                 unread_count = 0
-                            };
+                            }, HaveUnread};
                         false ->
-                            Member2
+                            {Member2, false}
                     end,
-                    {noreply, set_member(MemberId, Member3, State)};
+                    % Save state only when this user has unread messages
+                    {noreply, set_member(MemberId, Member3, IsDirty, State)};
                 false ->
                     ?LLOG(warning, "set_active for unknown session", [], State),
                     {noreply, State}
@@ -1302,6 +1304,7 @@ do_add_member(MemberId, Opts, State) ->
                     },
                     {Member1, MemberData1}
             end,
+            lager:warning("cuidao que no lo cambio a false"),
             State2 = set_member(MemberId, Member, State),
             case set_obj_name_members(State2) of
                 {ok, State3} ->
@@ -1360,11 +1363,9 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
                     do_event_member_sessions(Member2, {counter_updated, Count}, State),
                     Member2
             end,
-            State3 = set_member(MemberId, Member3, State),
+            State3 = set_member(MemberId, Member3, false, State),
             State4 = nkdomain_obj:links_add(usage, {?MODULE, session, MemberId, SessId, Pid}, State3),
-            %{ok, State4};
-            %% Adding a member through set_member changes is_dirty to true and this is not needed
-            {ok, State4#obj_state{is_dirty=false}};
+            {ok, State4};
         false ->
             {error, member_not_found}
     end.
@@ -1379,7 +1380,7 @@ do_remove_session(MemberId, SessId, State) ->
                     State2 = nkdomain_obj:links_remove(usage, {?MODULE, session, MemberId, SessId, Pid}, State),
                     State3 = do_event({session_removed, MemberId, SessId}, State2),
                     Member2 = Member#member{sessions=Sessions2},
-                    {ok, set_member(MemberId, Member2, State3)};
+                    {ok, set_member(MemberId, Member2, false, State3)};
                 false ->
                     {error, session_not_found}
             end;
@@ -1420,16 +1421,24 @@ get_members(#obj_state{session=Session}) ->
 
 
 %% @private
-set_members(Members, #obj_state{session=Session}=State) ->
+set_members(Members, State) ->
+    set_members(Members, true, State).
+
+%% @private
+set_members(Members, IsDirty, #obj_state{session=Session}=State) ->
     Session2 = Session#session{members=Members},
-    State#obj_state{session=Session2, is_dirty=true}.
+    State#obj_state{session=Session2, is_dirty=IsDirty}.
 
 
 %% @private
 set_member(MemberId, Member, State) ->
+    set_member(MemberId, Member, true, State).
+
+%% @private
+set_member(MemberId, Member, IsDirty, State) ->
     Members1 = get_members(State),
     Members2 = lists:keystore(MemberId, #member.member_id, Members1, Member),
-    set_members(Members2, State).
+    set_members(Members2, IsDirty, State).
 
 
 %% @private
