@@ -1304,7 +1304,6 @@ do_add_member(MemberId, Opts, State) ->
                     },
                     {Member1, MemberData1}
             end,
-            lager:warning("cuidao que no lo cambio a false"),
             State2 = set_member(MemberId, Member, State),
             case set_obj_name_members(State2) of
                 {ok, State3} ->
