@@ -565,20 +565,30 @@ object_do_active(_Id) ->
 
 %% @private
 do_set_active_conv(ConvId, #obj_state{session=Session, id=#obj_id_ext{obj_id=SessId}}=State) ->
-    #session{user_id=UserId, conv_pids=ConvPids} = Session,
-    do_set_active_conv(maps:to_list(ConvPids), ConvId, UserId, SessId),
+    #session{user_id=UserId, conv_pids=ConvPids, active_id=OldActiveId} = Session,
+    do_set_active_conv(maps:to_list(ConvPids), ConvId, OldActiveId, UserId, SessId),
     Session2 = Session#session{active_id=ConvId},
     State#obj_state{session=Session2}.
 
 
 %% @private
-do_set_active_conv([], _ActiveId, _UserId, _SessId) ->
+do_set_active_conv([], _ActiveId, _OldActiveId, _UserId, _SessId) ->
     ok;
 
-do_set_active_conv([{ConvId, Pid}|Rest], ActiveId, UserId, SessId) ->
+do_set_active_conv([{ConvId, Pid}|Rest], ActiveId, OldActiveId, UserId, SessId) ->
     Active = (ActiveId == ConvId),
-    nkchat_conversation:set_session_active(Pid, UserId, SessId, Active),
-    do_set_active_conv(Rest, ActiveId, UserId, SessId).
+    case ConvId of
+        OldActiveId ->
+            % Deactivate old conversation
+            nkchat_conversation:set_session_active(Pid, UserId, SessId, Active);
+        _ when Active =:= true ->
+            % Activate new conversation
+            nkchat_conversation:set_session_active(Pid, UserId, SessId, Active);
+        _ ->
+            % Do nothing
+            ok
+    end,
+    do_set_active_conv(Rest, ActiveId, OldActiveId, UserId, SessId).
 
 %% @private
 do_add_conv(ConvId, State) ->
