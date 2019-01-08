@@ -25,6 +25,7 @@
 
 -export([start/3, get_conversations/1, get_conversation_info/2, launch_notifications/1]).
 -export([set_active_conversation/2, deactivate_conversation/1, add_conversation/2, remove_conversation/2]).
+-export([is_conversation_active/2]).
 -export([conversation_event/4, send_invitation/5, accept_invitation/2, reject_invitation/2, wakeup/1]).
 -export([typing/1]).
 -export([object_info/0, object_es_mapping/0, object_parse/2,
@@ -174,6 +175,18 @@ set_active_conversation(Id, Conv) ->
 
 deactivate_conversation(Id) ->
     nkdomain_obj:sync_op(Id, {?MODULE, deactivate_conv}).
+
+%% @doc
+-spec is_conversation_active(nkdomain:id(), nkdomain:id()) ->
+    {ok, boolean()} | {error, term()}.
+
+is_conversation_active(Id, Conv) ->
+    case nkdomain_db:find(Conv) of
+        #obj_id_ext{obj_id=ConvId} ->
+            nkdomain_obj:sync_op(Id, {?MODULE, is_conv_active, ConvId});
+        {error, Error} ->
+            {error, Error}
+    end.
 
 %% @doc Sends a invitation notification
 -spec send_invitation(nkdomain:id(), nkdomain:id(), nkdomain:id(), integer(), map()) ->
@@ -406,6 +419,11 @@ object_sync_op({?MODULE, deactivate_conv}, _From, State) ->
     State2 = set_user_active(State),
     ConvId = undefined,
     {reply, ok, do_set_active_conv(ConvId, State2)};    
+
+object_sync_op({?MODULE, is_conv_active, ConvId}, _From, State) ->
+    #obj_state{session=Session} = State,
+    #session{active_id=ActiveId} = Session,
+    {reply, {ok, ConvId =:= ActiveId}, State};
 
 object_sync_op({?MODULE, add_conv, ConvId}, _From, State) ->
     case get_conv_pid(ConvId, State) of
