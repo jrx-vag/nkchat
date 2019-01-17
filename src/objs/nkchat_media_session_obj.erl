@@ -732,7 +732,7 @@ read_invite_token(Token) ->
         } ->
             {ok, CallId, CallerId, CalleeId, InviteOpts};
         _ ->
-            {error, invalid_token}
+            {error, token_invalid}
     end.
 
 
