@@ -34,7 +34,7 @@
 -define(CHAT_MSG_TYPE_ADDED_MEMBER, <<"chat.member_added">>).
 -define(CHAT_MSG_TYPE_REMOVED_MEMBER, <<"chat.member_removed">>).
 -define(CHAT_MSG_TYPE_ALERT, <<"chat.alert">>).
-
+-define(CHAT_MSG_TYPE_ANNOUNCEMENT, <<"chat.announcement">>).
 
 -define(DEFAULT_SILENT, false).
 -define(DEFAULT_READ_PREVIOUS, false).
