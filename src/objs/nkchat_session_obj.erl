@@ -402,8 +402,8 @@ object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #obj_state{sessi
                 {error, Error} ->
                     {reply, {error, Error}, State2}
             end;
-        not_found ->
-            {reply, {error, conversation_not_found}, State}
+        {not_found, State2} ->
+            {reply, {error, conversation_not_found}, State2}
     end;
 
 object_sync_op({?MODULE, set_active_conv, ConvId}, _From, State) ->
@@ -411,8 +411,8 @@ object_sync_op({?MODULE, set_active_conv, ConvId}, _From, State) ->
     case get_conv_pid(ConvId, State2) of
         {ok, _, State3} ->
             {reply, ok, do_set_active_conv(ConvId, State3)};
-        not_found ->
-            {reply, {error, conversation_not_found}, State2}
+        {not_found, State3} ->
+            {reply, {error, conversation_not_found}, State3}
     end;
 
 object_sync_op({?MODULE, deactivate_conv}, _From, State) ->
@@ -427,14 +427,14 @@ object_sync_op({?MODULE, is_conv_active, ConvId}, _From, State) ->
 
 object_sync_op({?MODULE, add_conv, ConvId}, _From, State) ->
     case get_conv_pid(ConvId, State) of
-        not_found ->
-            case do_add_conv(ConvId, State) of
-                {ok, State2} ->
-                    ?DEBUG("added conversation ~s", [ConvId], State2),
-                    State3 = do_event({conversation_added, ConvId}, State2),
-                    {reply, {ok, ConvId}, State3};
+        {not_found, State2} ->
+            case do_add_conv(ConvId, State2) of
+                {ok, State3} ->
+                    ?DEBUG("added conversation ~s", [ConvId], State3),
+                    State4 = do_event({conversation_added, ConvId}, State3),
+                    {reply, {ok, ConvId}, State4};
                 {error, Error} ->
-                    {reply, {error, Error}, State}
+                    {reply, {error, Error}, State2}
             end;
         {ok, _, State2} ->
             {reply, {error, conversation_is_already_present}, State2}
@@ -445,8 +445,8 @@ object_sync_op({?MODULE, rm_conv, ConvId}, _From, State) ->
         {ok, State2} ->
             ?DEBUG("removed conversation ~s", [ConvId], State2),
             {reply, ok, State2};
-        {error, Error} ->
-            {reply, {error, Error}, State}
+        {error, Error, State2} ->
+            {reply, {error, Error}, State2}
     end;
 
 object_sync_op({?MODULE, send_invitation, Member, Conv, TTL, Opts}, _From, State) ->
@@ -500,9 +500,9 @@ object_async_op({?MODULE, conversation_event, ConvId, Event}, State) ->
     case get_conv_pid(ConvId, State) of
         {ok, _, State2} ->
             do_conversation_event(Event, ConvId, State2);
-        not_found ->
-            ?LLOG(warning, "received event ~p for unknown conversation", [Event], State),
-            {noreply, State}
+        {not_found, State2} ->
+            ?LLOG(warning, "received event ~p for unknown conversation", [Event], State2),
+            {noreply, State2}
     end;
 
 object_async_op({?MODULE, notify_fun, {token_created, TokenId, Msg}}, State) ->
@@ -544,9 +544,9 @@ object_async_op({?MODULE, typing}, #obj_state{session=Session}=State) ->
                             ?LLOG(error, "typing error: ~p", [Error], State2),
                             {noreply, State2}
                     end;
-                not_found ->
-                    ?LLOG(error, "typing: conversation_not_found", [], State),
-                    {noreply, State}
+                {not_found, State2} ->
+                    ?LLOG(error, "typing: conversation_not_found", [], State2),
+                    {noreply, State2}
             end
     end;
 
@@ -622,7 +622,7 @@ do_add_conv(ConvId, State) ->
 %        {error, Error} ->
 %            {error, Error}
 %    end;
-    case nkdomain_db:find(ConvId) of
+    case nkdomain_db:find_loaded(ConvId) of
         #obj_id_ext{type = ?CHAT_CONVERSATION, pid = undefined} ->
             Convs2 = Convs1#{ConvId => undefined},
             Session2 = Session#session{conv_pids=Convs2},
@@ -637,8 +637,12 @@ do_add_conv(ConvId, State) ->
                 {error, Error} ->
                     {error, Error}
             end;
-        _ ->
-            {error, object_not_found}
+        not_found ->
+            Convs2 = Convs1#{ConvId => undefined},
+            Session2 = Session#session{conv_pids=Convs2},
+            {ok, State#obj_state{session=Session2}}
+%        _ ->
+%            {error, object_not_found}
     end.
 
 
@@ -660,8 +664,8 @@ do_rm_conv(ConvId, State) ->
             end,
             State3 = do_event({conversation_removed, ConvId}, State2),
             {ok, State3#obj_state{session=Session3}};
-        not_found ->
-            {error, conversation_not_found}
+        {not_found, State2} ->
+            {error, conversation_not_found, State2}
     end.
 
 
@@ -744,15 +748,17 @@ get_conv_pid(ConvId, #obj_state{session=Session}=State) ->
                         {ok, State2} ->
                             {ok, Pid, State2};
                         {error, _Error} ->
-                            not_found
+                            {not_found, State}
                     end;
                 _Other ->
-                    not_found
+                    Session2 = Session#session{conv_pids=maps:remove(ConvId, Convs)},
+                    State2 = State#obj_state{session=Session2},
+                    {not_found, State2}
             end;
         {ok, Pid} ->
             {ok, Pid, State};
         error ->
-            not_found
+            {not_found, State}
     end.
 
 %% @private
