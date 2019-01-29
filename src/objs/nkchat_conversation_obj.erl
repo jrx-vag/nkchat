@@ -63,6 +63,7 @@
     {message_deleted, nkdomain:obj_id()} |
     {member_added, nkdomain:obj_id(), MemberData::map()} |
     {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
+    {conversation_loaded, nkdomain:obj_id()} |          % Same but obj_id is for the member
     {member_muted, nkdomain:obj_id(), boolean()} |
     {member_removed, nkdomain:obj_id()} |
     {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
@@ -259,8 +260,10 @@ object_db_get_query(nkelastic, {query_member_conversations, Domain, Member}, DbO
                     ],
                     Opts = #{
                         type => ?CHAT_CONVERSATION,
-                        size=>9999,
-                        fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])]
+                        size => 9999,
+                        fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])],
+                        sort => [#{<<"updated_time">> => #{order => desc}},
+                                 #{<<"created_time">> => #{order => desc}}]
                     },
                     {ok, {nkelastic, Filters, maps:merge(DbOpts, Opts)}};
                 {error, Error} ->
@@ -283,10 +286,18 @@ object_db_get_query(nkelastic, {query_recent_conversations, Domain, Member, Opts
                         _ ->
                             []
                     end,
+                    Filters1 = case Opts of
+                        #{omitted_types := []} ->
+                            Filters;
+                        #{omitted_types := OmittedTypes} when is_list(OmittedTypes) ->
+                            [{'not', {[?CHAT_CONVERSATION, ".type"], values, OmittedTypes}}|Filters];
+                        _ ->
+                            Filters
+                    end,
                     Filters2 = [
                         {path, subdir, DomainPath},
                         {[?CHAT_CONVERSATION, ".members.member_id"], eq, MemberId}
-                    |Filters],
+                    |Filters1],
                     Opts2 = maps:with([from, size], Opts),
                     Opts3 = Opts2#{
                         type => ?CHAT_CONVERSATION,
@@ -448,7 +459,15 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 last_message_time = LastMessageTime,
                 obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
-            State2 = State#obj_state{session=Session},
+            State2 = lists:foldl(
+                fun(Data, StateN) ->
+                    #{
+                        member_id := MemberId2
+                    } = Data,
+                    do_event({conversation_loaded, MemberId2}, StateN)
+                end,
+                State#obj_state{session=Session},
+                MemberList),
             case maps:take(initial_member_ids, Conv) of
                 error ->
                     {ok, State2};
@@ -1356,10 +1375,12 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
             Member3 = case Member2 of
                 #member{last_seen_msg_time=Last, unread_count=-1} ->
                     Count = find_unread(Last, State),
-                    do_event_member_sessions(Member2, {counter_updated, Count}, State),
+                    % This counter_updated event is not needed at this time
+                    %do_event_member_sessions(Member2, {counter_updated, Count}, State),
                     Member2#member{unread_count=Count};
-                #member{unread_count=Count} ->
-                    do_event_member_sessions(Member2, {counter_updated, Count}, State),
+                #member{unread_count=_Count} ->
+                    % This counter_updated event is not needed at this time
+                    %do_event_member_sessions(Member2, {counter_updated, _Count}, State),
                     Member2
             end,
             State3 = set_member(MemberId, Member3, false, State),

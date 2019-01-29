@@ -35,6 +35,9 @@
 event({added_to_conversation, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
     {event, {added_to_conversation, MemberId, #{conversation_id=>ConvId}}, State};
 
+event({conversation_loaded, MemberId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}}=State) ->
+    {event, {conversation_loaded, MemberId, #{conversation_id=>ConvId}}, State};
+
 event({invite_added, InviteData}, State) ->
     {event, {invite_added, InviteData}, State};
 

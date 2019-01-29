@@ -395,12 +395,12 @@ object_sync_op({?MODULE, get_conversations}, _From, #obj_state{session=Session}=
 object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #obj_state{session=Session}=State) ->
     #session{user_id=UserId} = Session,
     case get_conv_pid(ConvId, State) of
-        {ok, Pid} ->
+        {ok, Pid, State2} ->
             case nkchat_conversation:get_member_info(Pid, UserId) of
                 {ok, Info} -> 
-                    {reply, {ok, Info}, State};
+                    {reply, {ok, Info}, State2};
                 {error, Error} ->
-                    {reply, {error, Error}, State}
+                    {reply, {error, Error}, State2}
             end;
         not_found ->
             {reply, {error, conversation_not_found}, State}
@@ -409,8 +409,8 @@ object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #obj_state{sessi
 object_sync_op({?MODULE, set_active_conv, ConvId}, _From, State) ->
     State2 = set_user_active(State),
     case get_conv_pid(ConvId, State2) of
-        {ok, _} ->
-            {reply, ok, do_set_active_conv(ConvId, State2)};
+        {ok, _, State3} ->
+            {reply, ok, do_set_active_conv(ConvId, State3)};
         not_found ->
             {reply, {error, conversation_not_found}, State2}
     end;
@@ -436,8 +436,8 @@ object_sync_op({?MODULE, add_conv, ConvId}, _From, State) ->
                 {error, Error} ->
                     {reply, {error, Error}, State}
             end;
-        {ok, _} ->
-            {reply, {error, conversation_is_already_present}, State}
+        {ok, _, State2} ->
+            {reply, {error, conversation_is_already_present}, State2}
     end;
 
 object_sync_op({?MODULE, rm_conv, ConvId}, _From, State) ->
@@ -498,8 +498,8 @@ object_sync_op(_Op, _From, _State) ->
 %% @private
 object_async_op({?MODULE, conversation_event, ConvId, Event}, State) ->
     case get_conv_pid(ConvId, State) of
-        {ok, _} ->
-            do_conversation_event(Event, ConvId, State);
+        {ok, _, State2} ->
+            do_conversation_event(Event, ConvId, State2);
         not_found ->
             ?LLOG(warning, "received event ~p for unknown conversation", [Event], State),
             {noreply, State}
@@ -536,13 +536,13 @@ object_async_op({?MODULE, typing}, #obj_state{session=Session}=State) ->
             {noreply, State};
         ConvId ->
             case get_conv_pid(ConvId, State) of
-                {ok, Pid} ->
+                {ok, Pid, State2} ->
                     case nkchat_conversation:typing(Pid, UserId) of
                         ok ->
-                            {noreply, set_user_active(State)};
+                            {noreply, set_user_active(State2)};
                         {error, Error} ->
-                            ?LLOG(error, "typing error: ~p", [Error], State),
-                            {noreply, State}
+                            ?LLOG(error, "typing error: ~p", [Error], State2),
+                            {noreply, State2}
                     end;
                 not_found ->
                     ?LLOG(error, "typing: conversation_not_found", [], State),
@@ -613,23 +613,41 @@ do_add_conv(ConvId, State) ->
     #obj_state{id=#obj_id_ext{obj_id=SessId}} = State,
     #obj_state{session=Session} = State,
     #session{user_id=UserId, conv_pids=Convs1} = Session,
-    case nkchat_conversation:add_session(ConvId, UserId, SessId, #{}) of
-        {ok, Pid} ->
-            monitor(process, Pid),
-            Convs2 = Convs1#{ConvId => Pid},
+%    case nkchat_conversation:add_session(ConvId, UserId, SessId, #{}) of
+%        {ok, Pid} ->
+%            monitor(process, Pid),
+%            Convs2 = Convs1#{ConvId => Pid},
+%            Session2 = Session#session{conv_pids=Convs2},
+%            {ok, State#obj_state{session=Session2}};
+%        {error, Error} ->
+%            {error, Error}
+%    end;
+    case nkdomain_db:find(ConvId) of
+        #obj_id_ext{type = ?CHAT_CONVERSATION, pid = undefined} ->
+            Convs2 = Convs1#{ConvId => undefined},
             Session2 = Session#session{conv_pids=Convs2},
             {ok, State#obj_state{session=Session2}};
-        {error, Error} ->
-            {error, Error}
+        #obj_id_ext{type = ?CHAT_CONVERSATION, pid = Pid} ->
+            case nkchat_conversation:add_session(ConvId, UserId, SessId, #{}) of
+                {ok, Pid} ->
+                    monitor(process, Pid),
+                    Convs2 = Convs1#{ConvId => Pid},
+                    Session2 = Session#session{conv_pids=Convs2},
+                    {ok, State#obj_state{session=Session2}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        _ ->
+            {error, object_not_found}
     end.
 
 
 %% @private
 do_rm_conv(ConvId, State) ->
     case get_conv_pid(ConvId, State) of
-        {ok, Pid} ->
-            #obj_state{id=#obj_id_ext{obj_id=SessId}} = State,
-            #obj_state{session=Session} = State,
+        {ok, Pid, State2} ->
+            #obj_state{id=#obj_id_ext{obj_id=SessId}} = State2,
+            #obj_state{session=Session} = State2,
             #session{user_id=UserId, conv_pids=ConvPids1, active_id=ActiveId} = Session,
             nkchat_conversation:remove_session(Pid, UserId, SessId),
             ConvPids2 = maps:remove(ConvId, ConvPids1),
@@ -640,8 +658,8 @@ do_rm_conv(ConvId, State) ->
                 _ ->
                     Session2
             end,
-            State2 = do_event({conversation_removed, ConvId}, State),
-            {ok, State2#obj_state{session=Session3}};
+            State3 = do_event({conversation_removed, ConvId}, State2),
+            {ok, State3#obj_state{session=Session3}};
         not_found ->
             {error, conversation_not_found}
     end.
@@ -652,6 +670,15 @@ do_conversation_event({conversation_updated, Conv}, ConvId, State) ->
     {noreply, do_event({conversation_updated, ConvId, Conv}, State)};
         
 do_conversation_event({counter_updated, Counter}, ConvId, State) ->
+    % TODO: omit conversation events from conversations not registered?
+    %#obj_state{session=Session} = State,
+    %#session{conv_pids=Convs} = Session,
+    %case maps:find(ConvId, Convs) of
+    %    {ok, _Pid} ->
+    %        {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
+    %    error ->
+    %        ok
+    %end;
     {noreply, do_event({unread_counter_updated, ConvId, Counter}, State)};
 
 do_conversation_event({invite_added, InviteData}, ConvId, State) ->
@@ -707,11 +734,23 @@ do_conversation_event(_Event, _ConvId, State) ->
 
 
 %% @private
-get_conv_pid(ConvId, #obj_state{session=Session}) ->
+get_conv_pid(ConvId, #obj_state{session=Session}=State) ->
     #session{conv_pids=Convs} = Session,
     case maps:find(ConvId, Convs) of
+        {ok, undefined} ->
+            case nkdomain:load(ConvId) of
+                {ok, ?CHAT_CONVERSATION, _, _, Pid} ->
+                    case do_add_conv(ConvId, State) of
+                        {ok, State2} ->
+                            {ok, Pid, State2};
+                        {error, _Error} ->
+                            not_found
+                    end;
+                _Other ->
+                    not_found
+            end;
         {ok, Pid} ->
-            {ok, Pid};
+            {ok, Pid, State};
         error ->
             not_found
     end.
