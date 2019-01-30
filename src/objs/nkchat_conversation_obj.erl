@@ -960,37 +960,41 @@ sync_op({make_invite_token, UserId, Member, TTL}, From, State) ->
     end;
 
 sync_op({add_invite_op, User, Member, Base, Opts}, _From, State) ->
-    %% TODO check permission
     #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
-    case nkdomain_db:find(Member) of
-        #obj_id_ext{obj_id=MemberId} ->
-            case find_member(MemberId, State) of
-                false ->
-                    case nkdomain_db:find(User) of
-                        #obj_id_ext{obj_id=UserId} ->
-                            ConvData1 = maps:get(?CHAT_CONVERSATION, Base, #{}),
-                            ConvData2 = ConvData1#{
-                                <<"add_member_op">> => #{
-                                    <<"conversation_id">> => ConvId,
-                                    <<"member_id">> => MemberId,
-                                    <<"user_id">> => UserId,
-                                    <<"opts">> => #{
-                                        <<"silent">> => maps:get(silent, Opts, ?DEFAULT_SILENT),
-                                        <<"read_previous">> => maps:get(read_previous, Opts, ?DEFAULT_READ_PREVIOUS)
-                                    },
-                                    <<"date">> => nkdomain_util:timestamp()
-                                }
-                            },
-                            Base2 = Base#{?CHAT_CONVERSATION => ConvData2},
-                            {reply, {ok, ConvId, MemberId, UserId, Base2}, State};
-                        _ ->
-                            {reply, {error, user_invalid}, State}
-                    end;
+    case nkdomain_db:find(User) of
+        #obj_id_ext{obj_id=UserId} ->
+            case find_member(UserId, State) of
                 {true, _} ->
-                    {reply, {error, member_already_present}, State}
+                    case nkdomain_db:find(Member) of
+                        #obj_id_ext{obj_id=MemberId} ->
+                            case find_member(MemberId, State) of
+                                false ->
+                                    ConvData1 = maps:get(?CHAT_CONVERSATION, Base, #{}),
+                                    ConvData2 = ConvData1#{
+                                        <<"add_member_op">> => #{
+                                            <<"conversation_id">> => ConvId,
+                                            <<"member_id">> => MemberId,
+                                            <<"user_id">> => UserId,
+                                            <<"opts">> => #{
+                                                <<"silent">> => maps:get(silent, Opts, ?DEFAULT_SILENT),
+                                                <<"read_previous">> => maps:get(read_previous, Opts, ?DEFAULT_READ_PREVIOUS)
+                                            },
+                                            <<"date">> => nkdomain_util:timestamp()
+                                        }
+                                    },
+                                    Base2 = Base#{?CHAT_CONVERSATION => ConvData2},
+                                    {reply, {ok, ConvId, MemberId, UserId, Base2}, State};
+                                {true, _} ->
+                                    {reply, {error, member_already_present}, State}
+                            end;
+                        _ ->
+                            {reply, {error, member_invalid}, State}
+                    end;
+                false ->
+                    {reply, {error, unauthorized}, State}
             end;
         _ ->
-            {reply, {error, member_invalid}, State}
+            {reply, {error, user_invalid}, State}
     end;
 
 sync_op(_Op, _From, _State) ->
