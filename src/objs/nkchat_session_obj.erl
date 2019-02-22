@@ -42,7 +42,7 @@
 -include_lib("nkdomain/include/nkdomain_debug.hrl").
 -include_lib("nkevent/include/nkevent.hrl").
 
--define(INACTIVITY_TIMER, 5*60).
+-define(INACTIVITY_TIMER, nkchat_app:get(inactivity_timer)).
 
 %% ===================================================================
 %% Types

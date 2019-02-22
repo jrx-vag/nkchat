@@ -23,7 +23,12 @@ start() ->
 
 %% @private OTP standard start callback
 start(_Type, _Args) ->
-	Syntax = #{},
+	Syntax = #{
+        inactivity_timer => {integer, 1, 60*60*24},
+        '__defaults' => #{
+            inactivity_timer => 5*60
+        }
+    },
     case nklib_config:load_env(?APP, Syntax) of
         {ok, _} ->
             {ok, Pid} = nkchat_sup:start_link(),
