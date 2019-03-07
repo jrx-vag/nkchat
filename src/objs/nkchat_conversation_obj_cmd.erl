@@ -152,6 +152,14 @@ cmd(<<"is_muted">>, #nkreq{data=#{id:=ConvId, member_id:=MemberId}}) ->
             {error, Error}
     end;
 
+cmd(<<"set_closed">>, #nkreq{data=#{id:=ConvId, is_closed:=IsClosed}}) ->
+    case nkchat_conversation:set_closed(ConvId, IsClosed) of
+        ok ->
+            {ok, #{}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(Cmd, Req) ->
     nkdomain_obj_cmd:cmd(Cmd, ?CHAT_CONVERSATION, Req).
 
