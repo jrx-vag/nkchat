@@ -104,5 +104,12 @@ syntax(<<"is_muted">>, Syntax) ->
         '__mandatory' => [id, member_id]
     };
 
+syntax(<<"set_closed">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        is_closed => boolean,
+        '__mandatory' => [id, is_closed]
+    };
+
 syntax(Cmd, Syntax) ->
     nkdomain_obj_syntax:syntax(Cmd, ?CHAT_CONVERSATION, Syntax).
