@@ -739,13 +739,30 @@ read_invite_token(Token) ->
 %% @private
 make_invite_push(CallerId, InviteOpts) ->
     {ok, #{fullname:=FullName}} = nkdomain_user:get_name(CallerId),
-    #{
+    Base = case InviteOpts of
+        #{conversation_id := CId} when CId =/= <<>> ->
+            ParentId = case nkdomain:get_obj(CId) of
+                {ok, #{type := ?CHAT_CONVERSATION}=Conv} ->
+                    maps:get(parent_id, Conv, <<>>);
+                _Other ->
+                    <<>>
+            end,
+            #{
+                conversation_id => CId,
+                parent_id => ParentId
+            };
+        _ ->
+            #{
+                conversation_id => <<>>,
+                parent_id => <<>>
+            }
+    end,
+    Base#{
         type => ?MEDIA_SESSION,
         class => invite,
         media_id => <<>>,
         full_name => FullName,
         audio => maps:get(audio, InviteOpts, false),
         video => maps:get(video, InviteOpts, false),
-        screen => maps:get(screen, InviteOpts, false),
-        conversation_id => maps:get(conversation_id, InviteOpts, <<>>)
+        screen => maps:get(screen, InviteOpts, false)
     }.

@@ -1559,7 +1559,7 @@ do_new_msg_event(Time, Msg, #obj_state{obj=#{?CHAT_CONVERSATION:=_ChatConv}} = S
 do_new_msg_event([], _Time, _Msg, Acc, _Opts, State) ->
     set_members(Acc, State);
 
-do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}} = State) ->
+do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = Opts, #obj_state{obj=#{?CHAT_CONVERSATION:=ChatConv}=Obj} = State) ->
     #member{
         member_id = MemberId,
         last_seen_msg_time = Last,
@@ -1623,9 +1623,11 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 end,
                 0,
                 MemberConvs),
+            ParentId = maps:get(parent_id, Obj, <<>>),
             Push = #{
                 type => ?CHAT_CONVERSATION,
                 class => new_msg,
+                parent_id => ParentId,
                 conversation_id => ConvId,
                 conversation_name => Name,
                 conversation_type => ConvType,
