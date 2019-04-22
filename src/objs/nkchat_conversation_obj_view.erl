@@ -47,7 +47,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
     Enabled = maps:get(enabled, Obj, true),
     Conv = maps:get(?CHAT_CONVERSATION, Obj, #{}),
     Type = maps:get(type, Conv, <<"channel">>),
-    AllowMembersEdit = Type =:= <<"channel">> orelse IsNew, % TODO: Remove when conversation type update is fixed
+    AllowMembersEdit = not(is_direct_conv(Type)) orelse IsNew, % TODO: Remove when conversation type update is fixed
     Members = maps:get(members, Conv, []),
     MemberIds = [maps:get(member_id, Member) || Member <- Members],
     MembersValue = binary:list_to_bin(lists:join(<<",">>, MemberIds)),
