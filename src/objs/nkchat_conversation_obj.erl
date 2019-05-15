@@ -279,16 +279,12 @@ object_db_get_query(nkelastic, {query_recent_conversations, Domain, Member, Opts
             case nkdomain_store_es_util:get_obj_id(Member) of
                 {ok, MemberId} ->
                     Filters = case Opts of
-                        #{types := []} ->
-                            [];
                         #{types := Types} when is_list(Types) ->
                             [{[?CHAT_CONVERSATION, ".type"], values, Types}];
                         _ ->
                             []
                     end,
                     Filters1 = case Opts of
-                        #{omitted_types := []} ->
-                            Filters;
                         #{omitted_types := OmittedTypes} when is_list(OmittedTypes) ->
                             [{'not', {[?CHAT_CONVERSATION, ".type"], values, OmittedTypes}}|Filters];
                         _ ->
@@ -1519,7 +1515,7 @@ set_invitation_by_user_id(UserId, Invitation, State) ->
     Invitations1 = get_invitations(State),
     Invitations2 = lists:keystore(UserId, #invitation.user_id, Invitations1, Invitation),
     set_invitations(Invitations2, State).
-    
+
 
 %%%% @private
 %%rm_invitation(InvitationId, State) ->
