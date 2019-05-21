@@ -1622,29 +1622,12 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 {error, _Error} ->
                     false
             end,
-            MemberConvs = case nkchat_conversation:find_member_conversations(root, MemberId) of
-                {ok, List} ->
-                    [CId || {CId, _Type} <- List];
-                {error, Error} ->
-                    [ConvId]
+            PCount2 = case nkchat_conversation:get_unread_counter(<<"/">>, MemberId, #{}) of
+                {ok, UC} ->
+                    UC + PCount;
+                _ ->
+                    PCount
             end,
-            PCount2 = lists:foldl(
-                fun(MemberConv, Acc) ->
-                    case MemberConv of
-                        ConvId ->
-                            Acc + PCount;
-                        _ ->
-                            UnreadCount = case nkchat_conversation:get_member_cached_data(MemberConv, MemberId) of
-                                {ok, #member{unread_count=UC}} ->
-                                    UC;
-                                {error, _Error2} ->
-                                    0
-                            end,
-                            Acc + UnreadCount
-                    end
-                end,
-                0,
-                MemberConvs),
             ParentId = maps:get(parent_id, Obj, <<>>),
             Push = #{
                 type => ?CHAT_CONVERSATION,
@@ -1660,7 +1643,7 @@ do_new_msg_event([Member|Rest], Time, Msg, Acc, #{members_map := MembersMap} = O
                 message_text => Txt,
                 message_type => MsgType,
                 is_muted => IsMuted,
-                unread_counter => PCount
+                unread_counter => PCount2
             },
             send_push(MemberId, Push, State),
             PCount;
