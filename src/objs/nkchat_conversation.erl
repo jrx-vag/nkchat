@@ -29,7 +29,7 @@
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
--export([get_recent_conversations/3]).
+-export([get_recent_conversations/3, get_unread_counter/3]).
 -export([get_pretty_name/1, is_direct_conversation/1]).
 -export([mute/3, is_muted/2, get_muted_tag/1]).
 -export([typing/2]).
@@ -274,6 +274,46 @@ get_recent_conversations(Domain, MemberId, Opts) ->
                 fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=Type}}) -> {ConvId, Type} end,
                 List),
             {ok, N, List2};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @doc
+get_unread_counter(Domain, Member, Opts) ->
+    case nkdomain_store_es_util:get_obj_id(Member) of
+        {ok, MemberId} ->
+            Size = maps:get(size, Opts, ?UNREAD_COUNTER_DEFAULT_POOL_SIZE),
+            case nkdomain_db:search(?CHAT_CONVERSATION, {query_recent_conversations, Domain, MemberId, Opts#{size => Size, unread => true}}) of
+                {ok, _N, List, _Meta} ->
+                    List2 = lists:map(
+                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=_Type, <<"members">>:=Members}}) ->
+                            LastSeenList = [LSMT || #{<<"member_id">>:=MId, <<"last_seen_message_time">>:=LSMT} <- Members, MId =:= MemberId],
+                            LastSeen = case LastSeenList of
+                                [] ->
+                                    0;
+                                [LS|_] ->
+                                    LS
+                            end,
+                            {ConvId, LastSeen}
+                        end,
+                    List),
+                    UnreadCounter = lists:foldl(
+                        fun({CId, Time}, Acc) ->
+                            case nkdomain_db:search(?CHAT_CONVERSATION, {query_conversation_messages, CId, #{size=>0, start_date=>Time}}) of
+                                {ok, Num, [], _Meta2} ->
+                                    Num + Acc;
+                                {error, Error} ->
+                                    lager:error("error reading unread count: ~p", [Error]),
+                                    Acc
+                            end
+                        end,
+                    0,
+                    List2),
+                    {ok, UnreadCounter};
+                {error, Error} ->
+                    {error, Error}
+            end;
         {error, Error} ->
             {error, Error}
     end.

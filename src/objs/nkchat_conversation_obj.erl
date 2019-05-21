@@ -242,7 +242,7 @@ object_mutation(MutationName, Params, Ctx) ->
 -type query() ::
     {query_member_conversations, nkdomain:id(), nkdomain:id()} |
     {query_recent_conversations, nkdomain:id(), nkdomain:id(), #{from=>integer(),
-                                    size=>integer(), types=>[binary()]}} |
+                                    size=>integer(), types=>[binary()], unread=>boolean()}} |
     {query_conversations_with_members, nkdomain:id(), [nkdomain:obj_id()]} |
     {query_conversation_messages, nkdomain:id(), nkdomain_db:search_objs_opts() |
                                     #{start_date=>nkdomain:timestamp(), end_date=>nkdomain:timestamp(), inclusive=>boolean()}}.
@@ -294,10 +294,16 @@ object_db_get_query(nkelastic, {query_recent_conversations, Domain, Member, Opts
                         {path, subdir, DomainPath},
                         {[?CHAT_CONVERSATION, ".members.member_id"], eq, MemberId}
                     |Filters1],
+                    Fields = case Opts of
+                        #{unread := true} ->
+                            [list_to_binary([?CHAT_CONVERSATION, ".members"])];
+                        _ ->
+                            []
+                    end,
                     Opts2 = maps:with([from, size], Opts),
                     Opts3 = Opts2#{
                         type => ?CHAT_CONVERSATION,
-                        fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])],
+                        fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])|Fields],
                         sort => [#{list_to_binary([?CHAT_CONVERSATION, ".last_message_time"]) => #{order => desc}}]
                     },
                     {ok, {nkelastic, Filters2, maps:merge(DbOpts, Opts3)}};

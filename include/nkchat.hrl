@@ -39,6 +39,8 @@
 -define(DEFAULT_SILENT, false).
 -define(DEFAULT_READ_PREVIOUS, false).
 
+-define(UNREAD_COUNTER_DEFAULT_POOL_SIZE, nkchat_app:get(unread_counter_pool_size, 999)).
+
 
 %% ===================================================================
 %% Records
