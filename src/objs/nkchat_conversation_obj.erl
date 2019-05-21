@@ -873,14 +873,13 @@ sync_op({get_member_info, MemberId}, _From, State) ->
             {reply, {error, member_not_found}, State}
     end;
 
-sync_op({get_member_cached_data, MemberId}, _From, #obj_state{session=Session}=State) ->
+sync_op({get_member_cached_data, MemberId}, _From, State) ->
     case find_member(MemberId, State) of
         {true, #member{last_seen_msg_time=Last, unread_count=UnreadCount}=Member} ->
             {Member3, State3} = case UnreadCount of
                 -1 ->
                     Count = find_unread(Last, State),
                     Member2 = Member#member{unread_count=Count},
-                    #obj_state{id=#obj_id_ext{obj_id=ConvId}} = State,
                     State2 = set_member(MemberId, Member2, false, State),
                     {Member2, State2};
                 _ ->
@@ -924,7 +923,7 @@ sync_op({get_pretty_name}, _From, State) ->
 
 sync_op({mute, MemberId, Muted}, _From, State) ->
     case mute_member(MemberId, Muted, State) of
-        {ok, NewTags, NewState} ->
+        {ok, _NewTags, NewState} ->
             NewState2 = do_event({member_muted, MemberId, Muted}, NewState),
             {reply, ok, NewState2};
         {error, Error, NewState} ->

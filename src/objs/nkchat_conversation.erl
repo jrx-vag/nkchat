@@ -243,7 +243,7 @@ get_member_info(ConvId, MemberId) ->
 %% @private
 -spec get_member_cached_data(nkdomain:obj_id(), nkdomain:obj_id()) ->
     {ok, map()} | {error, term()}.
-    
+
 get_member_cached_data(ConvId, MemberId) ->
     sync_op(ConvId, {get_member_cached_data, MemberId}).
 
@@ -301,9 +301,9 @@ find_conversations_with_members(Domain, MemberIds) ->
 
 get_messages(Id, Opts) ->
     Order = case Opts of
-        #{start_date:=Date} ->
+        #{start_date:=_Date} ->
             asc;
-        #{end_date:=Date} ->
+        #{end_date:=_Date} ->
             desc;
         _ ->
             desc
