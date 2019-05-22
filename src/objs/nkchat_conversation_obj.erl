@@ -1372,12 +1372,10 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
             Member3 = case Member2 of
                 #member{last_seen_msg_time=Last, unread_count=-1} ->
                     Count = find_unread(Last, State),
-                    % This counter_updated event is not needed at this time
-                    %do_event_member_sessions(Member2, {counter_updated, Count}, State),
+                    do_event_member_sessions(Member2, {counter_updated, Count}, State),
                     Member2#member{unread_count=Count};
-                #member{unread_count=_Count} ->
-                    % This counter_updated event is not needed at this time
-                    %do_event_member_sessions(Member2, {counter_updated, Count}, State),
+                #member{unread_count=Count} ->
+                    do_event_member_sessions(Member2, {counter_updated, Count}, State),
                     Member2
             end,
             State3 = set_member(MemberId, Member3, false, State),
