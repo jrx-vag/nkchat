@@ -60,6 +60,7 @@ syntax(<<"get_recent_conversations">>, Syntax) ->
         domain_id => binary,
         member_id => binary,
         types => {list, binary},
+        omitted_types => {list, binary},
         from => integer,
         size => integer
     };

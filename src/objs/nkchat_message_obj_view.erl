@@ -80,7 +80,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
             #{};
         _ ->
             case IsNew of
-                true -> 
+                true ->
                     #{};
                 false ->
                     #{with_image => <<"<a href=\"", FileUrl/binary, "\">Content type not supported</a>">>}
@@ -188,7 +188,7 @@ view(Obj, IsNew, #admin_session{domain_id=Domain}=Session) ->
                         required => MsgFileValue =/= <<>>,
                         editable => true
                     }
-                    | MsgFields                    
+                    | MsgFields
                 ]
             },
             nkadmin_webix_form:creation_fields(Obj, IsNew)
@@ -275,7 +275,7 @@ create(Data, #admin_session{user_id=UserId}=_Session) ->
             Msg;
         _ ->
             case nkdomain:get_obj(QuoteId) of
-                {ok, #{obj_id := QId, ?CHAT_MESSAGE := QuotedMsg, created_by := QuotedUser}=QuotedObj} ->
+                {ok, #{obj_id := QId, ?CHAT_MESSAGE := QuotedMsg, created_by := QuotedUser}=_QuotedObj} ->
                     Q = maps:with([file_id, text], QuotedMsg),
                     Q2 = Q#{user_id => QuotedUser, message_id => QId, type => <<"text">>},
                     Msg#{body => #{quote => Q2}};
@@ -368,7 +368,7 @@ get_quote_fields(true, _) ->
         }
     ];
 
-get_quote_fields(IsNew, #{<<"quote">> := Quote}) ->
+get_quote_fields(_IsNew, #{<<"quote">> := Quote}) ->
     QType = maps:get(<<"type">>, Quote, <<>>),
     QText = maps:get(<<"text">>, Quote, <<>>),
     QFileId = maps:get(<<"file_id">>, Quote, <<>>),
@@ -411,10 +411,10 @@ get_quote_fields(IsNew, #{<<"quote">> := Quote}) ->
             editable => true
         }
     ];
-    
+
 get_quote_fields(_, _) ->
     [].
-    
+
 
 %% @private
 get_body_field(Body) ->
