@@ -25,8 +25,10 @@ start() ->
 start(_Type, _Args) ->
 	Syntax = #{
         inactivity_timer => {integer, 1, 60*60*24},
+        unread_counter_pool_size => {integer, 1, 9999},
         '__defaults' => #{
-            inactivity_timer => 5*60
+            inactivity_timer => 5*60,
+            unread_counter_pool_size => 999
         }
     },
     case nklib_config:load_env(?APP, Syntax) of

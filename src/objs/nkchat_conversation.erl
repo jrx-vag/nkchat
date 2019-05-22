@@ -29,7 +29,7 @@
 -export([get_status/1, set_status/2, set_closed/2]).
 -export([get_info/1, get_messages/2, find_member_conversations/2,
          find_conversations_with_members/2, get_last_messages/1]).
--export([get_recent_conversations/3]).
+-export([get_recent_conversations/3, get_unread_counter/3]).
 -export([get_pretty_name/1, is_direct_conversation/1]).
 -export([mute/3, is_muted/2, get_muted_tag/1]).
 -export([typing/2]).
@@ -243,7 +243,7 @@ get_member_info(ConvId, MemberId) ->
 %% @private
 -spec get_member_cached_data(nkdomain:obj_id(), nkdomain:obj_id()) ->
     {ok, map()} | {error, term()}.
-    
+
 get_member_cached_data(ConvId, MemberId) ->
     sync_op(ConvId, {get_member_cached_data, MemberId}).
 
@@ -280,6 +280,49 @@ get_recent_conversations(Domain, MemberId, Opts) ->
 
 
 %% @doc
+get_unread_counter(Domain, Member, Opts) ->
+    case nkdomain:find(Member) of
+        {ok, _, MemberId, _, _} ->
+            Size = maps:get(size, Opts, ?UNREAD_COUNTER_DEFAULT_POOL_SIZE),
+            case nkdomain_db:search(?CHAT_CONVERSATION, {query_recent_conversations, Domain, MemberId, Opts#{size => Size, unread => true}}) of
+                {ok, _N, List, _Meta} ->
+                    List2 = lists:map(
+                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=_Type, <<"members">>:=Members}=ConvData}) ->
+                            LastSeenList = [LSMT || #{<<"member_id">>:=MId, <<"last_seen_message_time">>:=LSMT} <- Members, MId =:= MemberId],
+                            LastMsgTime = maps:get(<<"last_message_time">>, ConvData, 0),
+                            LastSeen = case LastSeenList of
+                                [] ->
+                                    0;
+                                [LS|_] ->
+                                    LS
+                            end,
+                            {ConvId, LastMsgTime, LastSeen}
+                        end,
+                    List),
+                    % Filter conversations with unread messages
+                    List3 = [{ConvId2, TimeB} || {ConvId2, TimeA, TimeB} <- List2, TimeA =/= TimeB],
+                    UnreadCounter = lists:foldl(
+                        fun({CId, Time}, Acc) ->
+                            case nkdomain_db:search(?CHAT_CONVERSATION, {query_conversation_messages, CId, #{size=>0, start_date=>Time}}) of
+                                {ok, Num, [], _Meta2} ->
+                                    Num + Acc;
+                                {error, Error} ->
+                                    lager:error("error reading unread count: ~p", [Error]),
+                                    Acc
+                            end
+                        end,
+                    0,
+                    List3),
+                    {ok, UnreadCounter};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @doc
 find_conversations_with_members(Domain, MemberIds) ->
     case nkdomain_db:search(?CHAT_CONVERSATION, {query_conversations_with_members, Domain, MemberIds}) of
         {ok, N, List, _Meta} ->
@@ -301,9 +344,9 @@ find_conversations_with_members(Domain, MemberIds) ->
 
 get_messages(Id, Opts) ->
     Order = case Opts of
-        #{start_date:=Date} ->
+        #{start_date:=_Date} ->
             asc;
-        #{end_date:=Date} ->
+        #{end_date:=_Date} ->
             desc;
         _ ->
             desc
