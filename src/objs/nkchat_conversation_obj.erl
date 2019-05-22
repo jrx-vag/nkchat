@@ -296,7 +296,8 @@ object_db_get_query(nkelastic, {query_recent_conversations, Domain, Member, Opts
                     |Filters1],
                     Fields = case Opts of
                         #{unread := true} ->
-                            [list_to_binary([?CHAT_CONVERSATION, ".members"])];
+                            [list_to_binary([?CHAT_CONVERSATION, ".members"]),
+                             list_to_binary([?CHAT_CONVERSATION, ".last_message_time"])];
                         _ ->
                             []
                     end,

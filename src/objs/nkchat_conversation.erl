@@ -281,23 +281,26 @@ get_recent_conversations(Domain, MemberId, Opts) ->
 
 %% @doc
 get_unread_counter(Domain, Member, Opts) ->
-    case nkdomain_store_es_util:get_obj_id(Member) of
-        {ok, MemberId} ->
+    case nkdomain:find(Member) of
+        {ok, _, MemberId, _, _} ->
             Size = maps:get(size, Opts, ?UNREAD_COUNTER_DEFAULT_POOL_SIZE),
             case nkdomain_db:search(?CHAT_CONVERSATION, {query_recent_conversations, Domain, MemberId, Opts#{size => Size, unread => true}}) of
                 {ok, _N, List, _Meta} ->
                     List2 = lists:map(
-                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=_Type, <<"members">>:=Members}}) ->
+                        fun(#{<<"obj_id">>:=ConvId, ?CHAT_CONVERSATION:=#{<<"type">>:=_Type, <<"members">>:=Members}=ConvData}) ->
                             LastSeenList = [LSMT || #{<<"member_id">>:=MId, <<"last_seen_message_time">>:=LSMT} <- Members, MId =:= MemberId],
+                            LastMsgTime = maps:get(<<"last_message_time">>, ConvData, 0),
                             LastSeen = case LastSeenList of
                                 [] ->
                                     0;
                                 [LS|_] ->
                                     LS
                             end,
-                            {ConvId, LastSeen}
+                            {ConvId, LastMsgTime, LastSeen}
                         end,
                     List),
+                    % Filter conversations with unread messages
+                    List3 = [{ConvId2, TimeB} || {ConvId2, TimeA, TimeB} <- List2, TimeA =/= TimeB],
                     UnreadCounter = lists:foldl(
                         fun({CId, Time}, Acc) ->
                             case nkdomain_db:search(?CHAT_CONVERSATION, {query_conversation_messages, CId, #{size=>0, start_date=>Time}}) of
@@ -309,7 +312,7 @@ get_unread_counter(Domain, Member, Opts) ->
                             end
                         end,
                     0,
-                    List2),
+                    List3),
                     {ok, UnreadCounter};
                 {error, Error} ->
                     {error, Error}
