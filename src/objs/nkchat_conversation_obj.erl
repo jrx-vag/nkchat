@@ -613,8 +613,13 @@ object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
     },
     State2 = do_new_msg_event(Time, Msg, State#obj_state{session=Session2}),
     % is_dirty is already true
-    State3 = nkdomain_obj_util:do_save_timer(State2),
-    {ok, State3};
+    %State3 = nkdomain_obj_util:do_save_timer(State2),
+    % Save conversation immediately when a new message is created
+    #obj_state{object_info=Info}=State2,
+    State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{object_info=Info#{save_time => 0}, save_timer = undefined}),
+    % Restoring original save_time
+    State4 = State3#obj_state{object_info=Info},
+    {ok, State4};
 
 object_event({message_updated, Msg}, #obj_state{session=Session}=State) ->
     #session{messages=Msgs} = Session,
@@ -649,13 +654,18 @@ object_event({message_deleted, MsgId}, #obj_state{obj=Obj, session=Session}=Stat
     State2 = do_event_all_sessions({message_deleted, MsgId}, State#obj_state{session=Session3}),
     #session{last_message_time=NewLastMsgTime} = Session3,
     IsDirty = NewLastMsgTime =/= LastMsgTime,
-    State3 = case IsDirty of
+    case IsDirty of
         true ->
-            nkdomain_obj_util:do_save_timer(State2#obj_state{is_dirty=true});
+            %State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{is_dirty=true}),
+            % Save conversation immediately when the last message was deleted
+            #obj_state{object_info=Info}=State2,
+            State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{object_info=Info#{save_time => 0}, save_timer=undefined, is_dirty=true}),
+            % Restoring original save_time
+            State4 = State3#obj_state{object_info=Info},
+            {ok, State4};
         false ->
-            State2
-    end,
-    {ok, State3};
+            {ok, State2}
+    end;
 
 object_event({session_removed, MemberId, SessId}, State) ->
     {ok, do_event_all_sessions({session_removed, MemberId, SessId}, State)};
