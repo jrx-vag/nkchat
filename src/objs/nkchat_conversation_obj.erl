@@ -63,6 +63,7 @@
     {message_deleted, nkdomain:obj_id()} |
     {member_added, nkdomain:obj_id(), MemberData::map()} |
     {added_to_conversation, nkdomain:obj_id()} |        % Same but obj_id is for the member
+    {conversation_loaded, nkdomain:obj_id()} |          % Same but obj_id is for the member
     {member_muted, nkdomain:obj_id(), boolean()} |
     {member_removed, nkdomain:obj_id()} |
     {removed_from_conversation, nkdomain:obj_id()} |    % Same but obj_id is for the member
@@ -259,7 +260,7 @@ object_db_get_query(nkelastic, {query_member_conversations, Domain, Member}, DbO
                     ],
                     Opts = #{
                         type => ?CHAT_CONVERSATION,
-                        size=>9999,
+                        size => 9999,
                         fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])],
                         sort => [#{<<"updated_time">> => #{order => desc}},
                                  #{<<"created_time">> => #{order => desc}}]
@@ -461,7 +462,15 @@ object_init(#obj_state{id=Id, obj=Obj}=State) ->
                 last_message_time = LastMessageTime,
                 obj_name_follows_members = maps:get(obj_name_follows_members, Conv, false)
             },
-            State2 = State#obj_state{session=Session},
+            State2 = lists:foldl(
+                fun(Data, StateN) ->
+                    #{
+                        member_id := MemberId2
+                    } = Data,
+                    do_event({conversation_loaded, MemberId2}, StateN)
+                end,
+                State#obj_state{session=Session},
+                MemberList),
             case maps:take(initial_member_ids, Conv) of
                 error ->
                     {ok, State2};
@@ -604,8 +613,13 @@ object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
     },
     State2 = do_new_msg_event(Time, Msg, State#obj_state{session=Session2}),
     % is_dirty is already true
-    State3 = nkdomain_obj_util:do_save_timer(State2),
-    {ok, State3};
+    %State3 = nkdomain_obj_util:do_save_timer(State2),
+    % Save conversation immediately when a new message is created
+    #obj_state{object_info=Info}=State2,
+    State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{object_info=Info#{save_time => 0}, save_timer = undefined}),
+    % Restoring original save_time
+    State4 = State3#obj_state{object_info=Info},
+    {ok, State4};
 
 object_event({message_updated, Msg}, #obj_state{session=Session}=State) ->
     #session{messages=Msgs} = Session,
@@ -640,13 +654,18 @@ object_event({message_deleted, MsgId}, #obj_state{obj=Obj, session=Session}=Stat
     State2 = do_event_all_sessions({message_deleted, MsgId}, State#obj_state{session=Session3}),
     #session{last_message_time=NewLastMsgTime} = Session3,
     IsDirty = NewLastMsgTime =/= LastMsgTime,
-    State3 = case IsDirty of
+    case IsDirty of
         true ->
-            nkdomain_obj_util:do_save_timer(State2#obj_state{is_dirty=true});
+            %State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{is_dirty=true}),
+            % Save conversation immediately when the last message was deleted
+            #obj_state{object_info=Info}=State2,
+            State3 = nkdomain_obj_util:do_save_timer(State2#obj_state{object_info=Info#{save_time => 0}, save_timer=undefined, is_dirty=true}),
+            % Restoring original save_time
+            State4 = State3#obj_state{object_info=Info},
+            {ok, State4};
         false ->
-            State2
-    end,
-    {ok, State3};
+            {ok, State2}
+    end;
 
 object_event({session_removed, MemberId, SessId}, State) ->
     {ok, do_event_all_sessions({session_removed, MemberId, SessId}, State)};
@@ -1372,10 +1391,12 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
             Member3 = case Member2 of
                 #member{last_seen_msg_time=Last, unread_count=-1} ->
                     Count = find_unread(Last, State),
-                    do_event_member_sessions(Member2, {counter_updated, Count}, State),
+                    % This counter_updated event is not needed at this time
+                    %do_event_member_sessions(Member2, {counter_updated, Count}, State),
                     Member2#member{unread_count=Count};
-                #member{unread_count=Count} ->
-                    do_event_member_sessions(Member2, {counter_updated, Count}, State),
+                #member{unread_count=_Count} ->
+                    % This counter_updated event is not needed at this time
+                    %do_event_member_sessions(Member2, {counter_updated, _Count}, State),
                     Member2
             end,
             State3 = set_member(MemberId, Member3, false, State),
