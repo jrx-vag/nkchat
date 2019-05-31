@@ -1392,11 +1392,13 @@ do_add_session(MemberId, SessId, Meta, Pid, State) ->
                 #member{last_seen_msg_time=Last, unread_count=-1} ->
                     Count = find_unread(Last, State),
                     % This counter_updated event is not needed at this time
-                    %do_event_member_sessions(Member2, {counter_updated, Count}, State),
+                    % TODO: comment this line when the tests doesn't need the unread_counter event
+                    do_event_member_sessions(Member2, {counter_updated, Count}, State),
                     Member2#member{unread_count=Count};
                 #member{unread_count=_Count} ->
                     % This counter_updated event is not needed at this time
-                    %do_event_member_sessions(Member2, {counter_updated, _Count}, State),
+                    % TODO: comment this line when the tests doesn't need the unread_counter event
+                    do_event_member_sessions(Member2, {counter_updated, _Count}, State),
                     Member2
             end,
             State3 = set_member(MemberId, Member3, false, State),
