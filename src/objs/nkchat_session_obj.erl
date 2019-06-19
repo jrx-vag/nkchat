@@ -397,7 +397,7 @@ object_sync_op({?MODULE, get_conversation_info, ConvId}, _From, #obj_state{sessi
     case get_conv_pid(ConvId, State) of
         {ok, Pid, State2} ->
             case nkchat_conversation:get_member_info(Pid, UserId) of
-                {ok, Info} -> 
+                {ok, Info} ->
                     {reply, {ok, Info}, State2};
                 {error, Error} ->
                     {reply, {error, Error}, State2}
@@ -418,7 +418,7 @@ object_sync_op({?MODULE, set_active_conv, ConvId}, _From, State) ->
 object_sync_op({?MODULE, deactivate_conv}, _From, State) ->
     State2 = set_user_active(State),
     ConvId = undefined,
-    {reply, ok, do_set_active_conv(ConvId, State2)};    
+    {reply, ok, do_set_active_conv(ConvId, State2)};
 
 object_sync_op({?MODULE, is_conv_active, ConvId}, _From, State) ->
     #obj_state{session=Session} = State,
@@ -496,12 +496,18 @@ object_sync_op(_Op, _From, _State) ->
 
 
 %% @private
-object_async_op({?MODULE, conversation_event, ConvId, Event}, State) ->
+object_async_op({?MODULE, conversation_event, ConvId, Event}, #obj_state{id=#obj_id_ext{obj_id=SessId}} = State) ->
     case get_conv_pid(ConvId, State) of
         {ok, _, State2} ->
             do_conversation_event(Event, ConvId, State2);
         {not_found, State2} ->
-            ?LLOG(warning, "received event ~p for unknown conversation", [Event], State2),
+            case Event of
+                {_, _, SessId} ->
+                    %% Ignore error when conversation event contains our session ID
+                    ok;
+                _ ->
+                    ?LLOG(warning, "received event ~p for unknown conversation ~s", [Event, ConvId], State2)
+            end,
             {noreply, State2}
     end;
 
@@ -672,7 +678,7 @@ do_rm_conv(ConvId, State) ->
 %% @private
 do_conversation_event({conversation_updated, Conv}, ConvId, State) ->
     {noreply, do_event({conversation_updated, ConvId, Conv}, State)};
-        
+
 do_conversation_event({counter_updated, Counter}, ConvId, State) ->
     % TODO: omit conversation events from conversations not registered?
     %#obj_state{session=Session} = State,
