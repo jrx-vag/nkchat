@@ -1461,10 +1461,10 @@ set_members(Members, State) ->
     set_members(Members, true, State).
 
 %% @private
-set_members(Members, IsDirty, #obj_state{session=Session}=State) ->
+set_members(Members, IsDirty, #obj_state{id=_Id, session=Session, is_dirty=OldIsDirty}=State) ->
+    lager:warning("SETTING IS_DIRTY to ~s in conversation ~s", [IsDirty, _Id]),
     Session2 = Session#session{members=Members},
-    State#obj_state{session=Session2, is_dirty=IsDirty}.
-
+    State#obj_state{session=Session2, is_dirty=(IsDirty orelse OldIsDirty)}.
 
 %% @private
 set_member(MemberId, Member, State) ->
