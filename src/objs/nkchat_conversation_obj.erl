@@ -1462,7 +1462,6 @@ set_members(Members, State) ->
 
 %% @private
 set_members(Members, IsDirty, #obj_state{id=_Id, session=Session, is_dirty=OldIsDirty}=State) ->
-    lager:warning("SETTING IS_DIRTY to ~s in conversation ~p", [IsDirty, _Id]),
     Session2 = Session#session{members=Members},
     State#obj_state{session=Session2, is_dirty=(IsDirty orelse OldIsDirty)}.
 
