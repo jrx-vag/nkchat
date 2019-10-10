@@ -242,7 +242,9 @@ object_mutation(MutationName, Params, Ctx) ->
 -type query() ::
     {query_member_conversations, nkdomain:id(), nkdomain:id()} |
     {query_recent_conversations, nkdomain:id(), nkdomain:id(), #{from=>integer(),
-                                    size=>integer(), types=>[binary()], unread=>boolean()}} |
+                                    size=>integer(), types=>[binary()], omitted_types=>[binary()], unread=>boolean()}} |
+    {query_conversations, nkdomain:id(), #{from=>integer(), size=>integer(),
+                                    types=>[binary()], omitted_types=>[binary()]}} |
     {query_conversations_with_members, nkdomain:id(), [nkdomain:obj_id()]} |
     {query_conversation_messages, nkdomain:id(), nkdomain_db:search_objs_opts() |
                                     #{start_date=>nkdomain:timestamp(), end_date=>nkdomain:timestamp(), inclusive=>boolean()}}.
@@ -311,6 +313,42 @@ object_db_get_query(nkelastic, {query_recent_conversations, Domain, Member, Opts
                 {error, Error} ->
                     {error, Error}
             end;
+        {error, Error} ->
+            {error, Error}
+    end;
+
+object_db_get_query(nkelastic, {query_conversations, Domain, Opts}, DbOpts) ->
+    case nkdomain_store_es_util:get_path(Domain) of
+        {ok, DomainPath} ->
+            Filters = case Opts of
+                #{types := Types} when is_list(Types) ->
+                    [{[?CHAT_CONVERSATION, ".type"], values, Types}];
+                _ ->
+                    []
+            end,
+            Filters1 = case Opts of
+                #{omitted_types := OmittedTypes} when is_list(OmittedTypes) ->
+                    [{'not', {[?CHAT_CONVERSATION, ".type"], values, OmittedTypes}}|Filters];
+                _ ->
+                    Filters
+            end,
+            Filters2 = [
+                {path, subdir, DomainPath}
+            |Filters1],
+            Fields = case Opts of
+                #{unread := true} ->
+                    [list_to_binary([?CHAT_CONVERSATION, ".members"]),
+                     list_to_binary([?CHAT_CONVERSATION, ".last_message_time"])];
+                _ ->
+                    []
+            end,
+            Opts2 = maps:with([from, size], Opts),
+            Opts3 = Opts2#{
+                type => ?CHAT_CONVERSATION,
+                fields => [list_to_binary([?CHAT_CONVERSATION, ".type"])|Fields],
+                sort => [#{list_to_binary([?CHAT_CONVERSATION, ".last_message_time"]) => #{order => desc}}]
+            },
+            {ok, {nkelastic, Filters2, maps:merge(DbOpts, Opts3)}};
         {error, Error} ->
             {error, Error}
     end;
