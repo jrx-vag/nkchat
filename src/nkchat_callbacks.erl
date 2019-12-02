@@ -20,6 +20,7 @@
 
 -module(nkchat_callbacks).
 
+-export([nkchat_message_event/4]).
 -export([error/1]).
 
 
@@ -48,6 +49,13 @@ error(invite_not_found)                 -> "Invite not found";
 error(_)   		                        -> continue.
 
 
+
+%% @doc Called when a conversation receives a message event
+-spec nkchat_message_event(ConvId::nkdomain:obj_id(), EventType::binary(), ConvData::map(), MessageData::map()) ->
+    ok.
+
+nkchat_message_event(_ConvId, _EventType, _ConvData, _MessageData) ->
+    ok.
 
 
 %% ===================================================================

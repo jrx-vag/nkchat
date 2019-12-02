@@ -635,8 +635,9 @@ object_event({member_muted, MemberId, Muted}, State) ->
 object_event({member_typing, UserId}, State) ->
     {ok, do_event_all_sessions({member_typing, UserId}, State)};
 
-object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
+object_event({message_created, Msg}, #obj_state{id=#obj_id_ext{obj_id=ConvId}, obj=Obj, session=Session, effective_srv_id=SrvId}=State) ->
     ?DEBUG("created message ~p", [Msg], State),
+    spawn(fun() -> ?CALL_SRV(SrvId, nkchat_message_event, [ConvId, <<"created">>, Obj, Msg]) end),
     #session{total_messages=Total, messages=Msgs} = Session,
     #{obj_id:=MsgId, created_time:=Time} = Msg,
     Msgs2 = [{Time, MsgId, Msg}|Msgs],
@@ -659,7 +660,8 @@ object_event({message_created, Msg}, #obj_state{session=Session}=State) ->
     State4 = State3#obj_state{object_info=Info},
     {ok, State4};
 
-object_event({message_updated, Msg}, #obj_state{session=Session}=State) ->
+object_event({message_updated, Msg}, #obj_state{id=#obj_id_ext{obj_id=ConvId}, obj=Obj, session=Session, effective_srv_id=SrvId}=State) ->
+    spawn(fun() -> ?CALL_SRV(SrvId, nkchat_message_event, [ConvId, <<"updated">>, Obj, Msg]) end),
     #session{messages=Msgs} = Session,
     #{obj_id:=MsgId, created_time:=Time} = Msg,
     Session2 = case lists:keymember(MsgId, 2, Msgs) of
@@ -672,7 +674,8 @@ object_event({message_updated, Msg}, #obj_state{session=Session}=State) ->
     State2 = do_event_all_sessions({message_updated, Msg}, State#obj_state{session=Session2}),
     {ok, State2};
 
-object_event({message_deleted, MsgId}, #obj_state{obj=Obj, session=Session}=State) ->
+object_event({message_deleted, MsgId}, #obj_state{id=#obj_id_ext{obj_id=ConvId}, obj=Obj, session=Session, effective_srv_id=SrvId}=State) ->
+    spawn(fun() -> ?CALL_SRV(SrvId, nkchat_message_event, [ConvId, <<"deleted">>, Obj, #{obj_id => MsgId}]) end),
     #session{total_messages=Total, messages=Msgs, last_message_time=LastMsgTime} = Session,
     CreatedTime = maps:get(created_time, Obj, 0),
     Session2 = case lists:keymember(MsgId, 2, Msgs) of
