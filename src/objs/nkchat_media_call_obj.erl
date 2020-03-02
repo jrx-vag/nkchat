@@ -55,7 +55,7 @@
 -include_lib("nkservice/include/nkservice.hrl").
 
 
--define(MAX_NEW_TIME, 5).
+-define(MAX_NEW_TIME, 15).
 -define(MAX_RINGING_TIME, 60).
 -define(MAX_CALL_TIME, 4*60*60).
 
