@@ -971,9 +971,9 @@ create_chat_msg(ConvId, #obj_state{id=#obj_id_ext{obj_id=CallId}}) ->
         type => ?MEDIA_CALL,
         created_by => <<"admin">>,
         body => #{
-            call_id => CallId,
-            status => <<"ringing">>,
-            member_ids => []
+            <<"call_id">> => CallId,
+            <<"status">> => <<"ringing">>,
+            <<"member_ids">> => []
         },
         text => <<"Call ", CallId/binary, " created">>
     },
@@ -1000,14 +1000,14 @@ update_chat_msg(State) ->
     end,
     Status2 = nklib_util:to_binary(Status),
     Body1 = #{
-        call_id => CallId,
-        status => Status2,
-        members => Members2,
-        time => nkdomain_util:timestamp()
+        <<"call_id">> => CallId,
+        <<"status">> => Status2,
+        <<"members">> => Members2,
+        <<"time">> => nkdomain_util:timestamp()
     },
     Body2 = case Status of
         hangup ->
-            Body1#{duration => get_duration(State)};
+            Body1#{<<"duration">> => get_duration(State)};
         _ ->
             Body1
     end,
