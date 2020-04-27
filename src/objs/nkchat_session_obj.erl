@@ -753,10 +753,12 @@ get_conv_pid(ConvId, #obj_state{session=Session}=State) ->
                     case do_add_conv(ConvId, State) of
                         {ok, State2} ->
                             {ok, Pid, State2};
-                        {error, _Error} ->
+                        {error, Error} ->
+                            ?LLOG(error, "get_conv_pid: Couldn't add conversation ~s to chat.session current state because: ~p", [ConvId, Error], State),
                             {not_found, State}
                     end;
-                _Other ->
+                Other ->
+                    ?LLOG(error, "get_conv_pid: Couldn't load conversation ~s because: ~p", [ConvId, Other], State),
                     Session2 = Session#session{conv_pids=maps:remove(ConvId, Convs)},
                     State2 = State#obj_state{session=Session2},
                     {not_found, State2}
@@ -764,6 +766,7 @@ get_conv_pid(ConvId, #obj_state{session=Session}=State) ->
         {ok, Pid} ->
             {ok, Pid, State};
         error ->
+            ?LLOG(error, "get_conv_pid: Couldn't find conversation ~s in chat.session conv_pids", [ConvId], State),
             {not_found, State}
     end.
 
