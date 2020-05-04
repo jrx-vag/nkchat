@@ -673,7 +673,11 @@ do_event(Event, State) ->
 make_invite_token(CallId, CalleeId, InviteOpts, State) ->
     #obj_state{parent_id=UserId, domain_id=DomainId, effective_srv_id=SrvId} = State,
     TokenData1 = gen_invite_token(CallId, UserId, CalleeId, InviteOpts),
-    Push = make_invite_push(UserId, InviteOpts),
+    Push = make_invite_push(UserId, InviteOpts#{
+        call_id => CallId,
+        caller_id => UserId,
+        callee_id => CalleeId
+    }),
     Opts = #{srv_id=>SrvId, wakeup_push => Push},
     case nkdomain_user:add_token_notification(CalleeId, ?MEDIA_SESSION, Opts, TokenData1) of
         {ok, _MemberId, TokenData2} ->
@@ -739,7 +743,8 @@ read_invite_token(Token) ->
 %% @private
 make_invite_push(CallerId, InviteOpts) ->
     {ok, #{fullname:=FullName}} = nkdomain_user:get_name(CallerId),
-    Base = case InviteOpts of
+    Base1 = maps:with([call_id, caller_id, callee_id], InviteOpts),
+    Base2 = case InviteOpts of
         #{conversation_id := CId} when CId =/= <<>> ->
             ParentId = case nkdomain:get_obj(CId) of
                 {ok, #{type := ?CHAT_CONVERSATION}=Conv} ->
@@ -747,17 +752,17 @@ make_invite_push(CallerId, InviteOpts) ->
                 _Other ->
                     <<>>
             end,
-            #{
+            Base1#{
                 conversation_id => CId,
                 parent_id => ParentId
             };
         _ ->
-            #{
+            Base1#{
                 conversation_id => <<>>,
                 parent_id => <<>>
             }
     end,
-    Base#{
+    Base2#{
         type => ?MEDIA_SESSION,
         class => invite,
         media_id => <<>>,
