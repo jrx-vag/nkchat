@@ -52,6 +52,7 @@
 
 -export([start/3, get_call_info/1, launch_notifications/1]).
 -export([invite/3, cancel_invite/1, accept_invite/3, reject_invite/1]).
+-export([process_invite_token/1, process_invite_token/3]).
 -export([object_info/0, object_es_mapping/0, object_parse/2,
          object_api_syntax/2, object_api_cmd/2]).
 -export([object_init/1, object_stop/2, object_send_event/2,
@@ -444,7 +445,7 @@ object_handle_info({'DOWN', Ref, process, _Pid, _Reason}, #obj_state{session=Ses
         false ->
             case lists:keyfind(Ref, #media.token_mon, Medias) of
                 #media{id=MediaId, call_id=CallId, status=ringing_out} ->
-                    ?LLOG(notice, "token down ~s: ~p", [CallId], State),
+                    ?LLOG(notice, "token down ~s: ~s", [MediaId, CallId], State),
                     % If we are monitoring the token, we are the caller
                     nkchat_media_call_obj:hangup_async(CallId, caller_token_down),
                     State2 = do_rm_media(MediaId, token_down, State),
@@ -688,6 +689,8 @@ make_invite_token(CallId, CalleeId, InviteOpts, State) ->
                     ?DEFAULT_INVITE_TTL
             end,
             TokenOpts = #{
+                module => ?MODULE,
+                function => process_invite_token,
                 parent_id => CalleeId,
                 created_by => UserId,
                 subtype => <<"media.call">>,
@@ -705,11 +708,108 @@ make_invite_token(CallId, CalleeId, InviteOpts, State) ->
 
 
 %% @private
+make_invite_removed_token(DomainId, SrvId, CallId, CallerId, CalleeId, CallStatus, InviteId, InviteOpts) ->
+    TokenData1 = gen_invite_removed_token(CallId, CallerId, CalleeId, InviteOpts),
+    Push = make_invite_removed_push(CallerId, InviteOpts#{
+        call_id => CallId,
+        caller_id => CallerId,
+        callee_id => CalleeId,
+        reason => CallStatus,
+        invite_id => InviteId
+    }),
+    Opts = #{srv_id=>SrvId, wakeup_push => Push},
+    case nkdomain_user:add_token_notification(CalleeId, ?MEDIA_SESSION, Opts, TokenData1) of
+        {ok, _MemberId, TokenData2} ->
+            TTL = case InviteOpts of
+                #{ttl:=TTL0} when is_integer(TTL0), TTL0>0 ->
+                    TTL0;
+                _ ->
+                    ?DEFAULT_INVITE_TTL
+            end,
+            TokenOpts = #{
+                parent_id => CalleeId,
+                created_by => CallerId,
+                subtype => <<"media.call_invite_removed">>,
+                ttl => TTL
+            },
+            case nkdomain_token_obj:create(DomainId, TokenOpts, TokenData2) of
+                {ok, MediaId, Pid, Secs} ->
+                    {ok, MediaId, Pid, Secs};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @doc
+process_invite_token(Data) ->
+    {ok, Data}.
+
+%% @doc
+process_invite_token(Reason, Data, Opts) ->
+    CallStatus = case Reason of
+        {object_consumed, accept_invite} ->
+            accepted;
+        {object_consumed, cancel_invite} ->
+            cancelled;
+        {object_consumed, reject_invite} ->
+            rejected;
+        object_expired ->
+            expired;
+        _ ->
+            unknown
+    end,
+    InviteId = maps:get(obj_id, Data, <<>>),
+    case CallStatus =/= unknown of
+        true ->
+            DomainId = maps:get(domain_id, Data, <<>>),
+            TData = maps:get(?DOMAIN_TOKEN, Data, #{}),
+            TData2 = maps:get(data, TData, #{}),
+            MediaSessionData = maps:get(?MEDIA_SESSION, TData2, #{}),
+            InviteData = maps:get(<<"invite_op">>, MediaSessionData, #{}),
+            CallId = maps:get(<<"call_id">>, InviteData, <<>>),
+            CalleeId = maps:get(<<"callee_id">>, InviteData, <<>>),
+            CallerId = maps:get(<<"caller_id">>, InviteData, <<>>),
+            InviteOptsData = maps:get(<<"invite_opts">>, InviteData, #{}),
+            ConvId = maps:get(conversation_id, InviteOptsData, <<>>),
+            UserData = maps:get(<<"user">>, TData2, #{}),
+            NotificationData = maps:get(<<"notification">>, UserData, #{}),
+            SrvId = maps:get(<<"srv_id">>, NotificationData, <<>>),
+            InviteOpts = #{
+                conversation_id => ConvId,
+                ttl => 5
+            },
+            make_invite_removed_token(DomainId, SrvId, CallId, CallerId, CalleeId, CallStatus, InviteId, InviteOpts);
+        _ ->
+            % Ignore
+            lager:error("[process_invite_token] Unknown reason ~p received for token ~s", [Reason, InviteId]),
+            ok
+    end,
+    {ok, Data}.
+
+%% @private
 gen_invite_token(CallId, CallerId, CalleeId, InviteOpts) ->
     #{
         ?MEDIA_SESSION =>
         #{
             <<"invite_op">> =>
+            #{
+                <<"call_id">> => CallId,
+                <<"caller_id">> => CallerId,
+                <<"callee_id">> => CalleeId,
+                <<"invite_opts">> => InviteOpts
+            }
+        }
+    }.
+
+%% @private
+gen_invite_removed_token(CallId, CallerId, CalleeId, InviteOpts) ->
+    #{
+        ?MEDIA_SESSION =>
+        #{
+            <<"invite_removed_op">> =>
             #{
                 <<"call_id">> => CallId,
                 <<"caller_id">> => CallerId,
@@ -766,6 +866,38 @@ make_invite_push(CallerId, InviteOpts) ->
         type => ?MEDIA_SESSION,
         class => invite,
         media_id => <<>>,
+        full_name => FullName,
+        audio => maps:get(audio, InviteOpts, false),
+        video => maps:get(video, InviteOpts, false),
+        screen => maps:get(screen, InviteOpts, false)
+    }.
+
+
+%% @private
+make_invite_removed_push(CallerId, InviteOpts) ->
+    {ok, #{fullname:=FullName}} = nkdomain_user:get_name(CallerId),
+    Base1 = maps:with([call_id, caller_id, callee_id, invite_id, reason], InviteOpts),
+    Base2 = case InviteOpts of
+        #{conversation_id := CId} when CId =/= <<>> ->
+            ParentId = case nkdomain:get_obj(CId) of
+                {ok, #{type := ?CHAT_CONVERSATION}=Conv} ->
+                    maps:get(parent_id, Conv, <<>>);
+                _Other ->
+                    <<>>
+            end,
+            Base1#{
+                conversation_id => CId,
+                parent_id => ParentId
+            };
+        _ ->
+            Base1#{
+                conversation_id => <<>>,
+                parent_id => <<>>
+            }
+    end,
+    Base2#{
+        type => ?MEDIA_SESSION,
+        class => invite_removed,
         full_name => FullName,
         audio => maps:get(audio, InviteOpts, false),
         video => maps:get(video, InviteOpts, false),
