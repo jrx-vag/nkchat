@@ -113,6 +113,17 @@ syntax(<<"send_candidate_end">>, Syntax) ->
         '__mandatory' => [call_id]
     };
 
+syntax(<<"set_has_connected">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        call_id => binary,
+        has_connected => boolean,
+        '__mandatory' => [call_id],
+        '__defaults' => #{
+            has_connected => false
+        }
+    };
+
 syntax(<<"set_status">>, Syntax) ->
     Syntax#{
         id => binary,

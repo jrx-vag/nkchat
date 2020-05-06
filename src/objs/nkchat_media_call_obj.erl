@@ -38,7 +38,7 @@
 -export([create/2, hangup/2, hangup_async/2]).
 -export([add_session/3, remove_session/2, get_info/1]).
 -export([invite/5, stop_media/3, answer_media/5]).
--export([send_candidate/3, set_status/3]).
+-export([send_candidate/3, set_has_connected/3, set_status/3]).
 -export([heartbeat/1]).
 -export([find_calls/0, remove_calls/0]).
 -export([object_info/0, object_es_mapping/0, object_parse/2, object_create/1,
@@ -297,6 +297,14 @@ set_status(CallId, SessId, Status) ->
     nkdomain_obj:sync_op(CallId, {?MODULE, set_status, SessId, Status}).
 
 
+%% @doc
+-spec set_has_connected(nkdomain:obj_id(), nkdomain:obj_id(), session_status()) ->
+    ok | {error, term()}.
+
+set_has_connected(CallId, SessId, HasConnected) ->
+    nkdomain_obj:sync_op(CallId, {?MODULE, set_has_connected, SessId, HasConnected}).
+
+
 find_calls() ->
     nkdomain:get_paths_type(root, ?MEDIA_CALL).
 
@@ -313,7 +321,8 @@ remove_calls() ->
     session_id :: nkdomain_obj:id(),
     user_id :: nkdomain:obj_id(),
     session_pid :: pid(),
-    session_mon :: reference()
+    session_mon :: reference(),
+    has_connected = false :: boolean()
 }).
 
 
@@ -386,7 +395,8 @@ object_es_mapping() ->
             type => object,
             dynamic => false,
             properties => #{
-                member_id => #{type => keyword}
+                member_id => #{type => keyword},
+                has_connected => #{type => boolean}
             }
         }
     }.
@@ -407,10 +417,14 @@ object_parse(_Mode, _Obj) ->
         members_hash => binary,
         members =>
             {list,
-                 #{
-                     member_id => binary,
-                     '__mandatory' => [member_id]
-                 }
+                #{
+                    member_id => binary,
+                    has_connected => boolean,
+                    '__mandatory' => [member_id],
+                    '__defaults' => #{
+                        has_connected => false
+                    }
+                }
             },
         '__defaults' => #{type => direct, members => []}
     }.
@@ -488,9 +502,10 @@ object_init(#obj_state{obj=Obj}=State) ->
 object_save(#obj_state{obj=Obj, session=Session}=State) ->
     #session{type=Type, status=Status, members=Members} = Session,
     MemberList= lists:map(
-        fun(#member_session{user_id = UserId}) ->
+        fun(#member_session{user_id = UserId, has_connected = HasConnected}) ->
             #{
-                member_id => UserId
+                member_id => UserId,
+                has_connected => HasConnected
             }
         end,
         Members),
@@ -622,6 +637,27 @@ object_sync_op({?MODULE, set_status, SessId, Status}, _From, State) ->
                 not_found ->
                     {reply, {error, session_not_found}, State}
             end;
+        not_found ->
+            {reply, {error, session_not_found}, State}
+    end;
+
+object_sync_op({?MODULE, set_has_connected, SessId, HasConnected}, _From, State) ->
+    case get_member_session(SessId, State) of
+        #member_session{user_id=UserId, has_connected=OldHasConnected}=Member when OldHasConnected =/= HasConnected ->
+            #obj_state{session=#session{status=Status}} = State,
+            Member2 = Member#member_session{
+                has_connected = HasConnected
+            },
+            State2 = put_member_session(SessId, Member2, State),
+            case HasConnected of
+                true ->
+                    spawn(fun() -> send_media_call_event({Status, connected}, State2) end);
+                false ->
+                    spawn(fun() -> send_media_call_event({Status, disconnected}, State2) end)
+            end,
+            {reply, ok, State2};
+        #member_session{} ->
+            {reply, ok, State};
         not_found ->
             {reply, {error, session_not_found}, State}
     end;
@@ -959,9 +995,10 @@ get_members_hash(MemberIds) ->
 expand_members(#obj_state{session=Session}) ->
     #session{members=Members} = Session,
     lists:map(
-        fun(#member_session{user_id = MemberId}) ->
+        fun(#member_session{user_id = MemberId, has_connected = HasConnected}) ->
             #{
-                member_id => MemberId
+                member_id => MemberId,
+                has_connected => HasConnected
             }
         end,
         Members).
@@ -1053,10 +1090,14 @@ update_duration(#obj_state{obj=#{?MEDIA_CALL:=CallObj}=Obj}=State) ->
 %% @private
 send_media_call_event(Status, #obj_state{id=#obj_id_ext{obj_id=CallId}, obj=Obj, session=Session, effective_srv_id=SrvId} = State) ->
     #session{type=Type} = Session,
-    Data = #{
-        name => maps:get(name, Obj, <<>>),
+    CallObj = maps:get(?MEDIA_CALL, Obj, #{}),
+    Base = maps:with([started_time, stopped_time], CallObj),
+    Data = Base#{
+        conversation_id => maps:get(conversation_id, CallObj, <<>>),
         description => maps:get(description, Obj, <<>>),
-        type => Type,
-        members => expand_members(State)
+        duration => maps:get(duration, CallObj, 0),
+        members => expand_members(State),
+        name => maps:get(name, Obj, <<>>),
+        type => Type
     },
     ?CALL_SRV(SrvId, nkchat_media_call_event, [CallId, Status, Data]).

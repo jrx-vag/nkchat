@@ -92,6 +92,9 @@ cmd(<<"send_candidate_end">>, #nkreq{data=Data, user_id=MemberId}) ->
     #{id:=CallId} = Data,
     nkchat_media_call_obj:send_candidate(CallId, MemberId, #sdp_candidate{});
 
+cmd(<<"set_has_connected">>, #nkreq{data=#{id:=CallId}=Data, user_id=MemberId}) ->
+    HasConnected = maps:get(has_connected, Data, false),
+    nkchat_media_call_obj:set_has_connected(CallId, MemberId, HasConnected);
 
 cmd(<<"set_status">>, #nkreq{data=#{id:=CallId}=Data, user_id=MemberId}) ->
     Opts = maps:with([audio, video, screen], Data),

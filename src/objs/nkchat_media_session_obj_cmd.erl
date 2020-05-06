@@ -163,6 +163,15 @@ cmd(<<"send_candidate_end">>, #nkreq{data=Data}=Req) ->
             {error, Error}
     end;
 
+cmd(<<"set_has_connected">>, #nkreq{data=#{call_id:=CallId}=Data}=Req) ->
+    case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
+        {ok, Id} ->
+            HasConnected = maps:get(has_connected, Data, false),
+            nkchat_media_call_obj:set_has_connected(CallId, Id, HasConnected);
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(<<"set_status">>, #nkreq{data=#{call_id:=CallId}=Data}=Req) ->
     case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
         {ok, Id} ->
