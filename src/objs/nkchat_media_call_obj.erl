@@ -710,12 +710,14 @@ get_type_status(#obj_state{session=#session{type=Type, status=Status}}) ->
 
 %% @doc
 update_call_status(hangup, #obj_state{session=Session} = State) ->
-    ?LLOG(info, "call is now in 'hangup' status", [], State),
     State2 = State#obj_state{session=Session#session{status=hangup}},
+    spawn(fun() -> send_media_call_event(hangup, State2) end),
+    ?LLOG(info, "call is now in 'hangup' status", [], State2),
     update_chat_msg(State2);
 
 update_call_status(Status, #obj_state{session=Session} = State) ->
     State2 = State#obj_state{session=Session#session{status=Status}},
+    spawn(fun() -> send_media_call_event(Status, State2) end),
     Time = case Status of
         new ->
             ?MAX_NEW_TIME;
@@ -724,8 +726,8 @@ update_call_status(Status, #obj_state{session=Session} = State) ->
         in_call ->
             ?MAX_CALL_TIME
     end,
-    ?LLOG(info, "call is now in '~s' status (timeout:~p)", [Status, Time], State),
     State3 = nkdomain_obj_util:set_next_status_timer(Time*1000, State2),
+    ?LLOG(info, "call is now in '~s' status (timeout:~p)", [Status, Time], State3),
     State4 = update_chat_msg(State3),
     do_all_member_sessions_event({call_status, Status}, State4).
 
@@ -1046,3 +1048,15 @@ update_duration(#obj_state{obj=#{?MEDIA_CALL:=CallObj}=Obj}=State) ->
             0
     end,
     State#obj_state{obj=Obj#{?MEDIA_CALL=>CallObj#{duration=>Time}}, is_dirty=true}.
+
+
+%% @private
+send_media_call_event(Status, #obj_state{id=#obj_id_ext{obj_id=CallId}, obj=Obj, session=Session, effective_srv_id=SrvId} = State) ->
+    #session{type=Type} = Session,
+    Data = #{
+        name => maps:get(name, Obj, <<>>),
+        description => maps:get(description, Obj, <<>>),
+        type => Type,
+        members => expand_members(State)
+    },
+    ?CALL_SRV(SrvId, nkchat_media_call_event, [CallId, Status, Data]).

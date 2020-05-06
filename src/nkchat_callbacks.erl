@@ -21,6 +21,7 @@
 -module(nkchat_callbacks).
 
 -export([nkchat_message_event/4]).
+-export([nkchat_media_call_event/3]).
 -export([error/1]).
 
 
@@ -55,6 +56,13 @@ error(_)   		                        -> continue.
     ok.
 
 nkchat_message_event(_ConvId, _EventType, _ConvData, _MessageData) ->
+    ok.
+
+%% @doc Called when a media.call state changes
+-spec nkchat_media_call_event(CallId::nkdomain:obj_id(), EventType::binary(), CallData::map()) ->
+    ok.
+
+nkchat_media_call_event(_CallId, _EventType, _CallData) ->
     ok.
 
 
