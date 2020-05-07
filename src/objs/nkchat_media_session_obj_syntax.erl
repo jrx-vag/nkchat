@@ -33,6 +33,15 @@
 
 
 %% @doc
+syntax(<<"add_log">>, Syntax) ->
+    Syntax#{
+        id => binary,
+        call_id => binary,
+        type => binary,
+        data => map,
+        '__mandatory' => [call_id, type, data]
+    };
+
 syntax(<<"start">>, Syntax) ->
     Syntax#{
         domain_id => binary,

@@ -49,6 +49,11 @@
 %%            {error, Error}
 %%    end;
 
+cmd(<<"add_log">>, #nkreq{data=#{id:=CallId}=Data, user_id=MemberId}) ->
+    LogType = maps:get(type, Data, <<>>),
+    LogData = maps:get(data, Data, #{}),
+    nkchat_media_call_obj:add_log(CallId, MemberId, LogType, LogData);
+
 cmd(<<"find_member_calls">>, #nkreq{data=Data}=Req) ->
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
         {ok, DomainId} ->

@@ -36,6 +36,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([create/2, hangup/2, hangup_async/2]).
+-export([add_log/4]).
 -export([add_session/3, remove_session/2, get_info/1]).
 -export([invite/5, stop_media/3, answer_media/5]).
 -export([send_candidate/3, set_has_connected/3, set_status/3]).
@@ -212,6 +213,14 @@ get_info(Pid) ->
 
 invite(Id, MediaId, SessId, UserId, InviteOpts) ->
     nkdomain_obj:sync_op(Id, {?MODULE, invite, MediaId, SessId, self(), UserId, InviteOpts}).
+
+
+%% @doc Accepts a invitation notification in a direct call
+-spec add_log(nkdomain:id(), nkdomain:obj_id(), binary(), map()) ->
+    ok | {error, term()}.
+
+add_log(CallId, SessId, LogType, LogData) ->
+    nkdomain_obj:sync_op(CallId, {?MODULE, add_log, SessId, LogType, LogData}).
 
 
 %% @doc Accepts a invitation notification in a direct call
@@ -392,22 +401,33 @@ object_schema_types() ->
 %% @private
 object_es_mapping() ->
     #{
-        type => #{type => keyword},
         conversation_id => #{type => keyword},
-        message_id => #{type => keyword},
-        started_time => #{type => date},
-        stopped_time => #{type => date},
         duration => #{type => integer},
-        members_hash => #{type => keyword},
+        logs => #{
+            type => object,
+            dynamic => false,
+            properties => #{
+                data => #{enabled => false},
+                date => #{type => date},
+                member_id => #{type => keyword},
+                type => #{type => keyword}
+            }
+        },
         members => #{
             type => object,
             dynamic => false,
             properties => #{
-                member_id => #{type => keyword},
-                has_connected => #{type => boolean}
+                has_connected => #{type => boolean},
+                member_id => #{type => keyword}
             }
-        }
+        },
+        members_hash => #{type => keyword},
+        message_id => #{type => keyword},
+        started_time => #{type => date},
+        stopped_time => #{type => date},
+        type => #{type => keyword}
     }.
+
 
 
 %% @private
@@ -416,24 +436,27 @@ object_parse(update, _Obj) ->
 
 object_parse(_Mode, _Obj) ->
     #{
-        type => {atom, [direct, one2one, room]},
         conversation_id => binary,
+        duration => {integer, 0, none},
+        logs => {list, #{
+            data => map,
+            date => integer,
+            member_id => binary,
+            type => binary
+        }},
+        members_hash => binary,
+        members => {list, #{
+            has_connected => boolean,
+            member_id => binary,
+            '__mandatory' => [member_id],
+            '__defaults' => #{
+                has_connected => false
+            }
+        }},
+        message_id => binary,
         started_time => binary,
         stopped_time => binary,
-        duration => {integer, 0, none},
-        message_id => binary,
-        members_hash => binary,
-        members =>
-            {list,
-                #{
-                    member_id => binary,
-                    has_connected => boolean,
-                    '__mandatory' => [member_id],
-                    '__defaults' => #{
-                        has_connected => false
-                    }
-                }
-            },
+        type => {atom, [direct, one2one, room]},
         '__defaults' => #{type => direct, members => []}
     }.
 
@@ -571,6 +594,26 @@ object_sync_op({?MODULE, invite, MediaId, SessId, Pid, UserId, InviteOpts}, _Fro
             end;
         _ ->
             {reply, {error, call_status_invalid}, State}
+    end;
+
+object_sync_op({?MODULE, add_log, SessId, LogType, LogData}, _From, State) ->
+    case get_member_session(SessId, State) of
+        #member_session{user_id=UserId} ->
+            NewLog = #{
+                data => LogData,
+                date => nkdomain_util:timestamp(),
+                member_id => UserId,
+                type => LogType
+            },
+            #obj_state{obj=Obj}=State,
+            #{?MEDIA_CALL := CallObj} = Obj,
+            Logs = maps:get(logs, CallObj, []),
+            CallObj2 = CallObj#{logs => [NewLog|Logs]},
+            Obj2 = ?ADD_TO_OBJ(?MEDIA_CALL, CallObj2, Obj),
+            State2 = State#obj_state{obj=Obj2},
+            {reply, ok, State2};
+        not_found ->
+            {reply, {error, session_not_found}, State}
     end;
 
 object_sync_op({?MODULE, answer_media, MediaId, CalleeSessId, CalleeSessPid, CalleeId, AcceptOpts}, _From, State) ->
@@ -1116,6 +1159,7 @@ send_media_call_event(EventType, EventData, #obj_state{id=#obj_id_ext{obj_id=Cal
         conversation_id => maps:get(conversation_id, CallObj, <<>>),
         description => maps:get(description, Obj, <<>>),
         duration => maps:get(duration, CallObj, 0),
+        logs => maps:get(logs, CallObj, []),
         members => expand_members(State),
         name => maps:get(name, Obj, <<>>),
         status => Status,

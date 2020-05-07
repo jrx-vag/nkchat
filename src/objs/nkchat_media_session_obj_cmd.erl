@@ -43,6 +43,16 @@
 
 
 %% @doc
+cmd(<<"add_log">>, #nkreq{data=#{call_id:=CallId}=Data}=Req) ->
+    case nkdomain_api_util:get_id(?MEDIA_SESSION, Data, Req) of
+        {ok, Id} ->
+            Type = maps:get(type, Data, <<>>),
+            LogData = maps:get(data, Data, #{}),
+            nkchat_media_call_obj:add_log(CallId, Id, Type, LogData);
+        {error, Error} ->
+            {error, Error}
+    end;
+
 cmd(<<"start">>, #nkreq{session_module=nkapi_server}=Req) ->
     #nkreq{data=Data, session_pid=Pid, user_id=UserId} = Req,
     case nkdomain_api_util:get_id(?DOMAIN_DOMAIN, domain_id, Data, Req) of
