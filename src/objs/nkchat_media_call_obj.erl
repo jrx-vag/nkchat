@@ -114,6 +114,14 @@
     }.
 
 
+%% Events sent to the service
+-type service_event() ::
+    call_status_changed |
+    member_status_changed |
+    member_connected |
+    member_disconnected.
+
+
 -type event() :: session_event().
 
 
@@ -625,13 +633,15 @@ object_sync_op({?MODULE, set_status, SessId, Status}, _From, State) ->
                  {caller, #media_session{caller_status=OldStatus}=Media} ->
                     NewStatus = maps:merge(OldStatus, Status),
                     Media2 = Media#media_session{caller_status=NewStatus},
-                     State2 = update_media_session(Media2, State),
+                    State2 = update_media_session(Media2, State),
+                    spawn(fun() -> send_media_call_event(member_status_changed, #{member_id => UserId, status => NewStatus}, State2) end),
                     do_all_member_sessions_event({session_status, SessId, UserId, Status}, State),
                     {reply, ok, State2};
                 {callee, #media_session{callee_status=OldStatus}=Media} ->
                     NewStatus = maps:merge(OldStatus, Status),
                     Media2 = Media#media_session{callee_status=NewStatus},
                     State2 = update_media_session(Media2, State),
+                    spawn(fun() -> send_media_call_event(member_status_changed, #{member_id => UserId, status => NewStatus}, State2) end),
                     do_all_member_sessions_event({session_status, SessId, UserId, Status}, State),
                     {reply, ok, State2};
                 not_found ->
@@ -642,24 +652,31 @@ object_sync_op({?MODULE, set_status, SessId, Status}, _From, State) ->
     end;
 
 object_sync_op({?MODULE, set_has_connected, SessId, HasConnected}, _From, State) ->
-    case get_member_session(SessId, State) of
-        #member_session{user_id=UserId, has_connected=OldHasConnected}=Member when OldHasConnected =/= HasConnected ->
-            #obj_state{session=#session{status=Status}} = State,
-            Member2 = Member#member_session{
-                has_connected = HasConnected
-            },
-            State2 = put_member_session(SessId, Member2, State),
-            case HasConnected of
-                true ->
-                    spawn(fun() -> send_media_call_event({Status, connected}, State2) end);
-                false ->
-                    spawn(fun() -> send_media_call_event({Status, disconnected}, State2) end)
-            end,
-            {reply, ok, State2};
-        #member_session{} ->
-            {reply, ok, State};
-        not_found ->
-            {reply, {error, session_not_found}, State}
+    #obj_state{session=#session{status=Status}} = State,
+    case get_type_status(State) of
+        {direct, in_call} ->
+            case get_member_session(SessId, State) of
+                #member_session{user_id=UserId, has_connected=OldHasConnected}=Member when OldHasConnected =/= HasConnected ->
+                    Member2 = Member#member_session{
+                        has_connected = HasConnected
+                    },
+                    State2 = put_member_session(SessId, Member2, State),
+                    case HasConnected of
+                        true ->
+                            spawn(fun() -> send_media_call_event(member_connected, #{member_id => UserId}, State2) end);
+                        false ->
+                            spawn(fun() -> send_media_call_event(member_disconnected, #{member_id => UserId}, State2) end)
+                    end,
+                    {reply, ok, State2};
+                #member_session{} ->
+                    {reply, ok, State};
+                not_found ->
+                    {reply, {error, session_not_found}, State}
+            end;
+        {direct, _Other} ->
+            {reply, {error, call_status_invalid}, State};
+        _ ->
+            {reply, ok, State}
     end;
 
 object_sync_op(_Op, _From, _State) ->
@@ -747,13 +764,13 @@ get_type_status(#obj_state{session=#session{type=Type, status=Status}}) ->
 %% @doc
 update_call_status(hangup, #obj_state{session=Session} = State) ->
     State2 = State#obj_state{session=Session#session{status=hangup}},
-    spawn(fun() -> send_media_call_event(hangup, State2) end),
+    spawn(fun() -> send_media_call_event(call_status_changed, #{}, State2) end),
     ?LLOG(info, "call is now in 'hangup' status", [], State2),
     update_chat_msg(State2);
 
 update_call_status(Status, #obj_state{session=Session} = State) ->
     State2 = State#obj_state{session=Session#session{status=Status}},
-    spawn(fun() -> send_media_call_event(Status, State2) end),
+    spawn(fun() -> send_media_call_event(call_status_changed, #{}, State2) end),
     Time = case Status of
         new ->
             ?MAX_NEW_TIME;
@@ -1088,8 +1105,11 @@ update_duration(#obj_state{obj=#{?MEDIA_CALL:=CallObj}=Obj}=State) ->
 
 
 %% @private
-send_media_call_event(Status, #obj_state{id=#obj_id_ext{obj_id=CallId}, obj=Obj, session=Session, effective_srv_id=SrvId} = State) ->
-    #session{type=Type} = Session,
+-spec send_media_call_event(service_event(), map(), nkdomain:obj_state()) ->
+    ok.
+
+send_media_call_event(EventType, EventData, #obj_state{id=#obj_id_ext{obj_id=CallId}, obj=Obj, effective_srv_id=SrvId} = State) ->
+    {Type, Status} = get_type_status(State),
     CallObj = maps:get(?MEDIA_CALL, Obj, #{}),
     Base = maps:with([started_time, stopped_time], CallObj),
     Data = Base#{
@@ -1098,6 +1118,7 @@ send_media_call_event(Status, #obj_state{id=#obj_id_ext{obj_id=CallId}, obj=Obj,
         duration => maps:get(duration, CallObj, 0),
         members => expand_members(State),
         name => maps:get(name, Obj, <<>>),
+        status => Status,
         type => Type
     },
-    ?CALL_SRV(SrvId, nkchat_media_call_event, [CallId, Status, Data]).
+    ?CALL_SRV(SrvId, nkchat_media_call_event, [CallId, EventType, EventData, Data]).
