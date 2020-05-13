@@ -1328,6 +1328,8 @@ do_add_members([MemberId|Rest], State) ->
     case do_add_member(MemberId, State) of
         {ok, State2} ->
             do_add_members(Rest, State2);
+        {error, member_already_present} ->
+            do_add_members(Rest, State);
         {error, Error} ->
             {error, Error}
     end.
